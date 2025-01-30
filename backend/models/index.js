@@ -1,28 +1,23 @@
-require('dotenv').config(); 
-const express = require('express');
-const app = express();
-const PORT = 3001;
+const sequelize = require('../config/database');
+const ItemModel = require('./Item');
+const UserModel = require('./User');
+const DKPTransactionModel = require('./DKPTransaction');
+const LootRequestModel = require('./LootRequest');
 
-app.use(express.json());
+// Initialize models
+const Item = ItemModel(sequelize);
+const User = UserModel(sequelize);
+const DKPTransaction = DKPTransactionModel(sequelize);
+const LootRequest = LootRequestModel(sequelize);
 
-// Test route
-app.get('/', (req, res) => {
-  res.send('Guild Management API is running!');
-});
+// Set up associations
+// Add your associations here when you implement the other models
+// Example: User.hasMany(DKPTransaction);
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
-
-const { Sequelize } = require('sequelize');
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
-    dialect: 'postgres', // Explicitly specify PostgreSQL
-    dialectOptions: {
-      ssl: false, // Set to `true` if using a cloud database with SSL
-    },
-  });
-
-// Test the connection
-sequelize.authenticate()
-  .then(() => console.log('Connected to PostgreSQL!'))
-  .catch(err => console.error('Connection error:', err));
+module.exports = {
+  sequelize,
+  Item,
+  User,
+  DKPTransaction,
+  LootRequest
+};

@@ -1,102 +1,151 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Box, 
-  TextField, 
-  Button, 
-  Autocomplete, 
+  Autocomplete,
+  TextField,
+  Button,
   CircularProgress,
-  Typography 
+  Box,
+  Typography,
+  Avatar,
+  ListItem,
+  ListItemAvatar,
+  ListItemText
 } from '@mui/material';
-import { useLoot } from '../../contexts/LootContext';
+import axios from 'axios';
 
 const LootRequestForm = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const { requestItem, items } = useLoot();
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showNotFound, setShowNotFound] = useState(false);
 
   useEffect(() => {
-    const searchItems = async () => {
-      setIsSearching(true);
-      // Simulated API call - replace with actual API in your implementation
-      const results = items.filter(item => 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setSearchResults(results);
-      setIsSearching(false);
+    const fetchItems = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/items/autocomplete', {
+          params: { query: inputValue }
+        });
+        setOptions(response.data);
+        setShowNotFound(response.data.length === 0);
+      } catch (error) {
+        console.error('Failed to fetch items:', error);
+        setOptions([]);
+        setShowNotFound(true);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    if (searchTerm.length > 2) {
-      searchItems();
-    }
-  }, [searchTerm]);
+    const debounceTimer = setTimeout(() => {
+      if (inputValue.length >= 2) {
+        fetchItems();
+      } else {
+        setOptions([]);
+        setShowNotFound(false);
+      }
+    }, 300);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const item = searchResults[0];
-    if (item) {
-      await requestItem(item.id);
-      setSearchTerm('');
+    return () => clearTimeout(debounceTimer);
+  }, [inputValue]);
+
+  const handleSubmit = () => {
+    if (selectedItem) {
+      // Add your submission logic here
+      console.log('Submitting request for:', selectedItem);
     }
   };
 
   return (
-    <Box sx={{ 
-      bgcolor: 'rgba(30, 30, 30, 0.7)',
-      p: 4,
-      borderRadius: '12px',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-    }}>
-      <Typography variant="h5" sx={{ color: '#f48fb1', mb: 2 }}>
-        Request New Item
-      </Typography>
-      <form onSubmit={handleSubmit}>
-        <Autocomplete
-          freeSolo
-          options={searchResults}
-          getOptionLabel={(option) => option.name}
-          loading={isSearching}
-          onInputChange={(_, value) => setSearchTerm(value)}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Search Throne and Liberty Items"
-              variant="outlined"
-              sx={{
-                '& .MuiOutlinedInput-root': {
+    <Box sx={{ width: '100%', maxWidth: 600, mb: 4 }}>
+      <Autocomplete
+        freeSolo
+        options={options}
+        getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
+        inputValue={inputValue}
+        onInputChange={(_, value) => setInputValue(value)}
+        onChange={(_, value) => setSelectedItem(value)}
+        loading={loading}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Search Throne and Liberty Items"
+            variant="outlined"
+            fullWidth
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                  {params.InputProps.endAdornment}
+                </>
+              )
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <ListItem component="li" {...props}>
+            <ListItemAvatar>
+              <Avatar 
+                src={option.icon} 
+                sx={{ 
+                  width: 40, 
+                  height: 40,
+                  bgcolor: 'rgba(255,255,255,0.1)'
+                }}
+              >
+                {!option.icon && option.name[0]}
+              </Avatar>
+            </ListItemAvatar>
+            <ListItemText
+              primary={option.name}
+              primaryTypographyProps={{ 
+                sx: { 
                   color: 'white',
-                  '& fieldset': { borderColor: '#ffffff33' },
-                  '&:hover fieldset': { borderColor: '#90caf9' }
-                },
-                '& .MuiInputLabel-root': { color: '#ffffff99' }
-              }}
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {isSearching ? <CircularProgress size={20} sx={{ color: '#90caf9' }} /> : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                )
+                  marginLeft: 2
+                }
               }}
             />
-          )}
-        />
-        <Button 
-          type="submit" 
-          variant="contained" 
-          sx={{ 
-            mt: 2,
-            bgcolor: '#90caf9',
-            '&:hover': { bgcolor: '#64b5f6' }
-          }}
-        >
-          Submit Request
-        </Button>
-      </form>
+          </ListItem>
+        )}
+        sx={{
+          '& .MuiAutocomplete-listbox': {
+            backgroundColor: '#1a1a1a',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }
+        }}
+      />
+
+      {showNotFound && inputValue.length >= 2 && (
+        <Box sx={{ 
+          mt: 2, 
+          p: 2,
+          bgcolor: 'rgba(255,0,0,0.1)',
+          borderRadius: 1,
+          border: '1px solid rgba(255,0,0,0.3)'
+        }}>
+          <Typography variant="body2" sx={{ color: '#ff6666' }}>
+            Item not found in database. Please contact @Skrinkz on Discord
+          </Typography>
+        </Box>
+      )}
+
+      <Button
+        variant="contained"
+        onClick={handleSubmit}
+        disabled={!selectedItem}
+        sx={{
+          mt: 2,
+          bgcolor: '#90caf9',
+          '&:hover': { bgcolor: '#64b5f6' },
+          '&:disabled': { bgcolor: '#666666' }
+        }}
+      >
+        Request Item
+      </Button>
     </Box>
   );
 };
-
 
 export default LootRequestForm;

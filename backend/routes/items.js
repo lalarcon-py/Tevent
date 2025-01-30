@@ -39,5 +39,34 @@ router.put('/:id', isOfficer, async (req, res) => {
   }
 });
 
-// Add these to your existing backend setup
+outer.get('/search', async (req, res) => {
+  try {
+    const { query } = req.query;
+    const items = await Item.findAll({
+      where: {
+        name: {
+          [Sequelize.Op.iLike]: `%${query}%`
+        }
+      },
+      limit: 10
+    });
+    res.json(items);
+  } catch (error) {
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+router.get('/autocomplete', async (req, res) => {
+  try {
+    const items = await Item.findAll({
+      attributes: ['id', 'name', 'icon'],
+      order: [['name', 'ASC']]
+    });
+    res.json(items);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch items' });
+  }
+});
+
+
 module.exports = router;
