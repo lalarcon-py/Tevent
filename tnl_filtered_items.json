@@ -1,0 +1,1124 @@
+[
+  {
+    "name": "Shaikal's Deepmind Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00009.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Toublek's Deathmark Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00033.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Aelon's Rejuvenating Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00034.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Karnix's Netherbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00032.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Longbow of the Resistance",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00030.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Tevent's Arc of Wailing Death",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00018.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Longbow of the World Tree",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_bow_00020.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Duke Magna's Provoking Warblade",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00022.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Morokai's Greatblade of Corruption",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00027.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Adentus's Gargantuan Greatsword",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00028.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Junobote's Juggernaut Warblade",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00039.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Duke Magna's Fury Warblade",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00031.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Broadsword of the Resistance",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00038.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Greatsword of the Banshee",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00018.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Tevent's Warblade of Despair",
+    "type": "greatsword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword2h_00036.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Rex Chimaerus's Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00007c.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Kowazan's Sunflare Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00035.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Malakar's Energizing Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00034.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Crossbows of Infinite Steel",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00028.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Stormbringer Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00017.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Crossbows of the Resistance",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00022.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Queen Bellandir's Toxic Spine Throwers",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_crossbow_00033.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Toublek's Shattering Quarterstaff",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00014.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Talus's Crystalline Staff",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00032.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Aridus's Gnarled Voidstaff",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00033.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Staff of the Resistance",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00016.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Staff of the Umbramancer",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00027.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Staff of Lucid Light",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00028.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Queen Bellandir's Hivemind Staff",
+    "type": "staff",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_staff_00019.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Lequirus's Wicked Thorns",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00014.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Rex Chimaerus's Fangs",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00038.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Minzerok's Daggers of Crippling",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00039.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Kowazan's Twilight Daggers",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00037.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Darkslayer Daggers",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00036.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Daggers of the Resistance",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00013.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Tevent's Fangs of Fury",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_dagger_00035.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Karnix's Netherblade",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00015.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Cornelius's Animated Edge",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00008a.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Ahzreil's Siphoning Sword",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00026.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Nirma's Sword of Echoes",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00035.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Blade of the Resistance",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00032.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Chernobog's Blade of Beheading",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00033.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Queen Bellandir's Languishing Blade",
+    "type": "sword",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_sword_00034.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Tome of Proximate Remedy",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00008a.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Lequirus's Coveted Tome",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00013.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Shaikal's Mindfire Scepter",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00014.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Excavator's Mysterious Scepter",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00012.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Sacred Manuscript",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00001c.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Heroic Scepter of the Resistance",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00004c.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Tevent's Grasp of Withering",
+    "type": "wand",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_wand_00011.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Shock Commander Visor",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_hm_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Helmet of the Resistance",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_hm_06002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Blessed Templar Helmet",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_pl_m_hm_00016.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Helm of the Field General",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_hm_00018.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Visor of the Infernal Herald",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_hm_00019.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shock Commander Plate Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Blessed Templar Plate Mail",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_pl_m_ts_00015.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Armor of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_06002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Plate of the Field General",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00018.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Plate of the Infernal Herald",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00019.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shock Commander Gauntlets",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_gl_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ebon Roar Gauntlets",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_gl_05001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Gauntlets of the Resistance",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_gl_06002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Gauntlets of the Field General",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_gl_00018.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Gauntlets of the Infernal Herald",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_gl_00019.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shock Commander Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ebon Roar Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00017.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Greaves of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_06002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Greaves of the Field General",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00018.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Greaves of the Infernal Herald",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00019.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shock Commander Sabatons",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_bt_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ebon Roar Sabatons",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_bt_00017.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Sabatons of the Resistance",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_bt_06002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Sabatons of the Field General",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_bt_00018.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Boots of the Infernal Herald",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_bt_00019.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Phantom Wolf Mask",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_hm_00005.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Hood of the Resistance",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_hm_00014.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Tricorne of the Resistance",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_hm_05003.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shadow Harvester Mask",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_hm_00008.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Visage of the Executioner",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_fa_m_hm_00006.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Phantom Wolf Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00010.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Tunic of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05003.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shadow Harvester Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00013.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Garb of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Coat of the Executioner",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00022.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Phantom Wolf Gloves",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_gl_00001b.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Grips of the Resistance",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_gl_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shadow Harvester Grips",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_gl_00017a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Gloves of the Resistance",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_gl_05003.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Grip of the Executioner",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_fa_m_gl_00004.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Phantom Wolf Breeches",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Trousers of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05003.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shadow Harvester Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00007.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Breeches of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00004a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Breeches of the Executioner",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00022a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Phantom Wolf Boots",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_bt_00005.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Footguards of the Resistance",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_bt_05002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Shadow Harvester Boots",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_bt_00002.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Boots of the Resistance",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_bt_05003.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Boots of the Executioner",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_bt_00022.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Swirling Essence Hat",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_hm_05001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Hat of the Resistance",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_fa_m_hm_00005a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ascended Guardian Hood",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_hm_00011a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Arcane Shadow Hat",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_hm_00022.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Divine Justiciar Mask",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_hm_06001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Swirling Essence Robe",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_05001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ascended Guardian Raiment",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00010.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Robes of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00005.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Arcane Shadow Robes",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00023.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Divine Justiciar Attire",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_06001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Swirling Essence Gloves",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_gl_00020.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ascended Guardian Gloves",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_gl_00011.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Mitts of the Resistance",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_gl_00010.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Arcane Shadow Gloves",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_gl_00005b.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Divine Justiciar Gloves",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_gl_06001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Swirling Essence Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_fa_m_pt_00003.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ascended Guardian Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00005b.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Pants of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_06001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Arcane Shadow Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00023.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Divine Justiciar Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00022.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Swirling Essence Shoes",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_bt_00008c.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ascended Guardian Shoes",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_bt_00011.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Heroic Shoes of the Resistance",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_bt_00010.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Arcane Shadow Shoes",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_fa_m_bt_06001.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Divine Justiciar Shoes",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_pl_m_bt_00014a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Eldritch Whispers",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00008.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Bile Drenched Veil",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00013.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Relentless Assault",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00014.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Blessed Templar Cloak",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00019.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Forsaken Embrace",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00017.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Supreme Devotion",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00018.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Ancient Tapestry Mantle",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00016.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Immortal Reckoning",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_m_ca_00020.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Dark Seraph Ring",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00021.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Band of the Chosen One",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00024.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Band of the Silent One",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00002.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Abyssal Grace Band",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00018.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Embossed Granite Band",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00014.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Eldritch Ice Band",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00004.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Band of Universal Power",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00005.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Etched Alabaster Band",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00003.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Amber Dimensional Band",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00032.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Sapphire Dimensional Band",
+    "type": "ring",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_ring_00033.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Slayer's Quicksilver Pendant",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00002.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Bindings of the Unstoppable",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00008.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Thunderstorm Necklace",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00023.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Abyssal Grace Pendant",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00015.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Blessed Templar Choker",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00003.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Collar of Decimation",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00001.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Wrapped Coin Necklace",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00006.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Clasp of the Overlord",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00019.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Clasp of the Conqueror",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_necklace_00017.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Bracers of Unrelenting",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00004.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Ascended Guardian Bracelet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00003.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Eternal Champion Bindings",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00001.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Abyssal Grace Charm",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00018.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Forged Golden Bangle",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00013.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Ancient Saurodoma Bracers",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00010.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Gilded Infernal Wristlet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00008.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Bracers of the Primal King",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_bracelet_00023.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Forbidden Eternal Chain",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00013.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Forbidden Arcane Chain",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00014.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Forbidden Sacred Chain",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00015.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Demonic Beast King's Belt",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00018.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Flamewrought Bindings",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00019.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Girdle of Spectral Skulls",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00021.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Belt of Bloodlust",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00022.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Butcher's Belt",
+    "type": "belt",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/it_p_belt_00031.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Skillful Shock Bracelet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_bracelet_00002a.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Skillful Corrupted Bracelet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_bracelet_00004a.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Skillful Oppress Bracelet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_bracelet_00007a.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Skillful Charging Bracelet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_bracelet_00010a.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Skillful Silence Bracelet",
+    "type": "bracelet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_bracelet_00011a.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Heroic Polearm of the Resistance",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_spear_00015.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Skull Severing Spear",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_spear_00019.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Junobote's Smoldering Ranseur",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_spear_00021.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Shaikal's Mindveil Harpoon",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_spear_00016.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Queen Bellandir's Serrated Spike",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/weapon/it_p_spear_00018.png",
+    "dkp_value": 1000
+  },
+  {
+    "name": "Icy Necklace of Strength",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_necklace_00015.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Icy Necklace of Dexterity",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_necklace_00011.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Icy Necklace of Wisdom",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_necklace_00014.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Icy Necklace of Perception",
+    "type": "necklace",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/acc/pc_necklace_00010.png",
+    "dkp_value": 500
+  },
+  {
+    "name": "Gilded Raven Mask",
+    "type": "head",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_hm_00012a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Gilded Raven Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00014a.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Gilded Raven Grips",
+    "type": "hands",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_gl_00022b.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Gilded Raven Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00022b.png",
+    "dkp_value": 750
+  },
+  {
+    "name": "Gilded Raven Boots",
+    "type": "feet",
+    "icon": "https://cdn.tldb.info/db/images/ags/v11/128/image/icon/item_128/equip/armor/p_set_le_m_bt_00022a.png",
+    "dkp_value": 750
+  }
+]
