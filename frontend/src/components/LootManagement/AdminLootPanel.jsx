@@ -74,20 +74,18 @@ const AdminLootPanel = () => {
        inStorage: true
      });
      
-     if (response.status === 201) {
-       setAddedItems(prev => [...prev, response.data]);
-       
-       setNewItem({
-         name: '',
-         type: '',
-         dkpCost: 0,
-         quantity: 1,
-         inStorage: true,
-         icon: ''
-       });
-     }
+     await fetchAddedItems();
+     
+     setNewItem({
+       name: '',
+       type: '',
+       dkpCost: 0,
+       quantity: 1,
+       inStorage: true,
+       icon: ''
+     });
    } catch (error) {
-     console.error('Create error:', error);
+     console.error('Create/Update error:', error);
    }
  };
 
@@ -112,11 +110,11 @@ const AdminLootPanel = () => {
            getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
            value={newItem}
            onChange={(_, newValue) => {
-             if (newValue) {
+             if (newValue && typeof newValue === 'object') {
                setNewItem({
                  ...newItem,
-                 name: newValue.name || '',
-                 type: newValue.type || '',
+                 name: newValue.name,
+                 type: newValue.type,
                  icon: newValue.icon || '',
                  dkpCost: newValue.dkpCost || 0
                });
@@ -135,27 +133,33 @@ const AdminLootPanel = () => {
                }}
              />
            )}
-           renderOption={(props, option) => (
-             <ListItem {...props}>
-               <ListItemAvatar>
-                 <Avatar
-                   src={option.icon}
-                   sx={{
-                     width: 40,
-                     height: 40,
-                     bgcolor: 'rgba(144, 202, 249, 0.1)',
-                     border: '1px solid rgba(144, 202, 249, 0.2)'
-                   }}
-                 >
-                   {!option.icon && option.name?.[0]}
-                 </Avatar>
-               </ListItemAvatar>
-               <ListItemText 
-                 primary={option.name} 
-                 secondary={option.type}
-               />
-             </ListItem>
-           )}
+           renderOption={(props, option, state) => {
+             const { key, ...otherProps } = props;
+             return (
+               <ListItem 
+                 key={key} 
+                 {...otherProps}
+               >
+                 <ListItemAvatar>
+                   <Avatar
+                     src={option.icon}
+                     sx={{
+                       width: 40,
+                       height: 40,
+                       bgcolor: 'rgba(144, 202, 249, 0.1)',
+                       border: '1px solid rgba(144, 202, 249, 0.2)'
+                     }}
+                   >
+                     {!option.icon && option.name?.[0]}
+                   </Avatar>
+                 </ListItemAvatar>
+                 <ListItemText 
+                   primary={option.name} 
+                   secondary={option.type}
+                 />
+               </ListItem>
+             );
+           }}
          />
          <TextField
            label="DKP Cost"

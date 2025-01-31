@@ -67,22 +67,53 @@ router.get('/search', async (req, res) => {
 // Add new item
 router.post('/', async (req, res) => {
   try {
-    const { name, type, dkpCost, quantity, inStorage, icon } = req.body;
+    const { name, dkpCost, quantity, inStorage, icon } = req.body;
     
-    // Create the new item
+    // First, find the complete item information from the template/autocomplete items
+    const templateItem = await Item.findOne({
+      where: {
+        name: name
+      },
+      attributes: ['id', 'name', 'type', 'icon'] // Get all necessary template fields
+    });
+
+    if (!templateItem) {
+      return res.status(400).json({ error: 'Item template not found' });
+    }
+
+    // Now check if a storage entry exists for this item
+    const existingStorageItem = await Item.findOne({
+      where: {
+        name: name,
+        inStorage: true
+      }
+    });
+
+    if (existingStorageItem) {
+      // If item exists in storage, update its properties
+      const updatedItem = await existingStorageItem.update({
+        dkpCost: dkpCost || existingStorageItem.dkpCost,
+        quantity: existingStorageItem.quantity + quantity,
+        inStorage,
+        icon: icon || templateItem.icon
+      });
+      return res.json(updatedItem);
+    }
+
+    // If item doesn't exist in storage, create new one with template data
     const newItem = await Item.create({
       name,
-      type,
+      type: templateItem.type, // Use type from template
       dkpCost,
       quantity,
       inStorage,
-      icon
+      icon: icon || templateItem.icon
     });
 
     res.status(201).json(newItem);
   } catch (error) {
-    console.error('Error creating item:', error);
-    res.status(500).json({ error: 'Failed to create item' });
+    console.error('Error creating/updating item:', error);
+    res.status(500).json({ error: 'Failed to create/update item' });
   }
 });
 
@@ -108,11 +139,9 @@ router.delete('/:id', async (req, res) => {
 router.get('/autocomplete', getAutocompleteItems, async (req, res) => {
   try {
     const items = await Item.findAll({
-      attributes: ['id', 'name', 'icon'],
+      attributes: ['id', 'name', 'icon', 'type'],  // Add type to attributes
       order: [['name', 'ASC']]
     });
-    console.log('Autocomplete query:', Item.findAll({ attributes: ['id', 'name', 'icon'], order: [['name', 'ASC']] }).toString());
-    console.log('Autocomplete results:', JSON.stringify(items, null, 2)); // Log the results
     res.json(items);
   } catch (error) {
     console.error('Autocomplete error:', error);

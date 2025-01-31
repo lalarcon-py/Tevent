@@ -1,12 +1,11 @@
 import React from 'react';
-import { createRoot } from 'react-dom/client';  // Only need this import
+import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { ThemeProvider } from '@mui/material/styles';
 import darkTheme from './theme';
 
-// Create root once using React 18 syntax
 const root = createRoot(document.getElementById('root'));
 
 root.render(
@@ -17,5 +16,4 @@ root.render(
   </React.StrictMode>
 );
 
-// WebVitals (optional)
 reportWebVitals();
