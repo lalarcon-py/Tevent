@@ -9,7 +9,8 @@ import {
  Avatar,
  ListItem,
  ListItemAvatar,
- ListItemText
+ ListItemText,
+ Paper
 } from '@mui/material';
 import axiosInstance from '../../config/axios.js';
 
@@ -54,7 +55,23 @@ const LootRequestForm = () => {
  };
 
  return (
-   <Box sx={{ width: '100%', maxWidth: 600, mb: 4 }}>
+   <Paper 
+     elevation={3}
+     sx={{
+       p: 4,
+       width: '100%',
+       maxWidth: 600,
+       mb: 4,
+       background: 'rgba(30, 30, 30, 0.6)',
+       backdropFilter: 'blur(12px)',
+       border: '1px solid rgba(255,255,255,0.1)',
+       transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+       '&:hover': {
+         transform: 'translateY(-5px)',
+         boxShadow: '0 8px 32px rgba(144, 202, 249, 0.2)'
+       }
+     }}
+   >
      <Autocomplete
        freeSolo={false}
        options={allItems}
@@ -64,10 +81,8 @@ const LootRequestForm = () => {
        inputValue={inputValue}
        onInputChange={(_, value, reason) => {
          setInputValue(value);
-
          const filtered = filterItems(allItems, value);
          setShowNotFound(filtered.length === 0 && value.length > 0);
-
          if (reason === 'input') {
            setSelectedItem(null);
          }
@@ -81,11 +96,24 @@ const LootRequestForm = () => {
            label="Search Throne and Liberty Items"
            variant="outlined"
            fullWidth
+           sx={{
+             '& .MuiOutlinedInput-root': {
+               background: 'rgba(30, 30, 30, 0.4)',
+               backdropFilter: 'blur(12px)',
+               transition: 'all 0.3s ease'
+             },
+             '& .MuiOutlinedInput-notchedOutline': {
+               borderColor: 'rgba(144, 202, 249, 0.3)'
+             },
+             '&:hover .MuiOutlinedInput-notchedOutline': {
+               borderColor: 'rgba(144, 202, 249, 0.5)'
+             }
+           }}
            InputProps={{
              ...params.InputProps,
              endAdornment: (
                <>
-                 {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                 {loading ? <CircularProgress color="primary" size={20} /> : null}
                  {params.InputProps.endAdornment}
                </>
              )
@@ -93,14 +121,22 @@ const LootRequestForm = () => {
          />
        )}
        renderOption={(props, option) => (
-         <ListItem component="li" {...props}>
+         <ListItem {...props} sx={{
+           transition: 'background-color 0.3s ease',
+           borderRadius: 1,
+           my: 0.5,
+           '&:hover': {
+             backgroundColor: 'rgba(144, 202, 249, 0.1)'
+           }
+         }}>
            <ListItemAvatar>
              <Avatar
                src={option.icon}
                sx={{
                  width: 40,
                  height: 40,
-                 bgcolor: 'rgba(255,255,255,0.1)'
+                 bgcolor: 'rgba(144, 202, 249, 0.1)',
+                 border: '1px solid rgba(144, 202, 249, 0.2)'
                }}
              >
                {!option.icon && option.name[0]}
@@ -117,13 +153,8 @@ const LootRequestForm = () => {
            />
          </ListItem>
        )}
-       sx={{
-         '& .MuiAutocomplete-listbox': {
-           backgroundColor: '#1a1a1a',
-           border: '1px solid rgba(255,255,255,0.1)'
-         }
-       }}
      />
+     
      {showNotFound && (
        <Box sx={{
          mt: 2,
@@ -137,20 +168,30 @@ const LootRequestForm = () => {
          </Typography>
        </Box>
      )}
+
      <Button
        variant="contained"
        onClick={handleSubmit}
        disabled={!selectedItem}
        sx={{
          mt: 2,
-         bgcolor: '#90caf9',
-         '&:hover': { bgcolor: '#64b5f6' },
-         '&:disabled': { bgcolor: '#666666' }
+         width: '100%',
+         background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+         backdropFilter: 'blur(12px)',
+         transition: 'all 0.3s ease',
+         '&:hover': {
+           transform: 'translateY(-2px)',
+           boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+         },
+         '&:disabled': {
+           background: 'rgba(144, 202, 249, 0.1)',
+           color: 'rgba(255, 255, 255, 0.3)'
+         }
        }}
      >
        Request Item
      </Button>
-   </Box>
+   </Paper>
  );
 };
 

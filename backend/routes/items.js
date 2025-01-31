@@ -64,6 +64,46 @@ router.get('/search', async (req, res) => {
   }
 });
 
+// Add new item
+router.post('/', async (req, res) => {
+  try {
+    const { name, type, dkpCost, quantity, inStorage, icon } = req.body;
+    
+    // Create the new item
+    const newItem = await Item.create({
+      name,
+      type,
+      dkpCost,
+      quantity,
+      inStorage,
+      icon
+    });
+
+    res.status(201).json(newItem);
+  } catch (error) {
+    console.error('Error creating item:', error);
+    res.status(500).json({ error: 'Failed to create item' });
+  }
+});
+
+// Delete item
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await Item.findByPk(id);
+    
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    await item.destroy();
+    res.status(200).json({ message: 'Item deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    res.status(500).json({ error: 'Failed to delete item' });
+  }
+});
+
 // Autocomplete items
 router.get('/autocomplete', getAutocompleteItems, async (req, res) => {
   try {
