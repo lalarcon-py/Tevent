@@ -10,7 +10,10 @@ import GearCheck from './components/GearCheck/GearCheck';
 import Dashboard from './components/Dashboard'
 import { GuildProvider } from './contexts/GuildContext';
 import { LootProvider } from './contexts/LootContext';
+import { AttendanceProvider } from './contexts/AttendanceContext';
 import theme from './theme';
+import WaitListTab from './components/LootManagement/WaitListTab';
+import AttendanceManagement from './components/LootManagement/AttendanceManagement';
 
 function App() {
   useEffect(() => {
@@ -27,6 +30,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <GuildProvider>
         <LootProvider>
+          <AttendanceProvider>
           <Router>
             <AppHeader />
             <Navigation />
@@ -59,6 +63,7 @@ function App() {
               </Routes>
             </Box>
           </Router>
+          </AttendanceProvider>
         </LootProvider>
       </GuildProvider>
     </ThemeProvider>

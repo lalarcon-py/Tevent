@@ -1,35 +1,41 @@
-import { Box, Typography } from '@mui/material';
-import LootRequestForm from './LootRequestForm';
-import LootWaitlist from './LootWaitlist';
+// components/LootManagement/LootManagement.jsx
+import { useState } from 'react';
+import { Tabs, Tab, Box } from '@mui/material';
 import AdminLootPanel from './AdminLootPanel';
-import { useLoot } from '../../contexts/LootContext';
+import WaitListTab from './WaitListTab';
+import AttendanceManagement from './AttendanceManagement';
 
 const LootManagement = () => {
-  const { isAdmin } = useLoot();
+  const [currentTab, setCurrentTab] = useState(0);
 
   return (
-    <Box sx={{ 
-      p: 4,
-      background: 'linear-gradient(180deg, #1a1a1a 0%, #2d1a1a 100%)',
-      minHeight: '100vh'
-    }}>
-      <Typography variant="h3" sx={{ 
-        color: '#90caf9', 
-        mb: 4,
-        fontFamily: 'Arial, sans-serif',
-        textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
-      }}>
-        Loot Management
-      </Typography>
-      
-      <LootRequestForm />
-      
-      <Box sx={{ mt: 6 }}>
-        {isAdmin ? (
-          <AdminLootPanel />
-        ) : (
-          <LootWaitlist />
-        )}
+    <Box sx={{ width: '100%' }}>
+      <Tabs 
+        value={currentTab} 
+        onChange={(_, newValue) => setCurrentTab(newValue)}
+        sx={{
+          mb: 3,
+          '& .MuiTab-root': {
+            color: 'rgba(255,255,255,0.7)',
+            '&.Mui-selected': {
+              color: '#90caf9'
+            }
+          }
+        }}
+      >
+        <Tab label="Loot Management" />
+        <Tab label="Wait List" />
+        <Tab label="Attendance" />
+      </Tabs>
+
+      <Box hidden={currentTab !== 0}>
+        <AdminLootPanel />
+      </Box>
+      <Box hidden={currentTab !== 1}>
+        <WaitListTab />
+      </Box>
+      <Box hidden={currentTab !== 2}>
+        <AttendanceManagement />
       </Box>
     </Box>
   );

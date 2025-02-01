@@ -89,6 +89,17 @@ const AdminLootPanel = () => {
    }
  };
 
+ const handleRequestItem = async (item) => {
+   try {
+     const response = await axiosInstance.post('/api/waitlist', {
+       itemId: item.id,
+     });
+     console.log('Item requested successfully');
+   } catch (error) {
+     console.error('Failed to request item:', error);
+   }
+ };
+
  return (
    <Box>
      <Paper sx={{ 
@@ -218,6 +229,7 @@ const AdminLootPanel = () => {
              <TableCell>In Storage</TableCell>
              <TableCell>Quantity</TableCell>
              <TableCell>Actions</TableCell>
+             <TableCell>Request</TableCell>
            </TableRow>
          </TableHead>
          <TableBody>
@@ -270,6 +282,27 @@ const AdminLootPanel = () => {
                  >
                    <DeleteIcon />
                  </IconButton>
+               </TableCell>
+               <TableCell>
+                 <Button 
+                   variant="contained"
+                   disabled={!item.inStorage || item.quantity === 0}
+                   onClick={() => handleRequestItem(item)}
+                   sx={{
+                     background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+                     backdropFilter: 'blur(12px)',
+                     '&:hover': {
+                       transform: 'translateY(-2px)',
+                       boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+                     },
+                     '&:disabled': {
+                       background: 'rgba(144, 202, 249, 0.1)',
+                       color: 'rgba(255, 255, 255, 0.3)'
+                     }
+                   }}
+                 >
+                   Request
+                 </Button>
                </TableCell>
              </TableRow>
            ))}
