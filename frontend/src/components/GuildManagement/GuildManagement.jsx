@@ -10,55 +10,62 @@ const GuildManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [members, setMembers] = useState([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    // Check if user is already authenticated
-    const token = localStorage.getItem('discord_token');
-    if (token) {
-      setIsAuthenticated(true);
-    }
+    // Check authentication status
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/auth/status', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setIsAuthenticated(true);
+          setCurrentUser(userData);
+          // Fetch members after authentication
+          fetchMembers();
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setIsAuthenticated(false);
+      }
+    };
 
-    // Handle Discord OAuth callback
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    if (code) {
-      handleDiscordCallback(code);
-    }
+    checkAuth();
   }, []);
 
-  const handleDiscordCallback = async (code) => {
+  const fetchMembers = async () => {
     try {
-      // Exchange code for token (implement API call)
-      // Save token and user info
-      const isFirstUser = members.length === 0;
-      if (isFirstUser) {
-        // Set user as Guild Master
-        setMembers([{
-          id: Date.now(),
-          name: 'Guild Master', // You'll want to get this from Discord
-          role: 'Guild Master',
-          status: 'Active',
-          builds: []
-        }]);
+      const response = await fetch('http://localhost:5000/api/members', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Sort members to ensure Guild Master is first
+        const sortedMembers = data.sort((a, b) => {
+          if (a.role === 'Guild Master') return -1;
+          if (b.role === 'Guild Master') return 1;
+          return 0;
+        });
+        setMembers(sortedMembers);
       }
-      setIsAuthenticated(true);
     } catch (error) {
-      console.error('Discord authentication failed:', error);
+      console.error('Failed to fetch members:', error);
     }
-  };
-
-  const handleMemberAdd = (newMember) => {
-    setMembers(prev => {
-      const guildMaster = prev.find(m => m.role === 'Guild Master');
-      const otherMembers = prev.filter(m => m.role !== 'Guild Master');
-      return [guildMaster, ...otherMembers, newMember];
-    });
   };
 
   return (
     <Box sx={{ p: 4, height: '100%' }}>
       {!isAuthenticated ? (
-        <DiscordLogin onMemberAdd={handleMemberAdd} />
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh' 
+        }}>
+          <DiscordLogin />
+        </Box>
       ) : (
         <>
           <Box sx={{
@@ -95,7 +102,12 @@ const GuildManagement = () => {
             overflowY: 'auto',
             '&::-webkit-scrollbar': { display: 'none' }
           }}>
-            <MembersList searchTerm={searchTerm} members={members} setMembers={setMembers} />
+            <MembersList 
+              searchTerm={searchTerm} 
+              members={members} 
+              setMembers={setMembers}
+              currentUser={currentUser}
+            />
           </Box>
         </>
       )}

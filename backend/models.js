@@ -60,7 +60,7 @@ const User = sequelize.define('User', {
     },
     // add other user fields as needed
 }, {
-    tableName: 'Users',
+    tableName: 'users',
     freezeTableName: true
 });
   
