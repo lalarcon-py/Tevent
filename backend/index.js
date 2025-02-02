@@ -7,11 +7,33 @@ const itemsRouter = require('./routes/items');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const db = require('./models');
-console.log('DB object contains:', Object.keys(db));
-console.log('MemberBuild model:', db.MemberBuild);
+const Joi = require('joi');
+const format = require('pg-format');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Database connection check
+sequelize.authenticate()
+  .then(async () => {
+    console.log('Database connected');
+    // Verify builds column schema
+    const [schemaCheck] = await sequelize.query(`
+      SELECT column_name, data_type, udt_name, column_default 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name = 'builds'
+    `);
+    console.log('Builds column schema:', schemaCheck[0]);
+  })
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('Database connection failed:', error);
+  });
 
 // Middleware
 app.use(cors({
@@ -20,6 +42,17 @@ app.use(cors({
 }));
 app.use(express.json());
 
+app.use((req, res, next) => {
+  if (req.method === 'PUT') {
+    console.log('Incoming PUT request:', {
+      url: req.url,
+      body: req.body,
+      params: req.params
+    });
+  }
+  next();
+});
+
 // Session middleware
 app.use(session({
   secret: process.env.SESSION_SECRET,
@@ -27,82 +60,45 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
-// Initialize Passport
+// Passport initialization
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Routes
-app.use('/api/items', itemsRouter);
-
-// Test route
-app.get('/', (req, res) => {
-  res.send('Backend server is running!');
-});
-
 // Passport Discord Strategy
 passport.use(new DiscordStrategy({
-    clientID: process.env.DISCORD_CLIENT_ID,
-    clientSecret: process.env.DISCORD_CLIENT_SECRET,
-    callbackURL: process.env.DISCORD_REDIRECT_URI,
-    scope: ['identify', 'guilds']
-  },
-  async (accessToken, refreshToken, profile, done) => {
-    try {
-      const userCount = await db.User.count();
-      
-      let user = await db.User.findOne({
-        where: { discord_id: profile.id }
+  clientID: process.env.DISCORD_CLIENT_ID,
+  clientSecret: process.env.DISCORD_CLIENT_SECRET,
+  callbackURL: process.env.DISCORD_REDIRECT_URI,
+  scope: ['identify', 'guilds']
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    let user = await db.User.findOne({ where: { discord_id: profile.id } });
+    
+    if (!user) {
+      user = await db.User.create({
+        discord_id: profile.id,
+        username: profile.username,
+        role: (await db.User.count()) === 0 ? 'Guild Master' : 'Member',
+        status: 'Active',
+        avatar_url: profile.avatar 
+          ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+          : null,
+        builds: [] // Explicitly set empty array
       });
-
-      if (!user) {
-        const now = new Date();
-        user = await db.User.create({
-          discord_id: profile.id,
-          username: profile.username,
-          role: userCount === 0 ? 'Guild Master' : 'Member',
-          status: 'Active',
-          avatar_url: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null,
-          created_at: now,
-          updated_at: now
-        }, {
-          raw: true,
-          returning: true,
-          fields: [
-            'discord_id',
-            'username',
-            'role',
-            'status',
-            'avatar_url',
-            'created_at',
-            'updated_at'
-          ]
-        });
-
-        console.log('Created user with data:', user.toJSON());
-      }
-
-      return done(null, user);
-    } catch (error) {
-      console.error('Creation error:', {
-        message: error.message,
-        name: error.name,
-        sql: error.sql,
-        parameters: error.parameters,
-        detail: error.parent?.detail
-      });
-      return done(error, null);
     }
+    
+    done(null, user);
+  } catch (error) {
+    console.error('Auth error:', error);
+    done(error, null);
   }
-));
+}));
 
-passport.serializeUser((user, done) => {
-  done(null, user.id);
-});
-
+passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
   try {
     const user = await db.User.findByPk(id);
@@ -112,127 +108,117 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Auth routes
+// Routes
+app.use('/api/items', itemsRouter);
+
+app.get('/', (req, res) => res.send('Backend server is running!'));
+
 app.get('/auth/discord', passport.authenticate('discord'));
 
-app.get('/auth/discord/callback', 
-  passport.authenticate('discord', {
-    failureRedirect: '/login'
-  }),
-  (req, res) => {
-    res.redirect(`${process.env.CLIENT_BASE_URL}/guild-management`);
-  }
+app.get('/auth/discord/callback',
+  passport.authenticate('discord', { failureRedirect: '/login' }),
+  (req, res) => res.redirect(`${process.env.CLIENT_BASE_URL}/guild-management`)
 );
 
 app.get('/auth/logout', (req, res) => {
   req.logout((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Error logging out' });
-    }
     res.redirect(process.env.CLIENT_BASE_URL);
   });
 });
 
 app.get('/api/auth/status', (req, res) => {
-  if (req.isAuthenticated()) {
-    res.json(req.user);
-  } else {
-    res.status(401).json({ error: 'Not authenticated' });
-  }
+  req.isAuthenticated() ? res.json(req.user) : res.status(401).json({ error: 'Not authenticated' });
 });
 
 app.get('/api/members', async (req, res) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
+
   try {
-    console.log('Starting members fetch...');
-    
     const members = await db.User.findAll({
-      attributes: [
-        'id',
-        'discord_id',
-        'username',
-        'role',
-        'status',
-        'avatar_url',
-        'builds',
-        'created_at',
-        'updated_at'
-      ],
-      order: [
-        ['role', 'DESC'],
-        ['username', 'ASC']
-      ]
+      raw: true,
+      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds'],
+      order: [['role', 'DESC'], ['username', 'ASC']]
     });
-    
-    console.log('Members fetch successful:', members.length);
-    res.json(members);
+
+    res.json(members.map(m => ({
+      ...m,
+      builds: Array.isArray(m.builds) ? m.builds : []
+    })));
   } catch (error) {
-    console.error('Error fetching members:', error);
-    res.status(500).json({ error: 'Failed to fetch members: ' + error.message });
+    console.error('Fetch members error:', error);
+    res.status(500).json({ error: 'Failed to fetch members' });
   }
 });
 
 app.put('/api/members/:id', async (req, res) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
 
   const t = await sequelize.transaction();
-
   try {
     const { id } = req.params;
-    const updateData = req.body;
-    
-    console.log('Received update request for member:', id);
-    console.log('Update data:', updateData);
+    const { id: _, ...updateData } = req.body;
 
-    const member = await db.User.findByPk(id);
-    if (!member) {
+    // Find the user
+    const user = await db.User.findByPk(id);
+    if (!user) {
       await t.rollback();
       return res.status(404).json({ error: 'Member not found' });
     }
 
-    // Update member data including builds
-    await member.update({
-      status: updateData.status,
-      role: updateData.role,
-      discord_id: updateData.discord_id,
-      username: updateData.username,
-      avatar_url: updateData.avatar_url,
-      builds: updateData.builds?.map(build => ({
-        primary_weapon: build.primary,
-        secondary_weapon: build.secondary,
-        combat_role: build.spec
-      })) || [],
-      updated_at: new Date()
-    }, { transaction: t });
+    // Format the builds for PostgreSQL
+    const buildsJson = JSON.stringify(updateData.builds);
+
+    // Use raw query to ensure proper array handling
+    await sequelize.query(
+      `UPDATE users SET 
+        discord_id = :discord_id,
+        username = :username,
+        role = :role,
+        status = :status,
+        avatar_url = :avatar_url,
+        builds = ARRAY[:builds]::jsonb[],
+        updated_at = NOW()
+       WHERE id = :id`,
+      {
+        replacements: { 
+          id,
+          discord_id: updateData.discord_id,
+          username: updateData.username,
+          role: updateData.role,
+          status: updateData.status,
+          avatar_url: updateData.avatar_url,
+          builds: buildsJson
+        },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: t
+      }
+    );
 
     await t.commit();
 
-    console.log('Successfully updated member:', member);
-    res.json(member);
+    // Fetch and return the updated record
+    const updatedUser = await db.User.findByPk(id, {
+      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds']
+    });
+
+    console.log('Updated user:', JSON.stringify(updatedUser.toJSON(), null, 2));
+    res.json(updatedUser);
+    
   } catch (error) {
-    await t.rollback();
-    console.error('Error updating member:', error);
-    res.status(500).json({ error: 'Failed to update member: ' + error.message });
+    console.error('Update error:', {
+      message: error.message,
+      stack: error.stack,
+      sql: error.sql
+    });
+    if (!t.finished) await t.rollback();
+    res.status(500).json({ 
+      error: 'Update failed',
+      details: error.original?.message || error.message 
+    });
   }
 });
 
-
-
-// Start the server
-sequelize.authenticate()
-  .then(() => {
-    console.log('Database connected');
-  })
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error('Unable to connect to the database:', error);
-  });
+// UUID validation helper
+function validateUUID(uuid) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+}

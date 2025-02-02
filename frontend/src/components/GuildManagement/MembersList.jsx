@@ -218,23 +218,40 @@ const MembersList = ({ searchTerm }) => {
 
  const handleSave = async (updatedMember) => {
    try {
-     console.log('Saving member:', updatedMember);
-     const response = await fetch(`http://localhost:5000/api/members/${updatedMember.id}`, {
+     // Convert builds to proper format
+     const memberToUpdate = {
+       ...updatedMember,
+       builds: updatedMember.builds.map(build => ({
+         primary: build.primary,
+         secondary: build.secondary,
+         spec: build.spec
+       }))
+     };
+
+     console.log('Sending update data:', JSON.stringify(memberToUpdate, null, 2));
+   
+     const response = await fetch(`http://localhost:5000/api/members/${memberToUpdate.id}`, {
        method: 'PUT',
        headers: {
          'Content-Type': 'application/json',
        },
        credentials: 'include',
-       body: JSON.stringify(updatedMember)
+       body: JSON.stringify(memberToUpdate)
      });
 
      if (!response.ok) {
-       throw new Error('Failed to update member');
+       const errorData = await response.json();
+       console.error('Server error response:', errorData);
+       throw new Error(`Failed to update member: ${errorData.error || 'Unknown error'}`);
      }
 
+     const responseData = await response.json();
+     console.log('Server response:', responseData);
+
+     // Update local state with the server response
      setMembers(prevMembers => 
        prevMembers.map(member => 
-         member.id === updatedMember.id ? updatedMember : member
+         member.id === responseData.id ? responseData : member
        )
      );
      setEditMember(null);

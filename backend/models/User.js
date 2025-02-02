@@ -31,25 +31,34 @@ const User = sequelize.define('users', {
     allowNull: true
   },
   builds: {
-    type: DataTypes.JSONB,
-    allowNull: true,
-    defaultValue: []
+    type: DataTypes.ARRAY(DataTypes.JSONB),
+    allowNull: false,
+    defaultValue: [],
+    get() {
+      const rawValue = this.getDataValue('builds');
+      return Array.isArray(rawValue) ? rawValue : [];
+    },
+    set(value) {
+      this.setDataValue('builds', Array.isArray(value) ? value : []);
+    }
   },
   created_at: {
     type: DataTypes.DATE,
-    defaultValue: sequelize.fn('NOW'),
-    allowNull: true
+    defaultValue: sequelize.fn('NOW')
   },
   updated_at: {
     type: DataTypes.DATE,
-    defaultValue: sequelize.fn('NOW'),
-    allowNull: true
+    defaultValue: sequelize.fn('NOW')
   }
 }, {
-  sequelize,
   tableName: 'users',
   timestamps: false,
-  underscored: true
+  underscored: true,
+  hooks: {
+    beforeUpdate: (instance) => {
+      instance.updated_at = new Date();
+    }
+  }
 });
 
 module.exports = User;
