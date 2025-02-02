@@ -7,7 +7,8 @@ import Navigation from './components/Navigation/Navigation';
 import GuildManagement from './components/GuildManagement/GuildManagement';
 import LootManagement from './components/LootManagement/LootManagement';
 import GearCheck from './components/GearCheck/GearCheck';
-import Dashboard from './components/Dashboard'
+import Dashboard from './components/Dashboard';
+import EventPlanner from './components/EventPlanner/EventPlanner';
 import { GuildProvider } from './contexts/GuildContext';
 import { LootProvider } from './contexts/LootContext';
 import { AttendanceProvider } from './contexts/AttendanceContext';
@@ -31,38 +32,39 @@ function App() {
       <GuildProvider>
         <LootProvider>
           <AttendanceProvider>
-          <Router>
-            <AppHeader />
-            <Navigation />
-            <Box
-              component="main"
-              sx={{
-                flexGrow: 1,
-                p: 3,
-                ml: { sm: '240px' },
-                mt: { xs: '56px', sm: '64px' },
-                position: 'relative',
-                '&::before': {
-                  content: '""',
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(144, 202, 249, 0.1), transparent 50%)',
-                  pointerEvents: 'none',
-                  zIndex: 0,
-                }
-              }}
-            >
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/guild-management" element={<GuildManagement />} />
-                <Route path="/loot-management" element={<LootManagement />} />
-                <Route path="/gear-check" element={<GearCheck />} />
-              </Routes>
-            </Box>
-          </Router>
+            <Router>
+              <AppHeader />
+              <Navigation />
+              <Box
+                component="main"
+                sx={{
+                  flexGrow: 1,
+                  p: 3,
+                  ml: { sm: '240px' },
+                  mt: { xs: '56px', sm: '64px' },
+                  position: 'relative',
+                  '&::before': {
+                    content: '""',
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(144, 202, 249, 0.1), transparent 50%)',
+                    pointerEvents: 'none',
+                    zIndex: 0,
+                  }
+                }}
+              >
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/guild-management" element={<GuildManagement />} />
+                  <Route path="/loot-management" element={<LootManagement />} />
+                  <Route path="/gear-check" element={<GearCheck />} />
+                  <Route path="/event-planner" element={<EventPlanner />} />
+                </Routes>
+              </Box>
+            </Router>
           </AttendanceProvider>
         </LootProvider>
       </GuildProvider>

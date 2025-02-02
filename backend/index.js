@@ -9,6 +9,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 const db = require('./models');
 const Joi = require('joi');
 const format = require('pg-format');
+const eventsRouter = require('./routes/events');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -40,7 +41,24 @@ app.use(cors({
   origin: process.env.CLIENT_BASE_URL,
   credentials: true
 }));
+
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.use(express.json());
+
+app.use('/api/items', itemsRouter);
+app.use('/api/events', eventsRouter);
 
 app.use((req, res, next) => {
   if (req.method === 'PUT') {
@@ -53,20 +71,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Session middleware
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000
-  }
-}));
 
-// Passport initialization
-app.use(passport.initialize());
-app.use(passport.session());
+app.use((req, res, next) => {
+  if (req.method === 'PUT') {
+    console.log('Incoming PUT request:', {
+      url: req.url,
+      body: req.body,
+      params: req.params
+    });
+  }
+  next();
+});
 
 // Passport Discord Strategy
 passport.use(new DiscordStrategy({
@@ -107,9 +122,6 @@ passport.deserializeUser(async (id, done) => {
     done(error, null);
   }
 });
-
-// Routes
-app.use('/api/items', itemsRouter);
 
 app.get('/', (req, res) => res.send('Backend server is running!'));
 
