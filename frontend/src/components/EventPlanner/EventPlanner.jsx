@@ -1,187 +1,225 @@
 // EventPlanner/EventPlanner.jsx
 import { useState, useEffect } from 'react';
-import { 
-  Box, 
-  ToggleButtonGroup,
-  ToggleButton,
-  Typography,
-  Button,
-  Dialog
-} from '@mui/material';
-import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import ViewListIcon from '@mui/icons-material/ViewList';
+import { Box, Button, Dialog, Snackbar, Alert, Typography } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import CalendarView from './CalendarView';
-import ListView from './ListView';
 import EventForm from './EventForm';
+import EventDetails from './EventDetails';
 
 const EventPlanner = () => {
-  const [viewMode, setViewMode] = useState('calendar');
   const [events, setEvents] = useState([]);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/auth/status', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          console.log('Authenticated as:', userData);
+        } else {
+          console.log('Not authenticated');
+          setError('Please log in to create events');
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/events', {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch events');
+      const data = await response.json();
+      setEvents(data);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setError('Failed to fetch events');
+    }
+  };
+
+  const createEvent = async (eventData) => {
+    if (!user) {
+      throw new Error('Please log in to create events');
+    }
+
+    try {
+      console.log('Creating event as user:', user);
+      console.log('Attempting to create event with data:', eventData);
+
+      const response = await fetch('http://localhost:5000/api/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          ...eventData,
+          event_time: eventData.eventTime
+        })
+      });
+
+      const responseData = await response.json();
+      console.log('Server response:', responseData);
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Failed to create event');
+      }
+
+      await fetchEvents();
+      return responseData;
+    } catch (error) {
+      console.error('Create event error:', error);
+      throw error;
+    }
+  };
 
   useEffect(() => {
     fetchEvents();
   }, []);
 
-  const fetchEvents = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/events', {
-        credentials: 'include'
+  const handleEventClick = (eventData) => {
+    if (eventData.id) {
+      // Existing event clicked
+      setSelectedEvent(eventData);
+      setIsDetailsDialogOpen(true);
+    } else {
+      // Empty date clicked - open create dialog with pre-filled date
+      setIsCreateDialogOpen(true);
+      setSelectedEvent({
+        event_time: eventData.event_time,
+        title: '',
+        description: '',
+        location: '',
+        tanks: 2,
+        healers: 4,
+        dps: 24,
+        requirements: ''
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch events');
-      }
-
-      const data = await response.json();
-      setEvents(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      setEvents([]);
-    } finally {
-      setLoading(false);
     }
   };
 
   return (
-    <Box sx={{ p: 4, bgcolor: '#121212', minHeight: '100vh' }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" sx={{ color: 'white' }}>
-          Event Planner
-        </Typography>
-        <Box display="flex" gap={2}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={(e, newValue) => newValue && setViewMode(newValue)}
-            sx={{ 
-              bgcolor: '#1e1e1e',
-              '& .MuiToggleButton-root': {
-                color: 'grey.400',
-                '&.Mui-selected': {
-                  color: 'white',
-                  bgcolor: 'rgba(144, 202, 249, 0.2)'
-                }
-              }
-            }}
-          >
-            <ToggleButton value="calendar">
-              <CalendarMonthIcon />
-            </ToggleButton>
-            <ToggleButton value="list">
-              <ViewListIcon />
-            </ToggleButton>
-          </ToggleButtonGroup>
+    <Box>
+      {!user ? (
+        <Box sx={{ textAlign: 'center', mt: 4 }}>
+          <Typography variant="h6" color="error">
+            Please log in to access the Event Planner
+          </Typography>
           <Button 
             variant="contained" 
-            onClick={() => {
-              setSelectedEvent(null);
-              setIsFormOpen(true);
-            }}
-            sx={{ 
-              bgcolor: '#90caf9',
-              '&:hover': { bgcolor: '#64b5f6' }
-            }}
+            href="http://localhost:5000/auth/discord" 
+            sx={{ mt: 2 }}
           >
-            Create Event
+            Login with Discord
           </Button>
         </Box>
-      </Box>
-
-      {viewMode === 'calendar' ? (
-        <CalendarView 
-          events={events}
-          onEventSelect={setSelectedEvent}
-          onEventUpdate={fetchEvents}
-        />
       ) : (
-        <ListView 
-          events={events}
-          onEventSelect={setSelectedEvent}
-          onEventUpdate={fetchEvents}
-        />
+        <>
+          <Box sx={{ mb: 2 }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setSelectedEvent(null);
+                setIsCreateDialogOpen(true);
+              }}
+              sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
+            >
+              Create Event
+            </Button>
+          </Box>
+
+          <CalendarView 
+            events={events} 
+            onEventClick={handleEventClick}
+          />
+
+          <Dialog 
+            open={isCreateDialogOpen} 
+            onClose={() => {
+              setIsCreateDialogOpen(false);
+              setSelectedEvent(null);
+            }}
+            maxWidth="md"
+            fullWidth
+          >
+            <EventForm 
+              initialData={selectedEvent || {
+                title: '',
+                description: '',
+                eventTime: new Date().toISOString().slice(0, 16),
+                location: '',
+                tanks: 2,
+                healers: 4,
+                dps: 24,
+                requirements: ''
+              }}
+              onSubmit={async (eventData) => {
+                try {
+                  await createEvent(eventData);
+                  setIsCreateDialogOpen(false);
+                  setSelectedEvent(null);
+                } catch (error) {
+                  console.error('Error in form submission:', error);
+                  setError(error.message || 'Failed to create event');
+                }
+              }}
+              onClose={() => {
+                setIsCreateDialogOpen(false);
+                setSelectedEvent(null);
+              }}
+            />
+          </Dialog>
+
+          <Dialog
+            open={isDetailsDialogOpen}
+            onClose={() => {
+              setIsDetailsDialogOpen(false);
+              setSelectedEvent(null);
+            }}
+            maxWidth="md"
+            fullWidth
+          >
+            {selectedEvent && (
+              <EventDetails 
+                event={selectedEvent}
+                onEventUpdate={async () => {
+                  await fetchEvents();
+                  setIsDetailsDialogOpen(false);
+                  setSelectedEvent(null);
+                }}
+                onClose={() => {
+                  setIsDetailsDialogOpen(false);
+                  setSelectedEvent(null);
+                }}
+              />
+            )}
+          </Dialog>
+        </>
       )}
 
-      <Dialog 
-        open={isFormOpen} 
-        onClose={() => setIsFormOpen(false)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: { bgcolor: '#1e1e1e' }
-        }}
+      <Snackbar 
+        open={!!error} 
+        autoHideDuration={6000} 
+        onClose={() => setError(null)}
       >
-        <EventForm 
-          initialData={selectedEvent}
-          onSubmit={async (eventData) => {
-            try {
-              const url = selectedEvent 
-                ? `http://localhost:5000/api/events/${selectedEvent.id}`
-                : 'http://localhost:5000/api/events';
-              
-              const response = await fetch(url, {
-                method: selectedEvent ? 'PUT' : 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify(eventData)
-              });
-
-              if (!response.ok) {
-                throw new Error('Failed to save event');
-              }
-
-              await fetchEvents();
-              setIsFormOpen(false);
-            } catch (error) {
-              console.error('Error saving event:', error);
-            }
-          }}
-          onClose={() => setIsFormOpen(false)}
-        />
-      </Dialog>
-
-      <Dialog 
-        open={Boolean(selectedEvent)} 
-        onClose={() => setSelectedEvent(null)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: { bgcolor: '#1e1e1e' }
-        }}
-      >
-        {selectedEvent && (
-          <EventForm 
-            initialData={selectedEvent}
-            onSubmit={async (eventData) => {
-              try {
-                const response = await fetch(`http://localhost:5000/api/events/${selectedEvent.id}`, {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  credentials: 'include',
-                  body: JSON.stringify(eventData)
-                });
-
-                if (!response.ok) {
-                  throw new Error('Failed to update event');
-                }
-
-                await fetchEvents();
-                setSelectedEvent(null);
-              } catch (error) {
-                console.error('Error updating event:', error);
-              }
-            }}
-            onClose={() => setSelectedEvent(null)}
-          />
-        )}
-      </Dialog>
+        <Alert onClose={() => setError(null)} severity="error">
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

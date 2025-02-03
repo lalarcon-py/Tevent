@@ -3,67 +3,157 @@ const sequelize = require('./config/database');
 
 // Item Schema
 const Item = sequelize.define('Item', {
-    id: { 
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true 
-    },
-    name: { type: DataTypes.STRING, allowNull: false },
-    type: { type: DataTypes.STRING },
-    rarity: { type: DataTypes.ENUM('Common', 'Rare', 'Epic', 'Legendary') },
-    dkpCost: { type: DataTypes.INTEGER, defaultValue: 0 },
-    inStorage: { type: DataTypes.BOOLEAN, defaultValue: false },
-    quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
-    icon: { type: DataTypes.STRING }
+   id: { 
+       type: DataTypes.UUID,
+       defaultValue: DataTypes.UUIDV4,
+       primaryKey: true 
+   },
+   name: { type: DataTypes.STRING, allowNull: false },
+   type: { type: DataTypes.STRING },
+   rarity: { type: DataTypes.ENUM('Common', 'Rare', 'Epic', 'Legendary') },
+   dkpCost: { type: DataTypes.INTEGER, defaultValue: 0 },
+   inStorage: { type: DataTypes.BOOLEAN, defaultValue: false }, 
+   quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
+   icon: { type: DataTypes.STRING }
 }, {
-    tableName: 'items',
-    freezeTableName: true
+   tableName: 'items',
+   freezeTableName: true
 });
-  
+
 // Loot Request Schema
 const LootRequest = sequelize.define('LootRequest', {
-    id: { 
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true 
-    },
-    status: { 
-        type: DataTypes.ENUM('Pending', 'Approved', 'Denied', 'Fulfilled'),
-        defaultValue: 'Pending'
-    },
-    priority: { type: DataTypes.INTEGER, defaultValue: 0 }
+   id: { 
+       type: DataTypes.UUID,
+       defaultValue: DataTypes.UUIDV4,
+       primaryKey: true 
+   },
+   status: { 
+       type: DataTypes.ENUM('Pending', 'Approved', 'Denied', 'Fulfilled'),
+       defaultValue: 'Pending'
+   },
+   priority: { type: DataTypes.INTEGER, defaultValue: 0 }
 }, {
-    tableName: 'loot_requests',
-    freezeTableName: true
+   tableName: 'loot_requests',
+   freezeTableName: true
 });
-  
-// DKP Transaction Schema
+
+// DKP Transaction Schema  
 const DKPTransaction = sequelize.define('DKPTransaction', {
-    id: { 
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true 
-    },
-    amount: { type: DataTypes.INTEGER, allowNull: false },
-    reason: { type: DataTypes.TEXT }
+   id: { 
+       type: DataTypes.UUID,
+       defaultValue: DataTypes.UUIDV4,
+       primaryKey: true 
+   },
+   amount: { type: DataTypes.INTEGER, allowNull: false },
+   reason: { type: DataTypes.TEXT }
 }, {
-    tableName: 'DKPTransactions',
-    freezeTableName: true
+   tableName: 'DKPTransactions',
+   freezeTableName: true
 });
 
 // User Schema
 const User = sequelize.define('User', {
-    id: { 
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true 
-    },
-    // add other user fields as needed
+   id: { 
+       type: DataTypes.UUID,
+       defaultValue: DataTypes.UUIDV4,
+       primaryKey: true 
+   },
+   discord_id: { type: DataTypes.STRING },
+   username: { type: DataTypes.STRING },
+   role: { type: DataTypes.STRING },
+   status: { type: DataTypes.STRING },
+   avatar_url: { type: DataTypes.STRING },
+   builds: { type: DataTypes.JSONB }
 }, {
-    tableName: 'users',
-    freezeTableName: true
+   tableName: 'users',
+   freezeTableName: true
 });
-  
+
+// Event Schema
+const Event = sequelize.define('Event', {
+   id: { 
+       type: DataTypes.UUID,
+       defaultValue: DataTypes.UUIDV4,
+       primaryKey: true 
+   },
+   title: {
+       type: DataTypes.STRING,
+       allowNull: false
+   },
+   description: {
+       type: DataTypes.TEXT
+   },
+   event_time: {
+       type: DataTypes.DATE,
+       allowNull: false
+   },
+   location: {
+       type: DataTypes.STRING
+   },
+   tanks: {
+       type: DataTypes.INTEGER,
+       defaultValue: 2
+   },
+   healers: {
+       type: DataTypes.INTEGER,
+       defaultValue: 4
+   },
+   dps: {
+       type: DataTypes.INTEGER,
+       defaultValue: 24
+   },
+   requirements: {
+       type: DataTypes.TEXT
+   },
+   created_by: {
+       type: DataTypes.UUID,
+       references: {
+           model: 'users',
+           key: 'id'
+       }
+   }
+}, {
+   tableName: 'events',
+   underscored: true,
+   timestamps: true
+});
+
+// EventParticipant Schema
+const EventParticipant = sequelize.define('EventParticipant', {
+   id: { 
+       type: DataTypes.UUID,
+       defaultValue: DataTypes.UUIDV4,
+       primaryKey: true 
+   },
+   event_id: {
+       type: DataTypes.UUID,
+       allowNull: false,
+       references: {
+           model: 'events',
+           key: 'id'
+       }
+   },
+   user_id: {
+       type: DataTypes.UUID,
+       allowNull: false,
+       references: {
+           model: 'users',
+           key: 'id'
+       }
+   },
+   role: {
+       type: DataTypes.STRING,
+       allowNull: false,
+       validate: {
+           isIn: [['TANK', 'HEALER', 'DPS']]
+       }
+   }
+}, {
+   tableName: 'event_participants',
+   underscored: true,
+   timestamps: true
+});
+
 // Associations
 User.hasMany(LootRequest);
 Item.hasMany(LootRequest);
@@ -71,10 +161,30 @@ User.hasMany(DKPTransaction);
 LootRequest.belongsTo(User);
 LootRequest.belongsTo(Item);
 
+Event.belongsTo(User, {
+   foreignKey: 'created_by',
+   as: 'creator'
+});
+
+Event.hasMany(EventParticipant, {
+   foreignKey: 'event_id',
+   as: 'participants'
+});
+
+EventParticipant.belongsTo(Event, {
+   foreignKey: 'event_id'
+});
+
+EventParticipant.belongsTo(User, {
+   foreignKey: 'user_id'
+});
+
 module.exports = {
-    sequelize,
-    Item,
-    LootRequest,
-    DKPTransaction,
-    User
+   sequelize,
+   Item,
+   LootRequest,
+   DKPTransaction,
+   User,
+   Event,
+   EventParticipant
 };

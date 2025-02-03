@@ -38,7 +38,7 @@ sequelize.authenticate()
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_BASE_URL,
+  origin: 'http://localhost:3002',
   credentials: true
 }));
 
@@ -48,6 +48,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000
   }
 }));

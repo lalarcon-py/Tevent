@@ -11,16 +11,17 @@ import {
 } from '@mui/material';
 
 const EventForm = ({ onSubmit, onClose, initialData }) => {
-  const [formData, setFormData] = useState(initialData || {
-    title: '',
-    description: '',
-    eventTime: new Date().toISOString().slice(0, 16), // Format: "YYYY-MM-DDTHH:mm"
-    maxParticipants: 30,
-    tanks: 2,
-    healers: 4,
-    dps: 24,
-    location: '',
-    requirements: ''
+  const [formData, setFormData] = useState({
+    title: initialData?.title || '',
+    description: initialData?.description || '',
+    eventTime: initialData?.event_time 
+      ? new Date(initialData.event_time).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16),
+    location: initialData?.location || '',
+    tanks: initialData?.tanks || 2,
+    healers: initialData?.healers || 4,
+    dps: initialData?.dps || 24,
+    requirements: initialData?.requirements || ''
   });
 
   const handleSubmit = () => {
@@ -33,7 +34,7 @@ const EventForm = ({ onSubmit, onClose, initialData }) => {
   return (
     <Box>
       <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
-        {initialData ? 'Edit Event' : 'Create New Event'}
+        {initialData?.id ? 'Edit Event' : 'Create New Event'}
       </DialogTitle>
       <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
         <Grid container spacing={2}>
@@ -169,7 +170,7 @@ const EventForm = ({ onSubmit, onClose, initialData }) => {
             '&:hover': { bgcolor: '#64b5f6' }
           }}
         >
-          {initialData ? 'Update' : 'Create'}
+          {initialData?.id ? 'Update' : 'Create'}
         </Button>
       </DialogActions>
     </Box>

@@ -42,4 +42,4 @@ const EventParticipant = sequelize.define('event_participants', {
   underscored: true
 });
 
-module.exports = EventParticipant;
+module.exports = EventParticipation;

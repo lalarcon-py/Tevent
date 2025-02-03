@@ -1,19 +1,15 @@
 // EventPlanner/CalendarView.jsx
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Box, 
   Grid, 
   Typography, 
-  Paper,
-  IconButton,
-  Tooltip,
-  Chip
+  IconButton
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import GroupIcon from '@mui/icons-material/Group';
 
-const CalendarView = ({ events, onEventSelect }) => {
+const CalendarView = ({ events, onEventClick }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const getDaysInMonth = (date) => {
@@ -24,136 +20,218 @@ const CalendarView = ({ events, onEventSelect }) => {
     return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   };
 
-  const getDayEvents = (day) => {
-    return events.filter(event => {
-      const eventDate = new Date(event.eventTime);
-      return eventDate.getDate() === day && 
-             eventDate.getMonth() === currentDate.getMonth() &&
-             eventDate.getFullYear() === currentDate.getFullYear();
+  const getDayEvents = useMemo(() => {
+    const eventsByDay = {};
+    events.forEach(event => {
+      const eventDate = new Date(event.event_time);
+      if (
+        eventDate.getMonth() === currentDate.getMonth() &&
+        eventDate.getFullYear() === currentDate.getFullYear()
+      ) {
+        const day = eventDate.getDate();
+        if (!eventsByDay[day]) eventsByDay[day] = [];
+        eventsByDay[day].push(event);
+      }
     });
-  };
+    return eventsByDay;
+  }, [events, currentDate]);
 
   const navigateMonth = (direction) => {
     setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + direction)));
   };
 
-  const renderCalendarDays = () => {
-    const daysInMonth = getDaysInMonth(currentDate);
-    const firstDayOfMonth = getFirstDayOfMonth(currentDate);
-    const days = [];
+  const CalendarDay = ({ day, isEmptyCell = false }) => {
+    if (isEmptyCell) return null;
 
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(<Grid item xs key={`empty-${i}`} sx={{ aspectRatio: '1/1' }} />);
-    }
+    const dayEvents = getDayEvents[day] || [];
+    const hasEvents = dayEvents.length > 0;
+    const isToday = new Date().getDate() === day && 
+                    new Date().getMonth() === currentDate.getMonth() &&
+                    new Date().getFullYear() === currentDate.getFullYear();
 
-    // Add cells for each day of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayEvents = getDayEvents(day);
-      const isToday = new Date().getDate() === day && 
-                      new Date().getMonth() === currentDate.getMonth() &&
-                      new Date().getFullYear() === currentDate.getFullYear();
+    const dayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
 
-      days.push(
-        <Grid item xs key={day}>
-          <Paper 
+    const handleClick = () => {
+      if (hasEvents) {
+        onEventClick(dayEvents[0]);
+      } else {
+        const defaultEventTime = new Date(dayDate.setHours(12, 0, 0, 0));
+        onEventClick({ event_time: defaultEventTime.toISOString() });
+      }
+    };
+
+    return (
+      <Box
+        onClick={handleClick}
+        sx={{
+          height: '120px',
+          width: '100%',
+          p: 2,
+          position: 'relative',
+          cursor: 'pointer',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+          bgcolor: 'transparent',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            bgcolor: 'rgba(255, 255, 255, 0.05)',
+            boxShadow: 'inset 0 0 0 2px #90caf9',
+            zIndex: 1,
+            '& .day-number': {
+              color: '#90caf9',
+            }
+          }
+        }}
+      >
+        <Typography 
+          className="day-number"
+          sx={{ 
+            color: isToday ? '#90caf9' : 'rgba(255, 255, 255, 0.87)',
+            fontSize: '1.1rem',
+            fontWeight: isToday ? 500 : 400,
+            transition: 'color 0.2s ease',
+          }}
+        >
+          {day}
+        </Typography>
+        
+        {hasEvents && (
+          <Box
             sx={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
               height: '100%',
-              p: 1,
-              bgcolor: isToday ? 'rgba(144, 202, 249, 0.1)' : '#1e1e1e',
-              borderRadius: 1,
-              minHeight: '100px',
-              aspectRatio: '1/1',
-              position: 'relative',
-              '&:hover': {
-                bgcolor: 'rgba(144, 202, 249, 0.1)',
+              width: '4px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              p: '4px'
+            }}
+          >
+            {dayEvents.map((event) => (
+              <Box
+                key={event.id}
+                sx={{
+                  width: '4px',
+                  flexGrow: 1,
+                  bgcolor: event.color || '#ff4444',
+                  borderRadius: '2px',
+                  transition: 'width 0.2s ease',
+                  '.MuiBox-root:hover &': {
+                    width: '6px'
+                  }
+                }}
+              />
+            ))}
+          </Box>
+        )}
+
+        {hasEvents && (
+          <Typography
+            sx={{
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: '0.875rem',
+              mt: 1,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              transition: 'color 0.2s ease',
+              '.MuiBox-root:hover &': {
+                color: 'rgba(255, 255, 255, 0.87)'
               }
             }}
           >
-            <Typography sx={{ color: isToday ? '#90caf9' : 'white' }}>
-              {day}
-            </Typography>
-            <Box sx={{ mt: 1 }}>
-              {dayEvents.map((event) => (
-                <Tooltip 
-                  key={event.id} 
-                  title={
-                    <Box>
-                      <Typography variant="body2">{event.title}</Typography>
-                      <Typography variant="caption">
-                        {new Date(event.eventTime).toLocaleTimeString()}
-                      </Typography>
-                      <Box sx={{ mt: 1 }}>
-                        <Chip 
-                          size="small" 
-                          icon={<GroupIcon />} 
-                          label={`${event.tanks}/${event.healers}/${event.dps}`}
-                        />
-                      </Box>
-                    </Box>
-                  }
-                >
-                  <Box
-                    onClick={() => onEventSelect(event)}
-                    sx={{
-                      bgcolor: '#90caf9',
-                      color: 'black',
-                      p: 0.5,
-                      borderRadius: 1,
-                      mb: 0.5,
-                      cursor: 'pointer',
-                      fontSize: '0.75rem',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {event.title}
-                  </Box>
-                </Tooltip>
-              ))}
-            </Box>
-          </Paper>
-        </Grid>
-      );
-    }
-
-    return days;
+            {dayEvents[0].title}
+          </Typography>
+        )}
+      </Box>
+    );
   };
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <IconButton onClick={() => navigateMonth(-1)} sx={{ color: 'white' }}>
+    <Box sx={{ 
+      width: '100%',
+      bgcolor: '#121212',
+      border: '1px solid rgba(255, 255, 255, 0.12)',
+      borderRadius: '4px',
+      overflow: 'hidden'
+    }}>
+      <Box 
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          p: 2,
+          borderBottom: '1px solid rgba(255, 255, 255, 0.12)'
+        }}
+      >
+        <IconButton 
+          onClick={() => navigateMonth(-1)} 
+          sx={{ color: 'white' }}
+        >
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h6" sx={{ color: 'white' }}>
+        <Typography variant="h5" sx={{ color: 'white', fontWeight: 500 }}>
           {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
         </Typography>
-        <IconButton onClick={() => navigateMonth(1)} sx={{ color: 'white' }}>
+        <IconButton 
+          onClick={() => navigateMonth(1)} 
+          sx={{ color: 'white' }}
+        >
           <ArrowForwardIcon />
         </IconButton>
       </Box>
 
-      <Grid container spacing={1}>
-        {weekDays.map(day => (
-          <Grid item xs key={day}>
-            <Typography 
-              align="center" 
+      <Box sx={{ width: '100%' }}>
+        <Grid container>
+          {weekDays.map(day => (
+            <Grid 
+              item 
+              key={day} 
               sx={{ 
-                color: 'white',
-                fontWeight: 'bold',
-                mb: 1
+                width: `${100/7}%`,
+                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+                p: 1
               }}
             >
-              {day}
-            </Typography>
-          </Grid>
-        ))}
-        {renderCalendarDays()}
-      </Grid>
+              <Typography sx={{ 
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textAlign: 'center'
+              }}>
+                {day}
+              </Typography>
+            </Grid>
+          ))}
+        </Grid>
+
+        <Grid container>
+          {[...Array(getFirstDayOfMonth(currentDate))].map((_, index) => (
+            <Grid 
+              item 
+              key={`empty-${index}`} 
+              sx={{ width: `${100/7}%` }}
+            >
+              <CalendarDay isEmptyCell />
+            </Grid>
+          ))}
+          {[...Array(getDaysInMonth(currentDate))].map((_, index) => (
+            <Grid 
+              item 
+              key={index} 
+              sx={{ width: `${100/7}%` }}
+            >
+              <CalendarDay day={index + 1} />
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
     </Box>
   );
 };

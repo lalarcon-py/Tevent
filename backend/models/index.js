@@ -1,36 +1,54 @@
-const sequelize = require('../config/database');
-const User = require('./User');
-const Item = require('./Item');
-const DKPTransaction = require('./DKPTransaction');
-const LootRequest = require('./LootRequest');
-const Event = require('./Event');
-const EventParticipant = require('./EventParticipant');
+const fs = require('fs');
+const path = require('path');
+const Sequelize = require('sequelize');
+const process = require('process');
+const basename = path.basename(__filename);
+const env = process.env.NODE_ENV || 'development';
+const config = require('../config/config')[env];
+const db = {};
 
-// Set up relationships
-Event.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
-User.hasMany(Event, { foreignKey: 'created_by', as: 'createdEvents' });
+console.log('Starting model initialization...');
+console.log('Current directory:', __dirname);
 
-Event.hasMany(EventParticipant, { foreignKey: 'event_id' });
-EventParticipant.belongsTo(Event, { foreignKey: 'event_id' });
+let sequelize;
+if (config.use_env_variable) {
+  sequelize = new Sequelize(process.env[config.use_env_variable], config);
+} else {
+  sequelize = new Sequelize(
+    config.database, 
+    config.username, 
+    config.password, 
+    config
+  );
+}
 
-EventParticipant.belongsTo(User, { foreignKey: 'user_id' });
-User.hasMany(EventParticipant, { foreignKey: 'user_id' });
-
-const db = {
-  sequelize,
-  User,
-  Item,
-  DKPTransaction,
-  LootRequest,
-  Event,
-  EventParticipant
+// Manually specify the models to load
+const models = {
+  Event: require('./Event'),
+  EventParticipant: require('./EventParticipant'),
+  User: require('./User'),
+  Item: require('./Item'),
+  LootRequest: require('./LootRequest'),
+  DKPTransaction: require('./DKPTransaction')
 };
 
-// Initialize models
-Object.values(db).forEach((model) => {
+// Initialize each model
+Object.entries(models).forEach(([name, model]) => {
+  console.log(`Initializing model: ${name}`);
+  db[name] = model(sequelize, Sequelize.DataTypes);
+});
+
+// Set up associations
+Object.values(db).forEach(model => {
   if (model.associate) {
+    console.log(`Setting up associations for: ${model.name}`);
     model.associate(db);
   }
 });
+
+db.sequelize = sequelize;
+db.Sequelize = Sequelize;
+
+console.log('Available models after initialization:', Object.keys(db));
 
 module.exports = db;

@@ -1,61 +1,69 @@
-// models/Event.js
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { Model } = require('sequelize');
 
-const Event = sequelize.define('events', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  event_time: {
-    type: DataTypes.DATE,
-    allowNull: false
-  },
-  location: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  tanks: {
-    type: DataTypes.INTEGER,
-    defaultValue: 2
-  },
-  healers: {
-    type: DataTypes.INTEGER,
-    defaultValue: 4
-  },
-  dps: {
-    type: DataTypes.INTEGER,
-    defaultValue: 24
-  },
-  created_by: {
-    type: DataTypes.UUID,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
+module.exports = (sequelize, DataTypes) => {
+  class Event extends Model {
+    static associate(models) {
+      Event.belongsTo(models.User, {
+        foreignKey: 'created_by',
+        as: 'creator'
+      });
+      Event.hasMany(models.EventParticipant, {
+        foreignKey: 'event_id',
+        as: 'participants'
+      });
     }
-  },
-  created_at: {
-    type: DataTypes.DATE,
-    defaultValue: sequelize.fn('NOW')
-  },
-  updated_at: {
-    type: DataTypes.DATE,
-    defaultValue: sequelize.fn('NOW')
   }
-}, {
-  tableName: 'events',
-  timestamps: false,
-  underscored: true
-});
 
+  Event.init({
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
+    title: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    description: {
+      type: DataTypes.TEXT
+    },
+    event_time: {
+      type: DataTypes.DATE,
+      allowNull: false
+    },
+    location: {
+      type: DataTypes.STRING
+    },
+    tanks: {
+      type: DataTypes.INTEGER,
+      defaultValue: 2
+    },
+    healers: {
+      type: DataTypes.INTEGER,
+      defaultValue: 4
+    },
+    dps: {
+      type: DataTypes.INTEGER,
+      defaultValue: 24
+    },
+    requirements: {
+      type: DataTypes.TEXT
+    },
+    created_by: {
+      type: DataTypes.UUID,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    }
+  }, {
+    sequelize,
+    modelName: 'Event',
+    tableName: 'events',
+    underscored: true,
+    timestamps: true
+  });
+
+  return Event;
+}
 module.exports = Event;

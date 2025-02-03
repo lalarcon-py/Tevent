@@ -11,15 +11,33 @@ import {
   ListItemSecondaryAction,
   IconButton,
   Chip,
-  Dialog
+  Dialog,
+  DialogContent,
+  Alert,
+  Snackbar
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import { format } from 'date-fns';
 import EventForm from './EventForm';
 
-const EventDetails = ({ event, onEventUpdate }) => {
+const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [error, setError] = useState(null);
+
+  const formatEventTime = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date:', dateString);
+        return 'Invalid date';
+      }
+      return format(date, 'MMMM dd, yyyy HH:mm');
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
+  };
 
   const handleSignUp = async (role) => {
     try {
@@ -32,10 +50,14 @@ const EventDetails = ({ event, onEventUpdate }) => {
         body: JSON.stringify({ role })
       });
       
-      if (!response.ok) throw new Error('Failed to sign up');
-      onEventUpdate();
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to sign up');
+      }
+      await onEventUpdate();
     } catch (error) {
       console.error('Error signing up:', error);
+      setError(error.message);
     }
   };
 
@@ -47,14 +69,15 @@ const EventDetails = ({ event, onEventUpdate }) => {
       });
       
       if (!response.ok) throw new Error('Failed to remove participant');
-      onEventUpdate();
+      await onEventUpdate();
     } catch (error) {
       console.error('Error removing participant:', error);
+      setError(error.message);
     }
   };
 
   return (
-    <Box sx={{ color: 'white' }}>
+    <DialogContent sx={{ bgcolor: '#1a1a1a', color: 'white', p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h5">{event.title}</Typography>
         <Button
@@ -69,7 +92,7 @@ const EventDetails = ({ event, onEventUpdate }) => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Typography variant="subtitle1" color="grey.400">Time</Typography>
-          <Typography>{format(new Date(event.eventTime), 'MMMM dd, yyyy HH:mm')}</Typography>
+          <Typography>{formatEventTime(event.event_time)}</Typography>
           
           <Box mt={2}>
             <Typography variant="subtitle1" color="grey.400">Location</Typography>
@@ -84,13 +107,19 @@ const EventDetails = ({ event, onEventUpdate }) => {
 
         <Grid item xs={12} md={6}>
           <Box mb={2}>
-            <Typography variant="h6">Roles Needed</Typography>
-            <Grid container spacing={2} mt={1}>
+            <Typography variant="h6" mb={2}>Roles Needed</Typography>
+            <Grid container spacing={2}>
               <Grid item>
                 <Chip 
                   label={`Tanks: ${event.participants?.filter(p => p.role === 'TANK').length || 0}/${event.tanks}`}
                   color="primary"
                   onClick={() => handleSignUp('TANK')}
+                  sx={{
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'primary.dark'
+                    }
+                  }}
                 />
               </Grid>
               <Grid item>
@@ -98,6 +127,12 @@ const EventDetails = ({ event, onEventUpdate }) => {
                   label={`Healers: ${event.participants?.filter(p => p.role === 'HEALER').length || 0}/${event.healers}`}
                   color="success"
                   onClick={() => handleSignUp('HEALER')}
+                  sx={{
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'success.dark'
+                    }
+                  }}
                 />
               </Grid>
               <Grid item>
@@ -105,6 +140,12 @@ const EventDetails = ({ event, onEventUpdate }) => {
                   label={`DPS: ${event.participants?.filter(p => p.role === 'DPS').length || 0}/${event.dps}`}
                   color="error"
                   onClick={() => handleSignUp('DPS')}
+                  sx={{
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'error.dark'
+                    }
+                  }}
                 />
               </Grid>
             </Grid>
@@ -142,7 +183,10 @@ const EventDetails = ({ event, onEventUpdate }) => {
         fullWidth
       >
         <EventForm 
-          initialData={event}
+          initialData={{
+            ...event,
+            eventTime: event.event_time
+          }}
           onSubmit={async (updatedData) => {
             try {
               const response = await fetch(`http://localhost:5000/api/events/${event.id}`, {
@@ -151,20 +195,34 @@ const EventDetails = ({ event, onEventUpdate }) => {
                   'Content-Type': 'application/json',
                 },
                 credentials: 'include',
-                body: JSON.stringify(updatedData)
+                body: JSON.stringify({
+                  ...updatedData,
+                  event_time: updatedData.eventTime
+                })
               });
               
               if (!response.ok) throw new Error('Failed to update event');
-              onEventUpdate();
+              await onEventUpdate();
               setIsEditDialogOpen(false);
             } catch (error) {
               console.error('Error updating event:', error);
+              setError(error.message);
             }
           }}
           onClose={() => setIsEditDialogOpen(false)}
         />
       </Dialog>
-    </Box>
+
+      <Snackbar 
+        open={!!error} 
+        autoHideDuration={6000} 
+        onClose={() => setError(null)}
+      >
+        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
+    </DialogContent>
   );
 };
 
