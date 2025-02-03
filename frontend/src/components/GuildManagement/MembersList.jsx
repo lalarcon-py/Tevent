@@ -7,6 +7,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 
+// Weapon Logic (Items Icons, CP, Etc..)
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
   'Crossbow|Greatsword': 'Outrider',
@@ -50,7 +51,7 @@ const getWeaponIcon = (weaponName) => {
   return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
 };
 
-
+// Edit button functions
 
 const EditMemberDialog = ({ member, onClose, onSave }) => {
   const [editedMember, setEditedMember] = useState(member ? {
@@ -123,6 +124,7 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
     updatedBuilds[buildIndex].spec = value;
     setEditedMember({ ...editedMember, builds: updatedBuilds });
   };
+// End of edit button functions
 
   return (
     <Dialog 
@@ -262,10 +264,56 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
   );
 };
 
+
 const MembersList = ({ searchTerm }) => {
   const [members, setMembers] = useState([]);
   const [editMember, setEditMember] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState({
+    key: null,
+    direction: 'asc'
+  });
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const getSortedMembers = (membersToSort) => {
+    if (!sortConfig.key) return membersToSort;
+  
+    return [...membersToSort].sort((a, b) => {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+  
+      // Handle null/undefined values
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+  
+      // Special handling for combat_power
+      if (sortConfig.key === 'combat_power') {
+        aValue = Number(aValue) || 0;
+        bValue = Number(bValue) || 0;
+      }
+  
+      // Handle string comparison
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+  
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  };
 
   useEffect(() => {
     console.log('Current editMember state:', editMember);
@@ -392,34 +440,62 @@ const MembersList = ({ searchTerm }) => {
     );
   }
 
-  const headers = ['Avatar', 'Name', 'Guild Role', 'Status', 'Weapons', 'Combat Role', 'Combat Power', 'Actions'];
+  const headers = [
+    { label: 'Avatar', key: null }, // null for non-sortable columns
+    { label: 'Name', key: 'username' },
+    { label: 'Guild Role', key: 'role' },
+    { label: 'Status', key: 'status' },
+    { label: 'Weapons', key: 'weapon_spec' },
+    { label: 'Combat Role', key: 'combat_role' },
+    { label: 'Combat Power', key: 'combat_power' },
+    { label: 'Actions', key: null }
+  ];
 
   const filteredMembers = members.filter(member =>
     member.username?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  
+  const sortedMembers = getSortedMembers(filteredMembers);
 
   return (
     <>
       <TableContainer component={Paper} sx={{ bgcolor: '#1e1e1e' }}>
         <Table>
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#1a1a1a' }}>
-              {headers.map((header, index) => (
+        <TableHead>
+          <TableRow sx={{ bgcolor: '#1a1a1a' }}>
+            {headers.map((header, index) => {
+              // Use header.label instead of header directly
+              const key = header.key;
+              return (
                 <TableCell 
                   key={index}
+                  onClick={() => header.key && handleSort(header.key)} // Only allow sorting if key exists
                   sx={{ 
                     color: 'white', 
                     fontWeight: 'bold',
-                    borderBottom: '2px solid #90caf9'
+                    borderBottom: '2px solid #90caf9',
+                    cursor: header.key ? 'pointer' : 'default', // Only show pointer cursor if sortable
+                    userSelect: 'none',
+                    '&:hover': {
+                      backgroundColor: header.key ? 'rgba(144, 202, 249, 0.1)' : 'inherit',
+                    }
                   }}
                 >
-                  {header}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {header.label}
+                    {sortConfig.key === header.key && (
+                      <span>
+                        {sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}
+                      </span>
+                    )}
+                  </Box>
                 </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
+              );
+            })}
+          </TableRow>
+        </TableHead>
           <TableBody>
-            {filteredMembers.map((member) => (
+            {sortedMembers.map((member) => (
               <TableRow 
                 key={member.id}
                 sx={{ 

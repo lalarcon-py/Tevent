@@ -149,7 +149,7 @@ app.get('/api/members', async (req, res) => {
   try {
     const members = await db.User.findAll({
       raw: true,
-      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds'],
+      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds', 'combat_power'], // Added combat_power here
       order: [['role', 'DESC'], ['username', 'ASC']]
     });
 
