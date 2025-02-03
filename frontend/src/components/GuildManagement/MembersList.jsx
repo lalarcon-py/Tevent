@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, IconButton, Dialog, DialogTitle, DialogContent, Select, MenuItem, 
-  Button, Avatar, Typography, Box
+  Button, Avatar, Typography, Box, TextField
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -50,6 +50,8 @@ const getWeaponIcon = (weaponName) => {
   return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
 };
 
+
+
 const EditMemberDialog = ({ member, onClose, onSave }) => {
   const [editedMember, setEditedMember] = useState(member ? {
     ...member,
@@ -58,18 +60,25 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
       secondary: 'Crossbow',
       spec: 'DPS'
     }],
-    weapon_spec: member.weapon_spec
+    weapon_spec: member.weapon_spec,
+    combat_power: member.combat_power || '' // Add this
   } : null);
+
+  const [showCombatPower, setShowCombatPower] = useState(false);
 
   useEffect(() => {
     if (member) {
+      const hasPermission = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(member.role);
+      setShowCombatPower(hasPermission);
+      
       setEditedMember({
         ...member,
         builds: member.builds || [{
           primary: 'Greatsword',
           secondary: 'Crossbow',
           spec: 'DPS'
-        }]
+        }],
+        combat_power: member.combat_power || ''
       });
     }
   }, [member]);
@@ -199,6 +208,31 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
               </Box>
             ))}
 
+            {showCombatPower && (
+              <Box sx={{ mb: 2 }}>
+                <Typography color="white" sx={{ mb: 1 }}>Combat Power</Typography>
+                <TextField
+                  type="number"
+                  value={editedMember.combat_power || ''}
+                  onChange={(e) => setEditedMember({
+                    ...editedMember,
+                    combat_power: e.target.value
+                  })}
+                  fullWidth
+                  sx={{ 
+                    bgcolor: '#2d2d2d',
+                    input: { color: 'white' },
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                      '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                      '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+                    }
+                  }}
+                />
+              </Box>
+            )}
+
+
             <Button 
               variant="contained" 
               onClick={handleAddBuild}
@@ -299,6 +333,7 @@ const MembersList = ({ searchTerm }) => {
       const memberToUpdate = {
         ...updatedMember,
         weapon_spec: weaponSpec,
+        combat_power: updatedMember.combat_power,
         builds: updatedMember.builds.map(build => ({
           primary: build.primary,
           secondary: build.secondary,
@@ -412,56 +447,56 @@ const MembersList = ({ searchTerm }) => {
                 <TableCell sx={{ color: 'white' }}>{member.role}</TableCell>
                 <TableCell sx={{ color: 'white' }}>{member.status}</TableCell>
                 <TableCell sx={{ color: 'white' }}>
-                    {member.builds?.map((build, index) => (
-                      <div 
-                        key={index} 
-                        style={{ 
-                          margin: '0.5rem 0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px'
-                        }}
-                      >
-                        <div style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '4px' 
-                        }}>
-                          {build.primary && (
-                            <img 
-                              src={getWeaponIcon(build.primary)} 
-                              alt={build.primary}
-                              style={{ 
-                                width: 24, 
-                                height: 24,
-                                objectFit: 'contain'
-                              }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                              }}
-                            />
-                          )}
-                          {build.secondary && (
-                            <img 
-                              src={getWeaponIcon(build.secondary)} 
-                              alt={build.secondary}
-                              style={{ 
-                                width: 24, 
-                                height: 24,
-                                objectFit: 'contain'
-                              }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                              }}
-                            />
-                          )}
-                        </div>
-                        <span style={{ color: '#90caf9' }}>
-                          {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
-                        </span>
+                  {member.builds?.map((build, index) => (
+                    <div 
+                      key={index} 
+                      style={{ 
+                        margin: '0.5rem 0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px' 
+                      }}>
+                        {build.primary && (
+                          <img 
+                            src={getWeaponIcon(build.primary)} 
+                            alt={build.primary}
+                            style={{ 
+                              width: 24, 
+                              height: 24,
+                              objectFit: 'contain'
+                            }}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        )}
+                        {build.secondary && (
+                          <img 
+                            src={getWeaponIcon(build.secondary)} 
+                            alt={build.secondary}
+                            style={{ 
+                              width: 24, 
+                              height: 24,
+                              objectFit: 'contain'
+                            }}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        )}
                       </div>
-                    ))}
-                  </TableCell>
+                      <span style={{ color: '#90caf9' }}>
+                        {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
+                      </span>
+                    </div>
+                  ))}
+                </TableCell>
                 <TableCell sx={{ color: 'white' }}>
                   {member.builds?.map((build, index) => (
                     <div 
@@ -478,18 +513,18 @@ const MembersList = ({ searchTerm }) => {
                   ))}
                 </TableCell>
                 <TableCell sx={{ color: 'white' }}>
-                      {member.builds?.map((build, index) => (
-                        <div 
-                          key={index} 
-                          style={{ 
-                            margin: '0.5rem 0',
-                            color: '#ffd700' // Gold color for combat power
-                          }}
-                        >
-                          {member.combat_power || 'N/A'}
-                        </div>
-                      ))}
-                    </TableCell>
+                  {member.builds?.map((build, index) => (
+                    <div 
+                      key={index} 
+                      style={{ 
+                        margin: '0.5rem 0',
+                        color: '#ffd700'
+                      }}
+                    >
+                      {member.combat_power || 'N/A'}
+                    </div>
+                  ))}
+                </TableCell>
                 <TableCell>
                   <IconButton 
                     onClick={(e) => {
@@ -513,7 +548,7 @@ const MembersList = ({ searchTerm }) => {
           </TableBody>
         </Table>
       </TableContainer>
-
+  
       {editMember && (
         <EditMemberDialog 
           member={editMember} 
@@ -529,6 +564,6 @@ const MembersList = ({ searchTerm }) => {
       )}
     </>
   );
-};
+}
 
 export default MembersList;

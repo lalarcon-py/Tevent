@@ -190,6 +190,7 @@ app.put('/api/members/:id', async (req, res) => {
         status = :status,
         avatar_url = :avatar_url,
         builds = ARRAY[:builds]::jsonb[],
+        combat_power = :combat_power,
         updated_at = NOW()
        WHERE id = :id`,
       {
@@ -200,7 +201,8 @@ app.put('/api/members/:id', async (req, res) => {
           role: updateData.role,
           status: updateData.status,
           avatar_url: updateData.avatar_url,
-          builds: buildsJson
+          builds: buildsJson,
+          combat_power: updateData.combat_power || null // Added this line
         },
         type: sequelize.QueryTypes.UPDATE,
         transaction: t
@@ -211,7 +213,7 @@ app.put('/api/members/:id', async (req, res) => {
 
     // Fetch and return the updated record
     const updatedUser = await db.User.findByPk(id, {
-      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds']
+      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds', 'combat_power'] // Added combat_power
     });
 
     console.log('Updated user:', JSON.stringify(updatedUser.toJSON(), null, 2));
