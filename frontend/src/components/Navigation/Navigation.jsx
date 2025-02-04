@@ -51,6 +51,14 @@ const Navigation = () => {
           >
             <ListItemText primary="Event Planner" sx={{ color: 'white' }} />
           </ListItem>
+          <ListItem 
+            button 
+            component={Link} 
+            to="/team-planner" 
+            sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
+          >
+            <ListItemText primary="Team Planner" sx={{ color: 'white' }} />
+          </ListItem>
       </List>
     </Drawer>
   );

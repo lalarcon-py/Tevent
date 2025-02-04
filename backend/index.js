@@ -10,6 +10,7 @@ const db = require('./models');
 const Joi = require('joi');
 const format = require('pg-format');
 const eventsRouter = require('./routes/events');
+const teamsRouter = require('./routes/teams');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -60,6 +61,7 @@ app.use(express.json());
 
 app.use('/api/items', itemsRouter);
 app.use('/api/events', eventsRouter);
+app.use('/api/teams', teamsRouter);
 
 app.use((req, res, next) => {
   if (req.method === 'PUT') {

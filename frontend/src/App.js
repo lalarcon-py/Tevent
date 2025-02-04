@@ -19,6 +19,10 @@ import EventListView from './components/EventPlanner/EventPlanner';
 import theme from './theme';
 import WaitListTab from './components/LootManagement/WaitListTab';
 import AttendanceManagement from './components/LootManagement/AttendanceManagement';
+import TeamPlanner from './components/TeamPlanner/TeamPlanner';
+import { TeamProvider } from './contexts/TeamContext';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
 
 function App() {
   useEffect(() => {
@@ -36,6 +40,7 @@ function App() {
       <GuildProvider>
         <LootProvider>
           <AttendanceProvider>
+            <TeamProvider>
             <Router>
               <AppHeader />
               <Navigation />
@@ -66,9 +71,12 @@ function App() {
                   <Route path="/loot-management" element={<LootManagement />} />
                   <Route path="/gear-check" element={<GearCheck />} />
                   <Route path="/event-planner" element={<EventPlanner />} />
+                  <Route path="/event-planner/:eventId" element={<EventDetails />} />
+                  <Route path="/events/:eventId/team-planner" element={<TeamPlanner />} />
                 </Routes>
               </Box>
             </Router>
+            </TeamProvider>
           </AttendanceProvider>
         </LootProvider>
       </GuildProvider>

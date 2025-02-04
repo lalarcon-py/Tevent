@@ -154,12 +154,86 @@ const EventParticipant = sequelize.define('EventParticipant', {
    timestamps: true
 });
 
+const Team = sequelize.define('Team', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    event_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'events',
+            key: 'id'
+        }
+    },
+    created_by: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    }
+ }, {
+    tableName: 'teams',
+    underscored: true,
+    timestamps: true
+ });
+ 
+ // TeamMember Schema
+ const TeamMember = sequelize.define('TeamMember', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    team_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'teams',
+            key: 'id'
+        }
+    },
+    user_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    role: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    position: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+    }
+ }, {
+    tableName: 'team_members',
+    underscored: true,
+    timestamps: true
+ });
+
 // Associations
 User.hasMany(LootRequest);
 Item.hasMany(LootRequest);
 User.hasMany(DKPTransaction);
 LootRequest.belongsTo(User);
 LootRequest.belongsTo(Item);
+Team.belongsTo(Event, { foreignKey: 'event_id' });
+Team.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+Team.hasMany(TeamMember, { foreignKey: 'team_id', as: 'members' });
+TeamMember.belongsTo(Team, { foreignKey: 'team_id' });
+TeamMember.belongsTo(User, { foreignKey: 'user_id' });
 
 Event.belongsTo(User, {
    foreignKey: 'created_by',
@@ -186,5 +260,7 @@ module.exports = {
    DKPTransaction,
    User,
    Event,
-   EventParticipant
+   EventParticipant,
+   Team,
+   TeamMember
 };

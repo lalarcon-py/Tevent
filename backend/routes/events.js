@@ -115,63 +115,45 @@ router.put('/:id', async (req, res) => {
 
 // Event signup
 router.post('/:id/signup', async (req, res) => {
- const t = await sequelize.transaction();
- try {
-   if (!req.isAuthenticated()) {
-     return res.status(401).json({ error: 'Not authenticated' });
-   }
-
-   const { role } = req.body;
-   const eventId = req.params.id;
-
-   const existingSignup = await EventParticipant.findOne({
-     where: {
-       event_id: eventId,
-       user_id: req.user.id
-     }
-   });
-
-   if (existingSignup) {
-     await t.rollback();
-     return res.status(400).json({ error: 'Already signed up for this event' });
-   }
-
-   const event = await Event.findByPk(eventId, {
-     include: [{
-       model: EventParticipant,
-       as: 'participants',
-       where: { role },
-       required: false
-     }]
-   });
-
-   if (!event) {
-     await t.rollback();
-     return res.status(404).json({ error: 'Event not found' });
-   }
-
-   const currentCount = event.participants?.length || 0;
-   const maxForRole = event[role.toLowerCase() + 's']; // tanks, healers, or dps
-
-   if (currentCount >= maxForRole) {
-     await t.rollback();
-     return res.status(400).json({ error: `No ${role} slots available` });
-   }
-
-   const participant = await EventParticipant.create({
-     event_id: eventId,
-     user_id: req.user.id,
-     role
-   }, { transaction: t });
-
-   await t.commit();
-   res.status(201).json(participant);
- } catch (error) {
-   await t.rollback();
-   console.error('Error signing up for event:', error);
-   res.status(500).json({ error: error.message });
- }
-});
+  const t = await sequelize.transaction();
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+ 
+    const { role } = req.body;
+    const eventId = req.params.id;
+ 
+    // Check for existing signup
+    const existingSignup = await EventParticipant.findOne({
+      where: {
+        event_id: eventId,
+        user_id: req.user.id
+      }
+    });
+ 
+    // If already signed up, update the role instead of creating new
+    if (existingSignup) {
+      await existingSignup.update({ role }, { transaction: t });
+      await t.commit();
+      return res.json(existingSignup);
+    }
+ 
+    // Create new signup (removed participant limit check)
+    const participant = await EventParticipant.create({
+      event_id: eventId,
+      user_id: req.user.id,
+      role
+    }, { transaction: t });
+ 
+    await t.commit();
+    res.status(201).json(participant);
+  } catch (error) {
+    await t.rollback();
+    console.error('Error signing up for event:', error);
+    res.status(500).json({ error: error.message });
+  }
+ });
 
 // Remove participant
 router.delete('/:eventId/participants/:userId', async (req, res) => {
@@ -201,6 +183,64 @@ router.delete('/:eventId/participants/:userId', async (req, res) => {
    console.error('Error removing participant:', error);
    res.status(500).json({ error: error.message });
  }
+});
+
+// Get event participants
+router.get('/:id/participants', async (req, res) => {
+  try {
+    const participants = await EventParticipant.findAll({
+      where: {
+        event_id: req.params.id
+      },
+      include: [{
+        model: User,
+        attributes: ['id', 'username', 'avatar_url', 'builds', 'weapon_spec', 'combat_power']
+      }],
+      order: [['created_at', 'ASC']]
+    });
+
+    res.json(participants);
+  } catch (error) {
+    console.error('Error fetching event participants:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/event/:eventId', async (req, res) => {
+  try {
+      console.log('Attempting to fetch teams for event:', req.params.eventId);
+      
+      // Check if event exists first
+      const event = await Event.findByPk(req.params.eventId);
+      if (!event) {
+          console.log('Event not found:', req.params.eventId);
+          return res.status(404).json({ error: 'Event not found' });
+      }
+      
+      console.log('Found event, fetching teams...');
+      const teams = await Team.findAll({
+          where: { event_id: req.params.eventId },
+          include: [{
+              model: TeamMember,
+              as: 'members',
+              include: [{
+                  model: User,
+                  attributes: ['id', 'username', 'avatar_url']
+              }],
+              order: [['position', 'ASC']]
+          }],
+          order: [['created_at', 'ASC']]
+      });
+      
+      console.log(`Found ${teams.length} teams for event`);
+      res.json(teams);
+  } catch (error) {
+      console.error('Detailed error fetching teams:', error);
+      res.status(500).json({ 
+          error: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+  }
 });
 
 module.exports = router;

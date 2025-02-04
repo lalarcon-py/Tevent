@@ -9,6 +9,8 @@ const db = {};
 
 console.log('Starting model initialization...');
 console.log('Current directory:', __dirname);
+console.log('Starting model initialization...');
+console.log('Available models after initialization:', Object.keys(db));
 
 let sequelize;
 if (config.use_env_variable) {
@@ -29,7 +31,9 @@ const models = {
   User: require('./User'),
   Item: require('./Item'),
   LootRequest: require('./LootRequest'),
-  DKPTransaction: require('./DKPTransaction')
+  DKPTransaction: require('./DKPTransaction'),
+  Team: require('./Team'),
+  TeamMember: require('./TeamMember')
 };
 
 // Initialize each model
