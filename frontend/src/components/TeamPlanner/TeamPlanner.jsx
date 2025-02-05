@@ -1,6 +1,20 @@
 // frontend/src/components/TeamPlanner/TeamPlanner.jsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Button, TextField } from '@mui/material';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  Grid, 
+  Button, 
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemText
+} from '@mui/material';
 import { useParams } from 'react-router-dom';
 
 const DraggableMember = ({ member, onRemove }) => {
@@ -133,7 +147,6 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [teamName, setTeamName] = useState(team.name);
 
-
   const handleDragOver = (e) => {
     e.preventDefault();
   };
@@ -202,7 +215,11 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
       </Box>
       <Box sx={{ minHeight: 100 }}>
         {team.members?.map(member => (
-          <DraggableMember key={member.id} member={member} onRemove={() => onRemoveMember(team.id, member)} />
+          <DraggableMember 
+            key={member.id} 
+            member={member} 
+            onRemove={() => onRemoveMember(team.id, member)} 
+          />
         ))}
       </Box>
     </Paper>
@@ -276,7 +293,11 @@ const TeamPlanner = () => {
   const [teams, setTeams] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [error, setError] = useState(null);
+  const [presets, setPresets] = useState([]);
+  const [openPresetDialog, setOpenPresetDialog] = useState(false);
+  const [presetName, setPresetName] = useState('');
 
+  // First useEffect for fetching initial data
   useEffect(() => {
     const fetchData = async () => {
       if (!eventId) return;
@@ -362,10 +383,7 @@ const TeamPlanner = () => {
 
   const handleRemoveMember = async (teamId, member) => {
     try {
-      console.log('Attempting to remove member:', { teamId, member });
-  
       if (!member.user_id) {
-        console.error('No user_id found on member:', member);
         throw new Error('Invalid member data');
       }
   
@@ -379,23 +397,18 @@ const TeamPlanner = () => {
         throw new Error(errorData.error || 'Failed to remove team member');
       }
   
-      // Add member back to participants list with User data preserved
-      const memberWithUser = {
-        ...member,
-        id: member.user_id,
-        User: member.User
-      };
-      
-      // First update participants
-      setParticipants(prev => {
-        const updatedParticipants = [...prev];
-        if (!updatedParticipants.some(p => p.user_id === member.user_id)) {
-          updatedParticipants.push(memberWithUser);
-        }
-        return updatedParticipants;
-      });
-      
-      // Then update teams
+      // Add member back to participants list only if they don't already exist
+      const memberExists = participants.some(p => p.user_id === member.user_id);
+      if (!memberExists) {
+        const memberWithUser = {
+          ...member,
+          id: member.user_id,
+          User: member.User
+        };
+        setParticipants(prev => [...prev, memberWithUser]);
+      }
+  
+      // Update teams state
       setTeams(prev => prev.map(team => {
         if (team.id === teamId) {
           return {
@@ -417,22 +430,18 @@ const TeamPlanner = () => {
       const teamToRemove = teams.find(t => t.id === teamId);
       if (!teamToRemove) return;
   
-      // First, add all members back to participants pool
       const members = teamToRemove.members || [];
       setParticipants(prev => [...prev, ...members.map(member => ({
         ...member,
         User: member.User
       }))]);
   
-      // Then delete the team
       const response = await fetch(`http://localhost:5000/api/teams/${teamId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
   
       if (!response.ok) throw new Error('Failed to delete team');
-      
-      // Remove the team from state
       setTeams(prev => prev.filter(team => team.id !== teamId));
     } catch (error) {
       console.error('Error removing team:', error);
@@ -463,6 +472,9 @@ const TeamPlanner = () => {
       // Don't do anything if dropping into the same team
       if (sourceTeamId === teamId) return;
   
+      // Check for duplicates before proceeding
+      if (isDuplicateMember(member.user_id)) return;
+  
       const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -487,7 +499,6 @@ const TeamPlanner = () => {
         User: member.User || updatedMember.User // Keep original User data if it exists
       };
   
-      // Update state based on where the member came from
       if (sourceTeamId) {
         // Moving between teams
         setTeams(prev => prev.map(team => {
@@ -498,8 +509,8 @@ const TeamPlanner = () => {
               members: team.members.filter(m => m.id !== memberId)
             };
           }
-          if (team.id === teamId) {
-            // Add to target team with preserved User data
+          if (team.id === teamId && !isDuplicateMember(member.user_id)) {
+            // Add to target team only if not duplicate
             return {
               ...team,
               members: [...(team.members || []), memberWithUserData]
@@ -509,21 +520,167 @@ const TeamPlanner = () => {
         }));
       } else {
         // Moving from participants pool
-        setParticipants(prev => prev.filter(p => p.id !== memberId));
-        setTeams(prev => prev.map(team => {
-          if (team.id === teamId) {
-            return {
-              ...team,
-              members: [...(team.members || []), memberWithUserData]
-            };
-          }
-          return team;
-        }));
+        if (!isDuplicateMember(member.user_id)) {
+          setParticipants(prev => prev.filter(p => p.id !== memberId));
+          setTeams(prev => prev.map(team => {
+            if (team.id === teamId) {
+              return {
+                ...team,
+                members: [...(team.members || []), memberWithUserData]
+              };
+            }
+            return team;
+          }));
+        }
       }
     } catch (error) {
       console.error('Error updating team:', error);
       setError('Failed to update team');
     }
+  };
+
+  const handleSavePreset = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/team-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: presetName,
+          eventId,
+          teamsData: teams
+        })
+      });
+  
+      if (!response.ok) throw new Error('Failed to save preset');
+      setOpenPresetDialog(false);
+      setPresetName('');
+    } catch (error) {
+      setError('Failed to save preset');
+    }
+  };
+
+  const loadPresets = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/team-presets/event/${eventId}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to load presets');
+      const data = await response.json();
+      setPresets(data);
+    } catch (error) {
+      setError('Failed to load presets');
+    }
+  };
+
+  const cleanupExistingTeams = async () => {
+    try {
+      await Promise.all(
+        teams.map(team => 
+          fetch(`http://localhost:5000/api/teams/${team.id}`, {
+            method: 'DELETE',
+            credentials: 'include'
+          })
+        )
+      );
+    } catch (error) {
+      console.error('Error cleaning up teams:', error);
+    }
+  };
+
+
+  const loadPreset = async (presetId) => {
+    try {
+      // Clean up existing teams first
+      await cleanupExistingTeams();
+  
+      const response = await fetch(`http://localhost:5000/api/team-presets/${presetId}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to load preset');
+      const data = await response.json();
+  
+      // Get all member IDs from the preset teams
+      const presetMemberIds = new Set(
+        data.teams_data.flatMap(team => 
+          (team.members || []).map(member => member.user_id)
+        )
+      );
+  
+      // Update participants list to remove any members that will be in teams
+      setParticipants(prev => 
+        prev.filter(participant => !presetMemberIds.has(participant.user_id))
+      );
+  
+      // Create the teams in the database
+      const createdTeams = await Promise.all(
+        data.teams_data.map(async (teamData) => {
+          const createTeamResponse = await fetch('http://localhost:5000/api/teams', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              name: teamData.name,
+              eventId
+            })
+          });
+  
+          if (!createTeamResponse.ok) {
+            throw new Error('Failed to create team from preset');
+          }
+  
+          const newTeam = await createTeamResponse.json();
+  
+          // Add members to the team if they exist
+          if (teamData.members && teamData.members.length > 0) {
+            await Promise.all(
+              teamData.members.map(async (member) => {
+                // Check if member isn't already in another team
+                const memberInOtherTeam = teams.some(team => 
+                  team.members?.some(m => m.user_id === member.user_id)
+                );
+  
+                if (!memberInOtherTeam) {
+                  await fetch(`http://localhost:5000/api/teams/${newTeam.id}/members`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                      memberId: member.user_id,
+                      role: member.role
+                    })
+                  });
+                }
+              })
+            );
+          }
+  
+          return {
+            ...newTeam,
+            members: teamData.members || []
+          };
+        })
+      );
+  
+      setTeams(createdTeams);
+    } catch (error) {
+      console.error('Error loading preset:', error);
+      setError('Failed to load preset');
+    }
+  };
+
+  const isDuplicateMember = (memberId) => {
+    // Check teams
+    const inTeams = teams.some(team => 
+      team.members?.some(member => member.user_id === memberId)
+    );
+    
+    // Check participants
+    const inParticipants = participants.some(
+      participant => participant.user_id === memberId
+    );
+  
+    return inTeams || inParticipants;
   };
 
   if (error) {
@@ -540,16 +697,38 @@ const TeamPlanner = () => {
         <Typography variant="h4" sx={{ color: 'white' }}>
           Team Planner
         </Typography>
-        <Button
-          variant="contained"
-          onClick={handleCreateTeam}
-          sx={{
-            bgcolor: '#4CAF50',
-            '&:hover': { bgcolor: '#45a049' }
-          }}
-        >
-          Create Team
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            onClick={() => setOpenPresetDialog(true)}
+            sx={{
+              bgcolor: '#4CAF50',
+              '&:hover': { bgcolor: '#45a049' }
+            }}
+          >
+            Save as Preset
+          </Button>
+          <Button
+            variant="contained"
+            onClick={loadPresets}
+            sx={{
+              bgcolor: '#2196F3',
+              '&:hover': { bgcolor: '#1976D2' }
+            }}
+          >
+            Load Preset
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateTeam}
+            sx={{
+              bgcolor: '#4CAF50',
+              '&:hover': { bgcolor: '#45a049' }
+            }}
+          >
+            Create Team
+          </Button>
+        </Box>
       </Box>
 
       <Grid container spacing={3}>
@@ -573,6 +752,50 @@ const TeamPlanner = () => {
           </Grid>
         </Grid>
       </Grid>
+
+      <Dialog open={openPresetDialog} onClose={() => setOpenPresetDialog(false)}>
+        <DialogTitle>Save Team Preset</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Preset Name"
+            fullWidth
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            sx={{
+              '& .MuiInputBase-input': { color: 'white' },
+              '& .MuiInputLabel-root': { color: 'white' },
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' }
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenPresetDialog(false)}>Cancel</Button>
+          <Button onClick={handleSavePreset}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!presets.length} onClose={() => setPresets([])}>
+        <DialogTitle>Load Preset</DialogTitle>
+        <List>
+          {presets.map((preset) => (
+            <ListItem
+              key={preset.id}
+              button
+              onClick={() => {
+                loadPreset(preset.id);
+                setPresets([]);
+              }}
+            >
+              <ListItemText primary={preset.name} />
+            </ListItem>
+          ))}
+        </List>
+      </Dialog>
     </Box>
   );
 };

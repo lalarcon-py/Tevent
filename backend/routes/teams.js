@@ -204,16 +204,34 @@ router.put('/:id', async (req, res) => {
 
 // Delete team
 router.delete('/:id', async (req, res) => {
- try {
-   const team = await db.Team.findByPk(req.params.id);
-   if (!team) {
-     return res.status(404).json({ error: 'Team not found' });
-   }
-   await team.destroy();
-   res.json({ message: 'Team deleted successfully' });
- } catch (error) {
-   res.status(500).json({ error: error.message });
- }
+  const t = await sequelize.transaction();
+  try {
+    const teamId = req.params.id;
+    
+    // First, delete all team members
+    await db.TeamMember.destroy({
+      where: { team_id: teamId },
+      transaction: t
+    });
+
+    // Then delete the team
+    const result = await db.Team.destroy({
+      where: { id: teamId },
+      transaction: t
+    });
+
+    if (result === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    await t.commit();
+    res.json({ message: 'Team deleted successfully' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Error deleting team:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;
