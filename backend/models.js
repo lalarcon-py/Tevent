@@ -223,6 +223,44 @@ const Team = sequelize.define('Team', {
     timestamps: true
  });
 
+ //Team Presets
+
+ const TeamPreset = sequelize.define('TeamPreset', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    event_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'events',
+            key: 'id'
+        }
+    },
+    teams_data: {
+        type: DataTypes.JSONB,  // Using JSONB since you're using it elsewhere
+        allowNull: false
+    },
+    created_by: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    }
+}, {
+    tableName: 'team_presets',
+    underscored: true,
+    timestamps: true
+});
+
 // Associations
 User.hasMany(LootRequest);
 Item.hasMany(LootRequest);
@@ -234,6 +272,8 @@ Team.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 Team.hasMany(TeamMember, { foreignKey: 'team_id', as: 'members' });
 TeamMember.belongsTo(Team, { foreignKey: 'team_id' });
 TeamMember.belongsTo(User, { foreignKey: 'user_id' });
+TeamPreset.belongsTo(Event, { foreignKey: 'event_id' });
+TeamPreset.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 
 Event.belongsTo(User, {
    foreignKey: 'created_by',
@@ -262,5 +302,6 @@ module.exports = {
    Event,
    EventParticipant,
    Team,
-   TeamMember
+   TeamMember,
+   TeamPreset
 };

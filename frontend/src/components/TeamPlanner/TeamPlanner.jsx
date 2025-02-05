@@ -1,13 +1,31 @@
 // frontend/src/components/TeamPlanner/TeamPlanner.jsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Grid, Button } from '@mui/material';
+import { Box, Typography, Paper, Grid, Button, TextField } from '@mui/material';
 import { useParams } from 'react-router-dom';
 
 const DraggableMember = ({ member, onRemove }) => {
+  const [userData, setUserData] = useState(null);
+  console.log('Raw member data:', member);
+  const builds = member.User?.builds || [];
+  console.log('Member User builds:', builds);
+
   const handleDragStart = (e) => {
     e.dataTransfer.setData('memberId', member.id);
     e.dataTransfer.setData('memberRole', member.role);
   };
+
+  const parseBuilds = (buildsData) => {
+    try {
+      if (typeof buildsData === 'string') {
+        return JSON.parse(buildsData);
+      }
+      return buildsData;
+    } catch (error) {
+      console.error('Parse error:', error);
+      return [];
+    }
+  };
+  
 
   // Color based on role
   const getRoleColor = (role) => {
@@ -18,6 +36,19 @@ const DraggableMember = ({ member, onRemove }) => {
       default: return 'white';
     }
   };
+
+  const getWeaponIcon = (weaponName) => {
+    if (!weaponName) return null;
+    return `/weapons/${weaponName.trim()} Art.png`;
+  };
+
+  const parsedBuilds = builds[0] ? 
+    (typeof builds[0] === 'string' ? JSON.parse(builds[0]) : builds[0]) 
+    : null;
+
+    const primaryWeapon = builds[0]?.[0]?.primary;
+    const secondaryWeapon = builds[0]?.[0]?.secondary;
+    console.log('Weapons:', { primaryWeapon, secondaryWeapon });
 
   return (
     <Box
@@ -36,11 +67,35 @@ const DraggableMember = ({ member, onRemove }) => {
           transition: 'all 0.2s ease'
         },
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        gap: 1
       }}
     >
-      <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: '50px' }}>
+        {primaryWeapon && (
+          <img 
+            src={getWeaponIcon(primaryWeapon)}
+            alt={primaryWeapon}
+            style={{ width: 20, height: 20, objectFit: 'contain' }}
+            onError={(e) => {
+              console.log('Failed to load image:', e.target.src); // Debug log
+              e.target.style.display = 'none';
+            }}
+          />
+        )}
+        {secondaryWeapon && (
+          <img 
+            src={getWeaponIcon(secondaryWeapon)}
+            alt={secondaryWeapon}
+            style={{ width: 20, height: 20, objectFit: 'contain' }}
+            onError={(e) => {
+              console.log('Failed to load image:', e.target.src); // Debug log
+              e.target.style.display = 'none';
+            }}
+          />
+        )}
+      </Box>
+      <Box sx={{ flexGrow: 1 }}>
         <Typography sx={{ color: 'white' }}>
           {member.User?.username || member.username}
         </Typography>
@@ -74,7 +129,11 @@ const DraggableMember = ({ member, onRemove }) => {
   );
 };
 
-const Team = ({ team, onDrop, onRemove, onRemoveMember }) => {
+const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [teamName, setTeamName] = useState(team.name);
+
+
   const handleDragOver = (e) => {
     e.preventDefault();
   };
@@ -83,6 +142,11 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember }) => {
     e.preventDefault();
     const memberId = e.dataTransfer.getData('memberId');
     onDrop(memberId, team.id);
+  };
+
+  const handleNameSave = () => {
+    onEdit({ ...team, name: teamName });
+    setIsEditingName(false);
   };
 
   return (
@@ -96,9 +160,34 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember }) => {
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6" sx={{ color: 'white' }}>
-          {team.name}
-        </Typography>
+        {isEditingName ? (
+          <TextField
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            onBlur={handleNameSave}
+            onKeyPress={(e) => e.key === 'Enter' && handleNameSave()}
+            autoFocus
+            size="small"
+            sx={{
+              '& .MuiInputBase-input': { color: 'white' },
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' }
+              }
+            }}
+          />
+        ) : (
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              color: 'white',
+              cursor: 'pointer',
+              '&:hover': { color: '#90caf9' }
+            }}
+            onClick={() => setIsEditingName(true)}
+          >
+            {team.name}
+          </Typography>
+        )}
         <Button
           size="small"
           variant="contained"
@@ -113,11 +202,7 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember }) => {
       </Box>
       <Box sx={{ minHeight: 100 }}>
         {team.members?.map(member => (
-          <DraggableMember 
-            key={member.id} 
-            member={member}
-            onRemove={(member) => onRemoveMember(team.id, member)}
-          />
+          <DraggableMember key={member.id} member={member} onRemove={() => onRemoveMember(team.id, member)} />
         ))}
       </Box>
     </Paper>
@@ -195,7 +280,7 @@ const TeamPlanner = () => {
   useEffect(() => {
     const fetchData = async () => {
       if (!eventId) return;
-  
+    
       try {
         const [participantsResponse, teamsResponse] = await Promise.all([
           fetch(`http://localhost:5000/api/events/${eventId}/participants`, {
@@ -209,12 +294,14 @@ const TeamPlanner = () => {
         if (!participantsResponse.ok) {
           throw new Error('Failed to fetch participants');
         }
-  
+    
         const [participantsData, teamsData] = await Promise.all([
           participantsResponse.json(),
           teamsResponse.ok ? teamsResponse.json() : []
         ]);
-  
+    
+        console.log('Raw participants data:', participantsData);
+    
         // Filter out participants who are already in teams
         const teamMemberIds = teamsData.flatMap(team => 
           team.members?.map(member => member.user_id) || []
@@ -223,7 +310,7 @@ const TeamPlanner = () => {
         const availableParticipants = participantsData.filter(
           participant => !teamMemberIds.includes(participant.user_id)
         );
-  
+    
         setParticipants(availableParticipants);
         setTeams(teamsData);
       } catch (error) {
@@ -234,6 +321,24 @@ const TeamPlanner = () => {
   
     fetchData();
   }, [eventId]);
+
+  const handleEditTeam = async (updatedTeam) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/teams/${updatedTeam.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name: updatedTeam.name })
+      });
+  
+      if (!response.ok) throw new Error('Failed to update team');
+      setTeams(prev => prev.map(team => 
+        team.id === updatedTeam.id ? updatedTeam : team
+      ));
+    } catch (error) {
+      setError('Failed to update team name');
+    }
+  };
 
   const handleCreateTeam = async () => {
     try {
@@ -257,41 +362,67 @@ const TeamPlanner = () => {
 
   const handleRemoveMember = async (teamId, member) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members/${member.id}`, {
+      console.log('Attempting to remove member:', { teamId, member });
+  
+      if (!member.user_id) {
+        console.error('No user_id found on member:', member);
+        throw new Error('Invalid member data');
+      }
+  
+      const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members/${member.user_id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
   
-      if (!response.ok) throw new Error('Failed to remove team member');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove team member');
+      }
   
-      // Add member back to participants list
-      setParticipants(prev => [...prev, member]);
+      // Add member back to participants list with User data preserved
+      const memberWithUser = {
+        ...member,
+        id: member.user_id,
+        User: member.User
+      };
       
-      // Update teams to remove the member
+      // First update participants
+      setParticipants(prev => {
+        const updatedParticipants = [...prev];
+        if (!updatedParticipants.some(p => p.user_id === member.user_id)) {
+          updatedParticipants.push(memberWithUser);
+        }
+        return updatedParticipants;
+      });
+      
+      // Then update teams
       setTeams(prev => prev.map(team => {
         if (team.id === teamId) {
           return {
             ...team,
-            members: team.members.filter(m => m.id !== member.id)
+            members: team.members.filter(m => m.user_id !== member.user_id)
           };
         }
         return team;
       }));
+  
     } catch (error) {
       console.error('Error removing team member:', error);
-      setError('Failed to remove team member');
+      setError(error.message || 'Failed to remove team member');
     }
   };
 
   const handleRemoveTeam = async (teamId) => {
     try {
-      // Get the team that's being removed and its members before deletion
       const teamToRemove = teams.find(t => t.id === teamId);
-      
-      // First, remove all members from the team
-      for (const member of teamToRemove.members || []) {
-        await handleRemoveMember(teamId, member);
-      }
+      if (!teamToRemove) return;
+  
+      // First, add all members back to participants pool
+      const members = teamToRemove.members || [];
+      setParticipants(prev => [...prev, ...members.map(member => ({
+        ...member,
+        User: member.User
+      }))]);
   
       // Then delete the team
       const response = await fetch(`http://localhost:5000/api/teams/${teamId}`, {
@@ -300,6 +431,8 @@ const TeamPlanner = () => {
       });
   
       if (!response.ok) throw new Error('Failed to delete team');
+      
+      // Remove the team from state
       setTeams(prev => prev.filter(team => team.id !== teamId));
     } catch (error) {
       console.error('Error removing team:', error);
@@ -309,43 +442,83 @@ const TeamPlanner = () => {
 
   const handleDrop = async (memberId, teamId) => {
     try {
-      const member = participants.find(p => p.id === memberId);
-      if (!member) return;
-
-      // Check if member is already in any team
-      const isMemberInTeam = teams.some(team => 
-        team.members?.some(m => m.user_id === member.user_id)
-      );
-
-      if (isMemberInTeam) {
-        setError('Member is already assigned to a team');
-        return;
+      // Check if member is in participants pool
+      let member = participants.find(p => p.id === memberId);
+      let sourceTeamId = null;
+  
+      // If not in participants, find in which team they are
+      if (!member) {
+        for (const team of teams) {
+          const foundMember = team.members?.find(m => m.id === memberId);
+          if (foundMember) {
+            member = foundMember;
+            sourceTeamId = team.id;
+            break;
+          }
+        }
       }
-
+  
+      if (!member) return;
+  
+      // Don't do anything if dropping into the same team
+      if (sourceTeamId === teamId) return;
+  
       const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          memberId: member.user_id,
-          role: member.role
+          memberId: member.user_id || member.id,
+          role: member.role,
+          sourceTeamId
         })
       });
-
-      if (!response.ok) throw new Error('Failed to update team member');
-
-      // Remove member from participants list
-      setParticipants(prev => 
-        prev.filter(p => p.id !== memberId)
-      );
-
-      // Update teams data
-      const teamsResponse = await fetch(`http://localhost:5000/api/teams/event/${eventId}`, {
-        credentials: 'include'
-      });
-      if (teamsResponse.ok) {
-        const updatedTeams = await teamsResponse.json();
-        setTeams(updatedTeams);
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update team member');
+      }
+  
+      const updatedMember = await response.json();
+  
+      // Preserve the User data including builds from the original member
+      const memberWithUserData = {
+        ...updatedMember,
+        User: member.User || updatedMember.User // Keep original User data if it exists
+      };
+  
+      // Update state based on where the member came from
+      if (sourceTeamId) {
+        // Moving between teams
+        setTeams(prev => prev.map(team => {
+          if (team.id === sourceTeamId) {
+            // Remove from source team
+            return {
+              ...team,
+              members: team.members.filter(m => m.id !== memberId)
+            };
+          }
+          if (team.id === teamId) {
+            // Add to target team with preserved User data
+            return {
+              ...team,
+              members: [...(team.members || []), memberWithUserData]
+            };
+          }
+          return team;
+        }));
+      } else {
+        // Moving from participants pool
+        setParticipants(prev => prev.filter(p => p.id !== memberId));
+        setTeams(prev => prev.map(team => {
+          if (team.id === teamId) {
+            return {
+              ...team,
+              members: [...(team.members || []), memberWithUserData]
+            };
+          }
+          return team;
+        }));
       }
     } catch (error) {
       console.error('Error updating team:', error);
@@ -393,6 +566,7 @@ const TeamPlanner = () => {
                   onDrop={handleDrop}
                   onRemove={handleRemoveTeam}
                   onRemoveMember={handleRemoveMember}
+                  onEdit={handleEditTeam}
                 />
               </Grid>
             ))}

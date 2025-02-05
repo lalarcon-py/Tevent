@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const sequelize = require('../config/database');
+const { Op } = require('sequelize');
 
 
 console.log('Available models in teams.js:', Object.keys(db));
@@ -87,16 +88,41 @@ router.post('/:teamId/members', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { memberId, role } = req.body;
+    const { memberId, role, sourceTeamId } = req.body;
     const targetTeamId = req.params.teamId;
 
-    console.log('Adding member to team:', { memberId, role, targetTeamId }); // Debug log
+    console.log('Adding member to team:', { memberId, role, targetTeamId, sourceTeamId });
 
     // Check if team exists
     const targetTeam = await db.Team.findByPk(targetTeamId, { transaction: t });
     if (!targetTeam) {
       await t.rollback();
       return res.status(404).json({ error: 'Target team not found' });
+    }
+
+    // If coming from another team, remove from the source team first
+    if (sourceTeamId) {
+      await db.TeamMember.destroy({
+        where: {
+          team_id: sourceTeamId,
+          user_id: memberId
+        },
+        transaction: t
+      });
+    }
+
+    // Check if member is already in target team
+    const existingMember = await db.TeamMember.findOne({
+      where: {
+        team_id: targetTeamId,
+        user_id: memberId
+      },
+      transaction: t
+    });
+
+    if (existingMember) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Member already in team' });
     }
 
     // Get current position count
@@ -138,13 +164,20 @@ router.delete('/:teamId/members/:memberId', async (req, res) => {
   try {
     const { teamId, memberId } = req.params;
     
-    await db.TeamMember.destroy({
+    console.log('Deleting member:', { teamId, memberId }); // Debug log
+
+    const result = await db.TeamMember.destroy({
       where: {
         team_id: teamId,
-        id: memberId
+        user_id: memberId
       },
       transaction: t
     });
+
+    if (result === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Member not found' });
+    }
 
     await t.commit();
     res.json({ message: 'Member removed successfully' });
