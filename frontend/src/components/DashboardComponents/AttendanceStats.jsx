@@ -1,27 +1,35 @@
-// src/components/DashboardComponents/AttendanceStats.jsx
-import { Box, Typography } from '@mui/material';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React from 'react';
+import { Typography, Box } from '@mui/material';
 
 const AttendanceStats = ({ data }) => {
   if (!data) return <Typography>Loading attendance stats...</Typography>;
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Event Attendance</Typography>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data?.attendanceHistory || []}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-          <XAxis dataKey="date" stroke="#fff" />
-          <YAxis stroke="#fff" />
-          <Tooltip 
-            contentStyle={{ backgroundColor: '#1e1e1e', border: '1px solid #333' }}
-            labelStyle={{ color: '#fff' }}
-          />
-          <Legend />
-          <Line type="monotone" dataKey="attendance" stroke="#82ca9d" />
-          <Line type="monotone" dataKey="averageAttendance" stroke="#8884d8" />
-        </LineChart>
-      </ResponsiveContainer>
+      <Typography variant="h6" gutterBottom>
+        Event Attendance
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <Typography>Total Events: {data.total_events}</Typography>
+        <Typography>Average Attendance: {Math.round(data.average_attendance_rate)}%</Typography>
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {data.attendance_history?.map((item, index) => (
+          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography sx={{ minWidth: 100 }}>
+              {new Date(item.date).toLocaleDateString()}
+            </Typography>
+            <Box 
+              sx={{ 
+                height: 20, 
+                backgroundColor: '#8884d8',
+                width: `${(item.attendance_count / Math.max(...data.attendance_history.map(d => d.attendance_count))) * 100}%`
+              }} 
+            />
+            <Typography>{item.attendance_count}</Typography>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 };

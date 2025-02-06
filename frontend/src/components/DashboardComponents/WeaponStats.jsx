@@ -1,26 +1,32 @@
-// src/components/DashboardComponents/WeaponStats.jsx
-import { Box, Typography } from '@mui/material';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React from 'react';
+import { Typography, Box } from '@mui/material';
 
 const WeaponStats = ({ data }) => {
   if (!data) return <Typography>Loading weapon stats...</Typography>;
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Popular Weapon Combinations</Typography>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data?.weaponCombinations || []}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-          <XAxis dataKey="combination" stroke="#fff" />
-          <YAxis stroke="#fff" />
-          <Tooltip 
-            contentStyle={{ backgroundColor: '#1e1e1e', border: '1px solid #333' }}
-            labelStyle={{ color: '#fff' }}
-          />
-          <Legend />
-          <Bar dataKey="count" fill="#8884d8" />
-        </BarChart>
-      </ResponsiveContainer>
+      <Typography variant="h6" gutterBottom>
+        Weapon Combinations
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <Typography>Total Builds: {data.total_builds}</Typography>
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {data.weapon_combinations?.map((item, index) => (
+          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography sx={{ minWidth: 150 }}>{item.combination}</Typography>
+            <Box 
+              sx={{ 
+                height: 20, 
+                backgroundColor: '#8884d8',
+                width: `${(item.count / Math.max(...data.weapon_combinations.map(d => d.count))) * 100}%`
+              }} 
+            />
+            <Typography>{item.count}</Typography>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 };
