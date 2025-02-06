@@ -397,18 +397,16 @@ const TeamPlanner = () => {
         throw new Error(errorData.error || 'Failed to remove team member');
       }
   
-      // Add member back to participants list only if they don't already exist
       const memberExists = participants.some(p => p.user_id === member.user_id);
       if (!memberExists) {
-        const memberWithUser = {
+        const memberWithUser = formatMemberWithBuilds({
           ...member,
           id: member.user_id,
           User: member.User
-        };
+        });
         setParticipants(prev => [...prev, memberWithUser]);
       }
   
-      // Update teams state
       setTeams(prev => prev.map(team => {
         if (team.id === teamId) {
           return {
@@ -452,13 +450,13 @@ const TeamPlanner = () => {
   const handleDrop = async (memberId, teamId) => {
     try {
       // Check if member is in participants pool
-      let member = participants.find(p => p.id === memberId);
+      let member = participants.find(p => p.id === memberId || p.user_id === memberId);
       let sourceTeamId = null;
   
       // If not in participants, find in which team they are
       if (!member) {
         for (const team of teams) {
-          const foundMember = team.members?.find(m => m.id === memberId);
+          const foundMember = team.members?.find(m => m.id === memberId || m.user_id === memberId);
           if (foundMember) {
             member = foundMember;
             sourceTeamId = team.id;
@@ -468,12 +466,7 @@ const TeamPlanner = () => {
       }
   
       if (!member) return;
-  
-      // Don't do anything if dropping into the same team
       if (sourceTeamId === teamId) return;
-  
-      // Check for duplicates before proceeding
-      if (isDuplicateMember(member.user_id)) return;
   
       const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members`, {
         method: 'POST',
@@ -493,24 +486,24 @@ const TeamPlanner = () => {
   
       const updatedMember = await response.json();
   
-      // Preserve the User data including builds from the original member
-      const memberWithUserData = {
+      // Format member with builds properly preserved
+      const memberWithUserData = formatMemberWithBuilds({
         ...updatedMember,
-        User: member.User || updatedMember.User // Keep original User data if it exists
-      };
+        User: {
+          ...member.User,
+          builds: member.User?.builds || member.builds || []
+        }
+      });
   
       if (sourceTeamId) {
-        // Moving between teams
         setTeams(prev => prev.map(team => {
           if (team.id === sourceTeamId) {
-            // Remove from source team
             return {
               ...team,
-              members: team.members.filter(m => m.id !== memberId)
+              members: team.members.filter(m => m.id !== memberId && m.user_id !== memberId)
             };
           }
-          if (team.id === teamId && !isDuplicateMember(member.user_id)) {
-            // Add to target team only if not duplicate
+          if (team.id === teamId) {
             return {
               ...team,
               members: [...(team.members || []), memberWithUserData]
@@ -519,19 +512,16 @@ const TeamPlanner = () => {
           return team;
         }));
       } else {
-        // Moving from participants pool
-        if (!isDuplicateMember(member.user_id)) {
-          setParticipants(prev => prev.filter(p => p.id !== memberId));
-          setTeams(prev => prev.map(team => {
-            if (team.id === teamId) {
-              return {
-                ...team,
-                members: [...(team.members || []), memberWithUserData]
-              };
-            }
-            return team;
-          }));
-        }
+        setParticipants(prev => prev.filter(p => p.id !== memberId && p.user_id !== memberId));
+        setTeams(prev => prev.map(team => {
+          if (team.id === teamId) {
+            return {
+              ...team,
+              members: [...(team.members || []), memberWithUserData]
+            };
+          }
+          return team;
+        }));
       }
     } catch (error) {
       console.error('Error updating team:', error);
@@ -591,7 +581,6 @@ const TeamPlanner = () => {
 
   const loadPreset = async (presetId) => {
     try {
-      // Clean up existing teams first
       await cleanupExistingTeams();
   
       const response = await fetch(`http://localhost:5000/api/team-presets/${presetId}`, {
@@ -600,19 +589,17 @@ const TeamPlanner = () => {
       if (!response.ok) throw new Error('Failed to load preset');
       const data = await response.json();
   
-      // Get all member IDs from the preset teams
       const presetMemberIds = new Set(
         data.teams_data.flatMap(team => 
           (team.members || []).map(member => member.user_id)
         )
       );
   
-      // Update participants list to remove any members that will be in teams
       setParticipants(prev => 
         prev.filter(participant => !presetMemberIds.has(participant.user_id))
+          .map(participant => formatMemberWithBuilds(participant))
       );
   
-      // Create the teams in the database
       const createdTeams = await Promise.all(
         data.teams_data.map(async (teamData) => {
           const createTeamResponse = await fetch('http://localhost:5000/api/teams', {
@@ -631,11 +618,9 @@ const TeamPlanner = () => {
   
           const newTeam = await createTeamResponse.json();
   
-          // Add members to the team if they exist
           if (teamData.members && teamData.members.length > 0) {
             await Promise.all(
               teamData.members.map(async (member) => {
-                // Check if member isn't already in another team
                 const memberInOtherTeam = teams.some(team => 
                   team.members?.some(m => m.user_id === member.user_id)
                 );
@@ -657,7 +642,7 @@ const TeamPlanner = () => {
   
           return {
             ...newTeam,
-            members: teamData.members || []
+            members: (teamData.members || []).map(member => formatMemberWithBuilds(member))
           };
         })
       );
@@ -681,6 +666,54 @@ const TeamPlanner = () => {
     );
   
     return inTeams || inParticipants;
+  };
+
+  const formatMemberWithBuilds = (member) => {
+    let builds = member.User?.builds || member.builds || [];
+    
+    // If builds is a string, parse it
+    if (typeof builds === 'string') {
+      try {
+        builds = JSON.parse(builds);
+      } catch (e) {
+        console.error('Error parsing builds:', e);
+        builds = [];
+      }
+    }
+  
+    // Ensure builds is an array
+    builds = Array.isArray(builds) ? builds : [];
+  
+    return {
+      ...member,
+      User: {
+        ...member.User,
+        builds: builds
+      },
+      builds: builds
+    };
+  };
+
+  const [deletePresetDialog, setDeletePresetDialog] = useState(false);
+  const [presetToDelete, setPresetToDelete] = useState(null);
+
+  const handleDeletePreset = async (preset) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/team-presets/${preset.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+  
+      if (!response.ok) throw new Error('Failed to delete preset');
+      
+      // Remove the deleted preset from the list
+      setPresets(prev => prev.filter(p => p.id !== preset.id));
+      setDeletePresetDialog(false);
+      setPresetToDelete(null);
+    } catch (error) {
+      console.error('Error deleting preset:', error);
+      setError('Failed to delete preset');
+    }
   };
 
   if (error) {
@@ -730,12 +763,12 @@ const TeamPlanner = () => {
           </Button>
         </Box>
       </Box>
-
+  
       <Grid container spacing={3}>
         <Grid item xs={12} md={3}>
           <ParticipantPool participants={participants} />
         </Grid>
-
+  
         <Grid item xs={12} md={9}>
           <Grid container spacing={2}>
             {teams.map(team => (
@@ -752,7 +785,8 @@ const TeamPlanner = () => {
           </Grid>
         </Grid>
       </Grid>
-
+  
+      {/* Save Preset Dialog */}
       <Dialog open={openPresetDialog} onClose={() => setOpenPresetDialog(false)}>
         <DialogTitle>Save Team Preset</DialogTitle>
         <DialogContent>
@@ -778,23 +812,75 @@ const TeamPlanner = () => {
           <Button onClick={handleSavePreset}>Save</Button>
         </DialogActions>
       </Dialog>
-
+  
+      {/* Load Preset Dialog */}
       <Dialog open={!!presets.length} onClose={() => setPresets([])}>
         <DialogTitle>Load Preset</DialogTitle>
         <List>
           {presets.map((preset) => (
             <ListItem
               key={preset.id}
-              button
-              onClick={() => {
-                loadPreset(preset.id);
-                setPresets([]);
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 2,
+                pr: 2
               }}
             >
-              <ListItemText primary={preset.name} />
+              <ListItemText 
+                primary={preset.name}
+                sx={{ cursor: 'pointer' }}
+                onClick={() => {
+                  loadPreset(preset.id);
+                  setPresets([]);
+                }}
+              />
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                onClick={() => {
+                  setPresetToDelete(preset);
+                  setDeletePresetDialog(true);
+                }}
+              >
+                Delete
+              </Button>
             </ListItem>
           ))}
         </List>
+      </Dialog>
+  
+      {/* Delete Confirmation Dialog */}
+      <Dialog 
+        open={deletePresetDialog} 
+        onClose={() => {
+          setDeletePresetDialog(false);
+          setPresetToDelete(null);
+        }}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the "{presetToDelete?.name}" Preset?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setDeletePresetDialog(false);
+              setPresetToDelete(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            color="error"
+            onClick={() => handleDeletePreset(presetToDelete)}
+          >
+            Delete
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

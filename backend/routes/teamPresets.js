@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const sequelize = db.sequelize;
 
 // Create team preset
 router.post('/', async (req, res) => {
@@ -54,6 +55,30 @@ router.get('/:presetId', async (req, res) => {
     }
     res.json(preset);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const presetId = req.params.id;
+    
+    const result = await db.TeamPreset.destroy({
+      where: { id: presetId },
+      transaction: t
+    });
+
+    if (result === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Preset not found' });
+    }
+
+    await t.commit();
+    res.json({ message: 'Preset deleted successfully' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Error deleting preset:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -1,83 +1,95 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
-const sequelize = require('../config/database');
-const { Op } = require('sequelize');
-
-
-console.log('Available models in teams.js:', Object.keys(db));
-console.log('Team model:', db.Team);
+const sequelize = db.sequelize;
 
 // Get all teams
 router.get('/', async (req, res) => {
- try {
-   const teams = await db.Team.findAll({
-     include: [{
-       model: db.TeamMember,
-       include: [{
-         model: db.User,
-         attributes: ['id', 'username', 'avatar_url']
-       }]
-     }]
-   });
-   res.json(teams);
- } catch (error) {
-   res.status(500).json({ error: error.message });
- }
+  try {
+    const teams = await db.Team.findAll({
+      include: [{
+        model: db.TeamMember,
+        include: [{
+          model: db.User,
+          attributes: ['id', 'username', 'avatar_url', 'builds']
+        }]
+      }]
+    });
+    res.json(teams);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Get teams for a specific event
 router.get('/event/:eventId', async (req, res) => {
- try {
-   console.log('Fetching teams for event:', req.params.eventId);
-   const teams = await db.Team.findAll({
-     where: { event_id: req.params.eventId },
-     include: [{
-       model: db.TeamMember,
-       as: 'members',
-       include: [{
-         model: db.User,
-         attributes: ['id', 'username', 'avatar_url']
-       }]
-     }],
-     order: [['created_at', 'ASC']]
-   });
-   console.log(`Found ${teams.length} teams`);
-   res.json(teams);
- } catch (error) {
-   console.error('Error fetching teams:', error);
-   res.status(500).json({ error: error.message });
- }
+  try {
+    console.log('Fetching teams for event:', req.params.eventId);
+    const teams = await db.Team.findAll({
+      where: { event_id: req.params.eventId },
+      include: [{
+        model: db.TeamMember,
+        as: 'members',
+        include: [{
+          model: db.User,
+          attributes: ['id', 'username', 'avatar_url', 'builds']
+        }]
+      }],
+      order: [['created_at', 'ASC']]
+    });
+
+    // Process the teams to ensure builds are properly structured
+    const processedTeams = teams.map(team => {
+      const plainTeam = team.get({ plain: true });
+      if (plainTeam.members) {
+        plainTeam.members = plainTeam.members.map(member => ({
+          ...member,
+          User: member.User ? {
+            ...member.User,
+            builds: Array.isArray(member.User.builds) ? member.User.builds : 
+              (typeof member.User.builds === 'string' ? JSON.parse(member.User.builds) : [])
+          } : null
+        }));
+      }
+      return plainTeam;
+    });
+
+    console.log(`Found ${teams.length} teams`);
+    res.json(processedTeams);
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Create new team
 router.post('/', async (req, res) => {
- const t = await sequelize.transaction();
- try {
-   if (!req.isAuthenticated()) {
-     return res.status(401).json({ error: 'Not authenticated' });
-   }
+  const t = await sequelize.transaction();
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
 
-   const { name, eventId } = req.body;
-   
-   if (!name || !eventId) {
-     await t.rollback();
-     return res.status(400).json({ error: 'Name and eventId are required' });
-   }
+    const { name, eventId } = req.body;
+    
+    if (!name || !eventId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Name and eventId are required' });
+    }
 
-   const team = await db.Team.create({
-     name,
-     event_id: eventId,
-     created_by: req.user.id
-   }, { transaction: t });
+    const team = await db.Team.create({
+      name,
+      event_id: eventId,
+      created_by: req.user.id
+    }, { transaction: t });
 
-   await t.commit();
-   res.status(201).json(team);
- } catch (error) {
-   await t.rollback();
-   console.error('Error creating team:', error);
-   res.status(500).json({ error: error.message });
- }
+    await t.commit();
+    res.status(201).json(team);
+  } catch (error) {
+    await t.rollback();
+    console.error('Error creating team:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Update team members
@@ -88,41 +100,16 @@ router.post('/:teamId/members', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { memberId, role, sourceTeamId } = req.body;
+    const { memberId, role } = req.body;
     const targetTeamId = req.params.teamId;
 
-    console.log('Adding member to team:', { memberId, role, targetTeamId, sourceTeamId });
+    console.log('Adding member to team:', { memberId, role, targetTeamId });
 
     // Check if team exists
     const targetTeam = await db.Team.findByPk(targetTeamId, { transaction: t });
     if (!targetTeam) {
       await t.rollback();
       return res.status(404).json({ error: 'Target team not found' });
-    }
-
-    // If coming from another team, remove from the source team first
-    if (sourceTeamId) {
-      await db.TeamMember.destroy({
-        where: {
-          team_id: sourceTeamId,
-          user_id: memberId
-        },
-        transaction: t
-      });
-    }
-
-    // Check if member is already in target team
-    const existingMember = await db.TeamMember.findOne({
-      where: {
-        team_id: targetTeamId,
-        user_id: memberId
-      },
-      transaction: t
-    });
-
-    if (existingMember) {
-      await t.rollback();
-      return res.status(400).json({ error: 'Member already in team' });
     }
 
     // Get current position count
@@ -144,13 +131,22 @@ router.post('/:teamId/members', async (req, res) => {
       where: { id: teamMember.id },
       include: [{
         model: db.User,
-        attributes: ['id', 'username', 'avatar_url']
+        attributes: ['id', 'username', 'avatar_url', 'builds']
       }],
       transaction: t
     });
 
+    // Process the member data to ensure builds are properly structured
+    const processedMember = updatedMember.get({ plain: true });
+    if (processedMember.User) {
+      processedMember.User.builds = Array.isArray(processedMember.User.builds) ? 
+        processedMember.User.builds : 
+        (typeof processedMember.User.builds === 'string' ? 
+          JSON.parse(processedMember.User.builds) : []);
+    }
+
     await t.commit();
-    res.json(updatedMember);
+    res.json(processedMember);
   } catch (error) {
     await t.rollback();
     console.error('Error updating team member:', error);
@@ -164,20 +160,13 @@ router.delete('/:teamId/members/:memberId', async (req, res) => {
   try {
     const { teamId, memberId } = req.params;
     
-    console.log('Deleting member:', { teamId, memberId }); // Debug log
-
-    const result = await db.TeamMember.destroy({
+    await db.TeamMember.destroy({
       where: {
         team_id: teamId,
         user_id: memberId
       },
       transaction: t
     });
-
-    if (result === 0) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Member not found' });
-    }
 
     await t.commit();
     res.json({ message: 'Member removed successfully' });
@@ -190,16 +179,20 @@ router.delete('/:teamId/members/:memberId', async (req, res) => {
 
 // Update team
 router.put('/:id', async (req, res) => {
- try {
-   const team = await db.Team.findByPk(req.params.id);
-   if (!team) {
-     return res.status(404).json({ error: 'Team not found' });
-   }
-   await team.update({ name: req.body.name });
-   res.json(team);
- } catch (error) {
-   res.status(500).json({ error: error.message });
- }
+  const t = await sequelize.transaction();
+  try {
+    const team = await db.Team.findByPk(req.params.id);
+    if (!team) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    await team.update({ name: req.body.name }, { transaction: t });
+    await t.commit();
+    res.json(team);
+  } catch (error) {
+    await t.rollback();
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Delete team
