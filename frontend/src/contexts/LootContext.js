@@ -1,26 +1,64 @@
-// frontend/src/contexts/LootContext.js
-import { createContext, useContext, useState } from 'react';
-import axios from 'axios';
+// contexts/LootContext.js
+import { createContext, useContext, useState, useEffect } from 'react';
+import axiosInstance from '../config/axios';
+import { useAuth } from './AuthContext';
 
 const LootContext = createContext();
 
 export const LootProvider = ({ children }) => {
   const [items, setItems] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadData = async () => {
+      if (mounted && isAuthenticated) {
+        await loadItems();
+        await loadRequests();
+      }
+    };
+
+    loadData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthenticated]);
 
   const requestItem = async (itemId) => {
-    const response = await axios.post('/api/loot/request', { itemId });
-    setRequests([...requests, response.data]);
+    try {
+      const response = await axiosInstance.post('/api/loot/request', { itemId });
+      await loadRequests();
+      return response.data;
+    } catch (error) {
+      console.error('Request failed:', error);
+      throw error;
+    }
   };
 
   const loadItems = async () => {
-    const response = await axios.get('/api/items');
-    setItems(response.data);
+    try {
+      const response = await axiosInstance.get('/api/items');
+      setItems(response.data);
+    } catch (error) {
+      console.error('Failed to load items:', error);
+    }
   };
 
   const loadRequests = async () => {
-    const response = await axios.get('/api/loot/waitlist');
-    setRequests(response.data);
+    if (loading) return;
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get('/api/loot/waitlist');
+      setRequests(response.data);
+    } catch (error) {
+      console.error('Failed to load requests:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,7 +68,7 @@ export const LootProvider = ({ children }) => {
       requestItem,
       loadItems,
       loadRequests,
-      isAdmin: true // Replace with actual auth check
+      loading
     }}>
       {children}
     </LootContext.Provider>

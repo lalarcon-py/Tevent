@@ -7,8 +7,12 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useLoot } from '../../contexts/LootContext';
 import axiosInstance from '../../config/axios.js';
+import { useAuth } from '../../contexts/AuthContext';
+
 
 const AdminLootPanel = () => {
+ const { isAuthenticated } = useAuth();
+ const { requestItem, loadRequests } = useLoot();
  const [addedItems, setAddedItems] = useState([]);
  const [templateItems, setTemplateItems] = useState([]);
  const [loading, setLoading] = useState(false);
@@ -20,6 +24,13 @@ const AdminLootPanel = () => {
    inStorage: true,
    icon: ''
  });
+
+ useEffect(() => {
+  if (isAuthenticated) {
+    fetchAddedItems();
+    fetchTemplateItems();
+  }
+}, [isAuthenticated]);
 
  useEffect(() => {
    fetchAddedItems();
@@ -90,15 +101,12 @@ const AdminLootPanel = () => {
  };
 
  const handleRequestItem = async (item) => {
-   try {
-     const response = await axiosInstance.post('/api/waitlist', {
-       itemId: item.id,
-     });
-     console.log('Item requested successfully');
-   } catch (error) {
-     console.error('Failed to request item:', error);
-   }
- };
+  try {
+    await requestItem(item.id);
+  } catch (error) {
+    console.error('Failed to request item:', error);
+  }
+};
 
  return (
    <Box>

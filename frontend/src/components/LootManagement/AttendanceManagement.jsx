@@ -31,18 +31,20 @@ const AttendanceManagement = () => {
   const fetchEvents = async () => {
     try {
       const response = await axiosInstance.get('/api/events');
-      setEvents(response.data);
+      setEvents(response.data || []); // Ensure we always have an array
     } catch (error) {
       console.error('Failed to fetch events:', error);
+      setEvents([]); // Set empty array on error
     }
   };
 
   const fetchPlayers = async () => {
     try {
-      const response = await axiosInstance.get('/api/players');
-      setPlayers(response.data);
+      const response = await axiosInstance.get('/api/members');
+      setPlayers(response.data || []); // Ensure we always have an array
     } catch (error) {
       console.error('Failed to fetch players:', error);
+      setPlayers([]); // Set empty array on error
     }
   };
 
@@ -181,23 +183,23 @@ const AttendanceManagement = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {players.map((player) => (
+                {players?.map((player) => (
                   <TableRow key={player.id}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar src={player.avatar}>
-                          {player.name[0]}
+                          {player.name ? player.name[0] : ''}
                         </Avatar>
-                        {player.name}
+                        {player.name || 'Unknown Player'}
                       </Box>
                     </TableCell>
-                    <TableCell>{player.dkp}</TableCell>
-                    <TableCell>{player.attendanceRate}%</TableCell>
+                    <TableCell>{player.dkp || 0}</TableCell>
+                    <TableCell>{player.attendanceRate || 0}%</TableCell>
                     <TableCell>
                       <Checkbox
-                        checked={player.attended}
+                        checked={Boolean(player.attended)}
                         onChange={(e) => handleMarkAttendance(
-                          selectedEvent.id,
+                          selectedEvent?.id,
                           player.id,
                           e.target.checked
                         )}

@@ -162,7 +162,7 @@ router.delete('/:eventId/participants/:userId', async (req, res) => {
    if (!req.isAuthenticated()) {
      return res.status(401).json({ error: 'Not authenticated' });
    }
-
+   
    const participant = await EventParticipant.findOne({
      where: {
        event_id: req.params.eventId,

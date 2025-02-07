@@ -13,6 +13,8 @@ const eventsRouter = require('./routes/events');
 const teamsRouter = require('./routes/teams');
 const teamPresetsRouter = require('./routes/teamPresets');
 const dashboardRouter = require('./routes/dashboardRoutes');
+const lootRouter = require('./routes/loot');
+const { authMiddleware, isOfficer } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -61,11 +63,12 @@ app.use(passport.session());
 
 app.use(express.json());
 
-app.use('/api/items', itemsRouter);
-app.use('/api/events', eventsRouter);
-app.use('/api/teams', teamsRouter);
-app.use('/api/team-presets', teamPresetsRouter);
-app.use('/api', dashboardRouter);
+app.use('/api/items',authMiddleware, itemsRouter);
+app.use('/api/events',authMiddleware, eventsRouter);
+app.use('/api/teams', authMiddleware, teamsRouter);
+app.use('/api/team-presets', authMiddleware, teamPresetsRouter);
+app.use('/api', authMiddleware,  dashboardRouter);
+app.use('/api/loot',authMiddleware, lootRouter);
 
 app.use((req, res, next) => {
   if (req.method === 'PUT') {
