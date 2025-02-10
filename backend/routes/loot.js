@@ -50,15 +50,6 @@ router.put('/request/:id/approve', async (req, res) => {
       return res.status(404).json({ error: 'Request not found' });
     }
 
-    const otherRequests = await LootRequest.findAll({
-      where: {
-        storage_item_id: request.storage_item_id,
-        id: { [Op.ne]: request.id },
-        status: 'Pending'
-      },
-      include: [User]
-    });
-
     // Update the storage item quantity
     if (request.StorageItem.quantity > 0) {
       await request.StorageItem.decrement('quantity');
@@ -70,24 +61,46 @@ router.put('/request/:id/approve', async (req, res) => {
     }
 
     await request.update({ status: 'Approved' });
-    res.json(request);
 
-    // Deny other requests
-    for (const otherRequest of otherRequests) {
-      await otherRequest.update({ status: 'Denied' });
-      await discordWebhook.send({
-        content: `❌ Your request for ${request.StorageItem.Item.name} has been denied as it was awarded to another player.`
+    // Handle other requests and notifications
+    try {
+      const otherRequests = await LootRequest.findAll({
+        where: {
+          storage_item_id: request.storage_item_id,
+          id: { [Op.ne]: request.id },
+          status: 'Pending'
+        },
+        include: [User]
       });
+
+      // Deny other requests
+      for (const otherRequest of otherRequests) {
+        await otherRequest.update({ status: 'Denied' });
+        try {
+          await discordWebhook.send({
+            content: `❌ Your request for ${request.StorageItem.Item.name} has been denied as it was awarded to another player.`
+          });
+        } catch (webhookError) {
+          console.log('Discord webhook error:', webhookError);
+        }
+      }
+
+      try {
+        await discordWebhook.send({
+          content: `🎉 **Item Distributed**\n${request.StorageItem.Item.name} has been awarded to ${request.User.username}`
+        });
+      } catch (webhookError) {
+        console.log('Discord webhook error:', webhookError);
+      }
+    } catch (error) {
+      console.error('Error handling other requests:', error);
     }
 
-    await discordWebhook.send({
-      content: `🎉 **Item Distributed**\n${request.StorageItem.Item.name} has been awarded to ${request.User.username}`
-    });
-
-    res.json(request);
+    // Send single response at the end
+    return res.json(request);
   } catch (error) {
     console.error('Approve request failed:', error);
-    res.status(500).json({ error: 'Failed to approve request' });
+    return res.status(500).json({ error: 'Failed to approve request' });
   }
 });
 
