@@ -169,20 +169,19 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const item = await Item.findByPk(id);
+    const storageItem = await GuildStorageItem.findByPk(id);
     
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
+    if (!storageItem) {
+      return res.status(404).json({ error: 'Storage item not found' });
     }
-
-    await item.destroy();
+ 
+    await storageItem.destroy();
     res.status(200).json({ message: 'Item deleted successfully' });
   } catch (error) {
     console.error('Error deleting item:', error);
     res.status(500).json({ error: 'Failed to delete item' });
   }
-});
-
+ });
 // Autocomplete items
 router.get('/autocomplete', getAutocompleteItems, async (req, res) => {
   try {

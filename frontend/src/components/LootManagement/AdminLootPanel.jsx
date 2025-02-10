@@ -101,14 +101,19 @@ const handleUpdate = (id, field, value) => {
   }
 }, 500);  
 
- const handleDelete = async (id) => {
-   try {
-     await axiosInstance.delete(`/api/items/${id}`);
-     fetchAddedItems();
-   } catch (error) {
-     console.error('Delete failed:', error);
-   }
- };
+const handleDelete = async (item) => {
+  try {
+    console.log('Deleting storage item:', item);
+    if (!item.id) {
+      console.error('No item ID provided');
+      return;
+    }
+    await axiosInstance.delete(`/api/guild-storage-items/${item.id}`);
+    fetchAddedItems();
+  } catch (error) {
+    console.error('Delete failed:', error);
+  }
+};
 
  const handleAddItem = async () => {
   try {
@@ -366,7 +371,7 @@ return (
               </TableCell>
               <TableCell>
                 <IconButton 
-                  onClick={() => handleDelete(item.id)}
+                  onClick={() => handleDelete(item)}
                   sx={{ 
                     '&:hover': { 
                       color: '#ff4444',

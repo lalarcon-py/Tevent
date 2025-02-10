@@ -37,12 +37,12 @@ router.put('/request/:id/approve', async (req, res) => {
   try {
     const request = await LootRequest.findByPk(req.params.id, {
       include: [
-        {
+        { model: User },
+        { 
           model: GuildStorageItem,
           as: 'StorageItem',
           include: [Item]
-        },
-        User
+        }
       ]
     });
 
@@ -62,14 +62,15 @@ router.put('/request/:id/approve', async (req, res) => {
     // Update the storage item quantity
     if (request.StorageItem.quantity > 0) {
       await request.StorageItem.decrement('quantity');
-      await DKPTransaction.create({
-        UserId: request.UserId,
-        amount: -request.StorageItem.dkp_cost,
-        reason: `Purchased ${request.StorageItem.Item.name}`
-      });
+      
+      // Delete storage item if quantity reaches 0
+      if (request.StorageItem.quantity <= 1) {
+        await request.StorageItem.destroy();
+      }
     }
 
     await request.update({ status: 'Approved' });
+    res.json(request);
 
     // Deny other requests
     for (const otherRequest of otherRequests) {
@@ -117,28 +118,32 @@ router.put('/request/:id/deny', async (req, res) => {
 });
 
 // Delete Request
-router.delete('/request/:id', async (req, res) => {
- try {
-   const request = await LootRequest.findByPk(req.params.id, {
-     include: [Item, User]
-   });
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('Deleting storage item:', id);
 
-   if (!request) {
-     return res.status(404).json({ error: 'Request not found' });
-   }
+    const { LootRequest } = require('../models');
 
-   await request.destroy();
+    // Delete associated loot requests first
+    await LootRequest.destroy({
+      where: { storage_item_id: id }
+    });
 
-   // Notify user of deletion
-   await discordWebhook.send({
-     content: `🗑️ Your request for ${request.Item.name} has been deleted.`
-   });
+    // Then delete storage item
+    const numDeleted = await GuildStorageItem.destroy({
+      where: { id }
+    });
 
-   res.json({ success: true });
- } catch (error) {
-   console.error('Delete request failed:', error);
-   res.status(500).json({ error: 'Failed to delete request' });
- }
+    if (numDeleted === 0) {
+      return res.status(404).json({ error: 'Storage item not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 

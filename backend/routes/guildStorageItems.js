@@ -109,17 +109,21 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('Attempting to delete storage item:', id);
     const storageItem = await GuildStorageItem.findByPk(id);
     
     if (!storageItem) {
+      console.log('Storage item not found');
       return res.status(404).json({ error: 'Storage item not found' });
     }
 
+    console.log('Found storage item:', storageItem.toJSON());
     await storageItem.destroy();
-    res.status(200).json({ message: 'Storage item deleted successfully' });
+    console.log('Storage item deleted');
+    res.status(200).json({ message: 'Item deleted successfully' });
   } catch (error) {
-    console.error('Error deleting storage item:', error);
-    res.status(500).json({ error: 'Failed to delete storage item' });
+    console.error('Delete error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
