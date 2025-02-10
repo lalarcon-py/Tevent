@@ -3,39 +3,61 @@ const sequelize = require('./config/database');
 
 // Item Schema
 const Item = sequelize.define('Item', {
-   id: { 
-       type: DataTypes.UUID,
-       defaultValue: DataTypes.UUIDV4,
-       primaryKey: true 
-   },
-   name: { type: DataTypes.STRING, allowNull: false },
-   type: { type: DataTypes.STRING },
-   rarity: { type: DataTypes.ENUM('Common', 'Rare', 'Epic', 'Legendary') },
-   dkpCost: { type: DataTypes.INTEGER, defaultValue: 0 },
-   inStorage: { type: DataTypes.BOOLEAN, defaultValue: false }, 
-   quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
-   icon: { type: DataTypes.STRING }
-}, {
-   tableName: 'items',
-   freezeTableName: true
-});
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    name: { type: DataTypes.STRING, allowNull: false },
+    type: { type: DataTypes.STRING },
+    rarity: { type: DataTypes.ENUM('Common', 'Rare', 'Epic', 'Legendary') },
+    dkpCost: { type: DataTypes.INTEGER, defaultValue: 0 },
+    inStorage: { type: DataTypes.BOOLEAN, defaultValue: false }, 
+    quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
+    icon: { type: DataTypes.STRING },
+    traits: { 
+        type: DataTypes.ARRAY(DataTypes.STRING),
+        defaultValue: [],
+        allowNull: true
+    }
+ }, {
+    tableName: 'items',
+    freezeTableName: true
+ });
 
 // Loot Request Schema
 const LootRequest = sequelize.define('LootRequest', {
-   id: { 
-       type: DataTypes.UUID,
-       defaultValue: DataTypes.UUIDV4,
-       primaryKey: true 
-   },
-   status: { 
-       type: DataTypes.ENUM('Pending', 'Approved', 'Denied', 'Fulfilled'),
-       defaultValue: 'Pending'
-   },
-   priority: { type: DataTypes.INTEGER, defaultValue: 0 }
-}, {
-   tableName: 'loot_requests',
-   freezeTableName: true
-});
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
+    status: {
+      type: DataTypes.STRING,
+      defaultValue: 'Pending'
+    },
+    priority: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
+    user_id: {
+      type: DataTypes.UUID,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
+    storage_item_id: {
+      type: DataTypes.UUID,
+      references: {
+        model: 'guild_storage_items',
+        key: 'id'
+      }
+    }
+  }, {
+    tableName: 'loot_requests',
+    timestamps: false
+  });
 
 // DKP Transaction Schema  
 const DKPTransaction = sequelize.define('DKPTransaction', {
@@ -261,12 +283,41 @@ const Team = sequelize.define('Team', {
     timestamps: true
 });
 
+const GuildStorageItem = sequelize.define('GuildStorageItem', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    item_id: {  // Changed from itemId to match database convention
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'items',
+            key: 'id'
+        }
+    },
+    quantity: { 
+        type: DataTypes.INTEGER, 
+        defaultValue: 0 
+    },
+    trait: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    dkp_cost: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    }
+}, {
+    tableName: 'guild_storage_items',
+    underscored: true,
+    timestamps: true
+});
+
 // Associations
-User.hasMany(LootRequest);
-Item.hasMany(LootRequest);
 User.hasMany(DKPTransaction);
 LootRequest.belongsTo(User);
-LootRequest.belongsTo(Item);
 Team.belongsTo(Event, { foreignKey: 'event_id' });
 Team.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 Team.hasMany(TeamMember, { foreignKey: 'team_id', as: 'members' });
@@ -274,6 +325,17 @@ TeamMember.belongsTo(Team, { foreignKey: 'team_id' });
 TeamMember.belongsTo(User, { foreignKey: 'user_id' });
 TeamPreset.belongsTo(Event, { foreignKey: 'event_id' });
 TeamPreset.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+Item.hasMany(GuildStorageItem, { foreignKey: 'item_id' });
+GuildStorageItem.belongsTo(Item, { foreignKey: 'item_id' });
+LootRequest.belongsTo(GuildStorageItem, {
+    foreignKey: 'storage_item_id',
+    as: 'StorageItem'
+  });
+  
+  GuildStorageItem.hasMany(LootRequest, {
+    foreignKey: 'storage_item_id',
+    as: 'Requests'
+  });
 
 Event.belongsTo(User, {
    foreignKey: 'created_by',
@@ -303,5 +365,6 @@ module.exports = {
    EventParticipant,
    Team,
    TeamMember,
-   TeamPreset
+   TeamPreset,
+   GuildStorageItem
 };

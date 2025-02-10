@@ -40,23 +40,17 @@ const WaitListTab = () => {
   });
 
   useEffect(() => {
-    let mounted = true;
-
-    const fetchData = async () => {
-      if (isAuthenticated && mounted) {
-        await loadRequests();
-      }
-      if (mounted) {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthenticated, loadRequests]);
+    if (isAuthenticated) {
+      const initialLoad = async () => {
+        try {
+          await loadRequests();
+        } finally {
+          setLoading(false);
+        }
+      };
+      initialLoad();
+    }
+  }, [isAuthenticated]);
 
   const handleApprove = async (request) => {
     setConfirmDialog({
@@ -151,21 +145,36 @@ const WaitListTab = () => {
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar 
-                        src={request?.Item?.icon} 
+                        src={request?.StorageItem?.Item?.icon} 
                         sx={{ 
                           width: 40, 
                           height: 40,
                           border: '2px solid #90caf9'
                         }}
                       >
-                        {!request?.Item?.icon && request?.Item?.name?.[0]}
+                        {!request?.StorageItem?.Item?.icon && request?.StorageItem?.Item?.name?.[0]}
                       </Avatar>
-                      <Typography sx={{ color: 'white' }}>
-                        {request?.Item?.name}
-                      </Typography>
+                      <Box>
+                        <Typography sx={{ color: 'white' }}>
+                          {request?.StorageItem?.Item?.name}
+                        </Typography>
+                        {request?.StorageItem?.trait && (
+                          <Typography 
+                            variant="caption" 
+                            sx={{ 
+                              color: '#90caf9',
+                              mt: 0.5,
+                              display: 'block',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            {request?.StorageItem?.trait}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </TableCell>
-                  <TableCell sx={{ color: 'white' }}>{request?.Item?.type}</TableCell>
+                  <TableCell sx={{ color: 'white' }}>{request?.StorageItem?.Item?.type}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar 
@@ -242,7 +251,7 @@ const WaitListTab = () => {
           </Table>
         </TableContainer>
       </Paper>
- 
+   
       <Dialog
         open={confirmDialog.open}
         onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}
@@ -266,7 +275,7 @@ const WaitListTab = () => {
         </DialogActions>
       </Dialog>
     </Box>
-  );
+   );
 };
 
 export default WaitListTab;

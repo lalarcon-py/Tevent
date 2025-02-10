@@ -15,6 +15,7 @@ const teamPresetsRouter = require('./routes/teamPresets');
 const dashboardRouter = require('./routes/dashboardRoutes');
 const lootRouter = require('./routes/loot');
 const { authMiddleware, isOfficer } = require('./middleware/auth');
+const guildStorageItemsRouter = require('./routes/guildStorageItems');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -63,6 +64,7 @@ app.use(passport.session());
 
 app.use(express.json());
 
+app.use('/api/guild-storage-items', guildStorageItemsRouter);
 app.use('/api/items',authMiddleware, itemsRouter);
 app.use('/api/events',authMiddleware, eventsRouter);
 app.use('/api/teams', authMiddleware, teamsRouter);

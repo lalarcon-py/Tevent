@@ -8,12 +8,14 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useLoot } from '../../contexts/LootContext';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
+import { debounce } from 'lodash';
 
 
 const AdminLootPanel = () => {
  const { isAuthenticated } = useAuth();
  const { requestItem, loadRequests } = useLoot();
  const [addedItems, setAddedItems] = useState([]);
+ const [availableTraits, setAvailableTraits] = useState([]);
  const [templateItems, setTemplateItems] = useState([]);
  const [loading, setLoading] = useState(false);
  const [newItem, setNewItem] = useState({
@@ -22,7 +24,8 @@ const AdminLootPanel = () => {
    dkpCost: 0,
    quantity: 1,
    inStorage: true,
-   icon: ''
+   icon: '',
+   trait: ''
  });
 
  useEffect(() => {
@@ -32,19 +35,14 @@ const AdminLootPanel = () => {
   }
 }, [isAuthenticated]);
 
- useEffect(() => {
-   fetchAddedItems();
-   fetchTemplateItems();
- }, []);
-
- const fetchAddedItems = async () => {
-   try {
-     const response = await axiosInstance.get('/api/items');
-     setAddedItems(response.data.filter(item => item.quantity > 0 || item.inStorage));
-   } catch (error) {
-     console.error('Failed to fetch added items:', error);
-   }
- };
+const fetchAddedItems = async () => {
+  try {
+    const response = await axiosInstance.get('/api/guild-storage-items');
+    setAddedItems(response.data);
+  } catch (error) {
+    console.error('Failed to fetch storage items:', error);
+  }
+};
 
  const fetchTemplateItems = async () => {
    try {
@@ -57,15 +55,51 @@ const AdminLootPanel = () => {
      setLoading(false);
    }
  };
+ const fetchAvailableTraits = async () => {
+  try {
+    const response = await axiosInstance.get('/api/items/traits');
+    // Flatten and deduplicate traits from all items
+    const uniqueTraits = [...new Set(response.data.flatMap(item => item.traits || []))];
+    setAvailableTraits(uniqueTraits);
+  } catch (error) {
+    console.error('Failed to fetch traits:', error);
+  }
+};
 
- const handleUpdate = async (id, field, value) => {
-   try {
-     const response = await axiosInstance.put(`/api/items/${id}`, { [field]: value });
-     if (response.status === 200) fetchAddedItems();
-   } catch (error) {
-     console.error('Update error:', error);
-   }
- };
+const fetchTraitsForItem = async (itemId) => {
+  try {
+    const response = await axiosInstance.get(`/api/items/${itemId}/traits`);
+    setAvailableTraits(response.data);
+  } catch (error) {
+    console.error('Failed to fetch traits for item:', error);
+  }
+};
+
+useEffect(() => {
+  if (isAuthenticated) {
+    const initialLoad = async () => {
+      try {
+        await loadRequests();
+      } finally {
+        setLoading(false);
+      }
+    };
+    initialLoad();
+  }
+}, [isAuthenticated]);
+
+const handleUpdate = (id, field, value) => {
+  debouncedUpdate(id, field, value);
+};
+
+ const debouncedUpdate = debounce(async (id, field, value) => {
+  try {
+    const response = await axiosInstance.put(`/api/items/${id}`, { [field]: value });
+    if (response.status === 200) fetchAddedItems();
+  } catch (error) {
+    console.error('Update error:', error);
+  }
+}, 500);  
 
  const handleDelete = async (id) => {
    try {
@@ -77,28 +111,43 @@ const AdminLootPanel = () => {
  };
 
  const handleAddItem = async () => {
-   try {
-     if (!newItem.name) return;
+  try {
+    if (!newItem.name) return;
 
-     const response = await axiosInstance.post('/api/items', {
-       ...newItem,
-       inStorage: true
-     });
-     
-     await fetchAddedItems();
-     
-     setNewItem({
-       name: '',
-       type: '',
-       dkpCost: 0,
-       quantity: 1,
-       inStorage: true,
-       icon: ''
-     });
-   } catch (error) {
-     console.error('Create/Update error:', error);
-   }
- };
+    // First, create or get the template item
+    const templateResponse = await axiosInstance.get('/api/items/autocomplete');
+    const existingItem = templateResponse.data.find(item => item.name === newItem.name);
+
+    if (!existingItem) {
+      console.error('Template item not found');
+      return;
+    }
+
+    // Then create the storage entry
+    const storageResponse = await axiosInstance.post('/api/guild-storage-items', {
+      itemId: existingItem.id,
+      quantity: newItem.quantity,
+      trait: newItem.trait,
+      dkpCost: newItem.dkpCost
+    });
+    
+    console.log('Storage response:', storageResponse.data);
+    
+    await fetchAddedItems();
+    
+    setNewItem({
+      name: '',
+      type: '',
+      dkpCost: 0,
+      quantity: 1,
+      inStorage: true,
+      icon: '',
+      trait: ''
+    });
+  } catch (error) {
+    console.error('Create/Update error:', error);
+  }
+};
 
  const handleRequestItem = async (item) => {
   try {
@@ -108,216 +157,253 @@ const AdminLootPanel = () => {
   }
 };
 
- return (
-   <Box>
-     <Paper sx={{ 
-       p: 4, 
-       mb: 4,
-       background: 'rgba(30, 30, 30, 0.6)',
-       backdropFilter: 'blur(12px)',
-       transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
-       '&:hover': {
-         transform: 'translateY(-5px)',
-         boxShadow: '0 8px 32px rgba(144, 202, 249, 0.2)'
-       }
-     }}>
-       <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add New Item</Typography>
-       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-         <Autocomplete
-           freeSolo
-           options={templateItems}
-           getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
-           value={newItem}
-           onChange={(_, newValue) => {
-             if (newValue && typeof newValue === 'object') {
-               setNewItem({
-                 ...newItem,
-                 name: newValue.name,
-                 type: newValue.type,
-                 icon: newValue.icon || '',
-                 dkpCost: newValue.dkpCost || 0
-               });
-             }
-           }}
-           renderInput={(params) => (
-             <TextField
-               {...params}
-               label="Item Name"
-               sx={{
-                 minWidth: 300,
-                 '& .MuiOutlinedInput-root': {
-                   background: 'rgba(30, 30, 30, 0.4)',
-                   backdropFilter: 'blur(12px)'
-                 }
-               }}
-             />
-           )}
-           renderOption={(props, option, state) => {
-             const { key, ...otherProps } = props;
-             return (
-               <ListItem 
-                 key={key} 
-                 {...otherProps}
-               >
-                 <ListItemAvatar>
-                   <Avatar
-                     src={option.icon}
-                     sx={{
-                       width: 40,
-                       height: 40,
-                       bgcolor: 'rgba(144, 202, 249, 0.1)',
-                       border: '1px solid rgba(144, 202, 249, 0.2)'
-                     }}
-                   >
-                     {!option.icon && option.name?.[0]}
-                   </Avatar>
-                 </ListItemAvatar>
-                 <ListItemText 
-                   primary={option.name} 
-                   secondary={option.type}
-                 />
-               </ListItem>
-             );
-           }}
-         />
-         <TextField
-           label="DKP Cost"
-           type="number"
-           value={newItem.dkpCost}
-           onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
-           sx={{
-             '& .MuiOutlinedInput-root': {
-               background: 'rgba(30, 30, 30, 0.4)',
-               backdropFilter: 'blur(12px)'
-             }
-           }}
-         />
-         <TextField
-           label="Quantity"
-           type="number"
-           value={newItem.quantity}
-           onChange={(e) => setNewItem({ ...newItem, quantity: Math.max(1, Number(e.target.value)) })}
-           InputProps={{ inputProps: { min: 1 } }}
-           sx={{
-             '& .MuiOutlinedInput-root': {
-               background: 'rgba(30, 30, 30, 0.4)',
-               backdropFilter: 'blur(12px)'
-             }
-           }}
-         />
-         <Button 
-           variant="contained" 
-           onClick={handleAddItem}
-           disabled={!newItem.name}
-           sx={{
-             background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
-             backdropFilter: 'blur(12px)',
-             transition: 'all 0.3s ease',
-             '&:hover': {
-               transform: 'translateY(-2px)',
-               boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
-             }
-           }}
-         >
-           Add Item
-         </Button>
-       </Box>
-     </Paper>
-
-     <TableContainer component={Paper} sx={{
-       background: 'rgba(30, 30, 30, 0.6)',
-       backdropFilter: 'blur(12px)'
-     }}>
-       <Table>
-         <TableHead>
-           <TableRow>
-             <TableCell>Item</TableCell>
-             <TableCell>Type</TableCell>
-             <TableCell>DKP Cost</TableCell>
-             <TableCell>In Storage</TableCell>
-             <TableCell>Quantity</TableCell>
-             <TableCell>Actions</TableCell>
-             <TableCell>Request</TableCell>
-           </TableRow>
-         </TableHead>
-         <TableBody>
-           {addedItems.map((item) => (
-             <TableRow key={item.id} sx={{
-               '&:hover': {
-                 backgroundColor: 'rgba(144, 202, 249, 0.1)'
-               }
-             }}>
-               <TableCell>
-                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                   <Avatar src={item.icon} sx={{ width: 40, height: 40 }}>
-                     {!item.icon && item.name[0]}
-                   </Avatar>
-                   {item.name}
-                 </Box>
-               </TableCell>
-               <TableCell>{item.type}</TableCell>
-               <TableCell>
-                 <TextField
-                   type="number"
-                   value={item.dkpCost}
-                   onChange={(e) => handleUpdate(item.id, 'dkpCost', Number(e.target.value))}
-                   sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
-                 />
-               </TableCell>
-               <TableCell>
-                 <Checkbox
-                   checked={item.inStorage}
-                   onChange={(e) => handleUpdate(item.id, 'inStorage', e.target.checked)}
-                 />
-               </TableCell>
-               <TableCell>
-                 <TextField
-                   type="number"
-                   value={item.quantity}
-                   onChange={(e) => handleUpdate(item.id, 'quantity', Number(e.target.value))}
-                   sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
-                 />
-               </TableCell>
-               <TableCell>
-                 <IconButton 
-                   onClick={() => handleDelete(item.id)}
-                   sx={{ 
-                     '&:hover': { 
-                       color: '#ff4444',
-                       transform: 'scale(1.1)'
-                     }
-                   }}
-                 >
-                   <DeleteIcon />
-                 </IconButton>
-               </TableCell>
-               <TableCell>
-                 <Button 
-                   variant="contained"
-                   disabled={!item.inStorage || item.quantity === 0}
-                   onClick={() => handleRequestItem(item)}
-                   sx={{
-                     background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
-                     backdropFilter: 'blur(12px)',
-                     '&:hover': {
-                       transform: 'translateY(-2px)',
-                       boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
-                     },
-                     '&:disabled': {
-                       background: 'rgba(144, 202, 249, 0.1)',
-                       color: 'rgba(255, 255, 255, 0.3)'
-                     }
-                   }}
-                 >
-                   Request
-                 </Button>
-               </TableCell>
-             </TableRow>
-           ))}
-         </TableBody>
-       </Table>
-     </TableContainer>
-   </Box>
+return (
+  <Box>
+    <Paper sx={{ 
+      p: 4, 
+      mb: 4,
+      background: 'rgba(30, 30, 30, 0.6)',
+      backdropFilter: 'blur(12px)',
+      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+      '&:hover': {
+        transform: 'translateY(-5px)',
+        boxShadow: '0 8px 32px rgba(144, 202, 249, 0.2)'
+      }
+    }}>
+      <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add New Item</Typography>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <Autocomplete
+          freeSolo
+          options={templateItems}
+          getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
+          value={newItem}
+          onChange={(_, newValue) => {
+            if (newValue && typeof newValue === 'object') {
+              fetchTraitsForItem(newValue.id);
+              setNewItem({
+                ...newItem,
+                name: newValue.name,
+                type: newValue.type,
+                icon: newValue.icon || '',
+                dkpCost: newValue.dkpCost || 0,
+                trait: newValue.trait || ''
+              });
+            }
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Item Name"
+              sx={{
+                minWidth: 300,
+                '& .MuiOutlinedInput-root': {
+                  background: 'rgba(30, 30, 30, 0.4)',
+                  backdropFilter: 'blur(12px)'
+                }
+              }}
+            />
+          )}
+          renderOption={(props, option, state) => {
+            const { key, ...otherProps } = props;
+            return (
+              <ListItem 
+                key={key} 
+                {...otherProps}
+              >
+                <ListItemAvatar>
+                  <Avatar
+                    src={option.icon}
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: 'rgba(144, 202, 249, 0.1)',
+                      border: '1px solid rgba(144, 202, 249, 0.2)'
+                    }}
+                  >
+                    {!option.icon && option.name?.[0]}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText 
+                  primary={option.name} 
+                  secondary={option.type}
+                />
+              </ListItem>
+            );
+          }}
+        />
+        <TextField
+          label="DKP Cost"
+          type="number"
+          value={newItem.dkpCost}
+          onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              background: 'rgba(30, 30, 30, 0.4)',
+              backdropFilter: 'blur(12px)'
+            }
+          }}
+        />
+        <TextField
+          label="Quantity"
+          type="number"
+          value={newItem.quantity}
+          onChange={(e) => setNewItem({ ...newItem, quantity: Math.max(1, Number(e.target.value)) })}
+          InputProps={{ inputProps: { min: 1 } }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              background: 'rgba(30, 30, 30, 0.4)',
+              backdropFilter: 'blur(12px)'
+            }
+          }}
+        />
+        <Autocomplete
+          options={availableTraits}
+          value={newItem.trait}
+          onChange={(_, newValue) => setNewItem({ ...newItem, trait: newValue })}
+          disabled={!newItem.name}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={newItem.name ? "Select Trait" : "Select an item first"}
+              sx={{
+                minWidth: 300,
+                '& .MuiOutlinedInput-root': {
+                  background: 'rgba(30, 30, 30, 0.4)',
+                  backdropFilter: 'blur(12px)'
+                }
+              }}
+            />
+          )}
+        />
+        <Button 
+          variant="contained" 
+          onClick={handleAddItem}
+          disabled={!newItem.name || !newItem.trait}
+          sx={{
+            background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+            backdropFilter: 'blur(12px)',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+            }
+          }}
+        >
+          Add Item
+        </Button>
+      </Box>
+    </Paper>
+ 
+    <TableContainer component={Paper} sx={{
+      background: 'rgba(30, 30, 30, 0.6)',
+      backdropFilter: 'blur(12px)'
+    }}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Item</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>DKP Cost</TableCell>
+            <TableCell>In Storage</TableCell>
+            <TableCell>Quantity</TableCell>
+            <TableCell>Actions</TableCell>
+            <TableCell>Request</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {addedItems.map((item) => (
+            <TableRow key={item.id} sx={{
+              '&:hover': {
+                backgroundColor: 'rgba(144, 202, 249, 0.1)'
+              }
+            }}>
+              <TableCell>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 2
+                }}>
+                  <Avatar src={item.icon} sx={{ width: 40, height: 40 }}>
+                    {!item.icon && item.name[0]}
+                  </Avatar>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Typography>{item.name}</Typography>
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        color: '#90caf9',
+                        fontSize: '0.75rem',
+                        fontWeight: 500
+                      }}
+                    >
+                      {item.trait}
+                    </Typography>
+                  </Box>
+                </Box>
+              </TableCell>
+              <TableCell>{item.type}</TableCell>
+              <TableCell>
+                <TextField
+                  type="number"
+                  value={item.dkpCost}
+                  onChange={(e) => handleUpdate(item.id, 'dkpCost', Number(e.target.value))}
+                  sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
+                />
+              </TableCell>
+              <TableCell>
+                <Checkbox
+                  checked={item.inStorage}
+                  onChange={(e) => handleUpdate(item.id, 'inStorage', e.target.checked)}
+                />
+              </TableCell>
+              <TableCell>
+                <TextField
+                  type="number"
+                  value={item.quantity}
+                  onChange={(e) => handleUpdate(item.id, 'quantity', Number(e.target.value))}
+                  sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
+                />
+              </TableCell>
+              <TableCell>
+                <IconButton 
+                  onClick={() => handleDelete(item.id)}
+                  sx={{ 
+                    '&:hover': { 
+                      color: '#ff4444',
+                      transform: 'scale(1.1)'
+                    }
+                  }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </TableCell>
+              <TableCell>
+                <Button 
+                  variant="contained"
+                  disabled={!item.inStorage || item.quantity === 0}
+                  onClick={() => handleRequestItem(item)}
+                  sx={{
+                    background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+                    backdropFilter: 'blur(12px)',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+                    },
+                    '&:disabled': {
+                      background: 'rgba(144, 202, 249, 0.1)',
+                      color: 'rgba(255, 255, 255, 0.3)'
+                    }
+                  }}
+                >
+                  Request
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  </Box>
  );
 };
 

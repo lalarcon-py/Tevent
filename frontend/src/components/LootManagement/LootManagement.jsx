@@ -1,9 +1,8 @@
-// components/LootManagement/LootManagement.jsx
-import { useState } from 'react';
-import { Tabs, Tab, Box } from '@mui/material';
-import AdminLootPanel from './AdminLootPanel';
-import WaitListTab from './WaitListTab';
-import AttendanceManagement from './AttendanceManagement';
+import { useState, lazy, Suspense } from 'react';
+import { Tabs, Tab, Box, CircularProgress } from '@mui/material';
+
+const AdminLootPanel = lazy(() => import('./AdminLootPanel'));
+const WaitListTab = lazy(() => import('./WaitListTab'));
 
 const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
@@ -25,18 +24,12 @@ const LootManagement = () => {
       >
         <Tab label="Loot Management" />
         <Tab label="Wait List" />
-        <Tab label="Attendance" />
       </Tabs>
 
-      <Box hidden={currentTab !== 0}>
-        <AdminLootPanel />
-      </Box>
-      <Box hidden={currentTab !== 1}>
-        <WaitListTab />
-      </Box>
-      <Box hidden={currentTab !== 2}>
-        <AttendanceManagement />
-      </Box>
+      <Suspense fallback={<CircularProgress />}>
+        {currentTab === 0 && <AdminLootPanel />}
+        {currentTab === 1 && <WaitListTab />}
+      </Suspense>
     </Box>
   );
 };

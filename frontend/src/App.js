@@ -26,6 +26,7 @@ import { AuthProvider } from './contexts/AuthContext';
 
 
 
+
 function App() {
   useEffect(() => {
     const handleMouseMove = (e) => {

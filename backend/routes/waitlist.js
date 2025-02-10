@@ -9,12 +9,17 @@ router.get('/', async (req, res) => {
     const waitListItems = await WaitList.findAll({
       include: [
         {
-          model: Item,
-          attributes: ['name', 'type', 'icon', 'dkpCost']
+          model: User,
+          attributes: ['username', 'avatar_url']
         },
         {
-          model: Player,
-          attributes: ['name', 'dkp', 'attendanceRate']
+          model: GuildStorageItem,
+          as: 'StorageItem',
+          include: [{
+            model: Item,
+            attributes: ['name', 'type', 'icon']
+          }],
+          attributes: ['trait', 'dkp_cost']
         }
       ],
       order: [['createdAt', 'DESC']]

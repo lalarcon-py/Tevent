@@ -28,16 +28,18 @@ export const LootProvider = ({ children }) => {
     };
   }, [isAuthenticated]);
 
-  const requestItem = async (itemId) => {
+  const requestItem = async (storageItemId) => {
     try {
-      const response = await axiosInstance.post('/api/loot/request', { itemId });
+      const response = await axiosInstance.post('/api/loot/request', {
+        storage_item_id: storageItemId
+      });
       await loadRequests();
       return response.data;
     } catch (error) {
-      console.error('Request failed:', error);
+      console.error('Failed to request item:', error);
       throw error;
     }
-  };
+   };
 
   const loadItems = async () => {
     try {
@@ -49,15 +51,12 @@ export const LootProvider = ({ children }) => {
   };
 
   const loadRequests = async () => {
-    if (loading) return;
     try {
-      setLoading(true);
       const response = await axiosInstance.get('/api/loot/waitlist');
       setRequests(response.data);
     } catch (error) {
       console.error('Failed to load requests:', error);
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
