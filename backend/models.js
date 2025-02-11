@@ -315,7 +315,84 @@ const GuildStorageItem = sequelize.define('GuildStorageItem', {
     timestamps: true
 });
 
+const RoleChangeLog = sequelize.define('RoleChangeLog', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    member_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    old_role: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    new_role: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    changed_by: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    changed_at: {
+        type: DataTypes.DATE,
+        allowNull: false
+    }
+}, {
+    tableName: 'role_change_logs',
+    underscored: true,
+    timestamps: true
+});
+
+// Guild Master Transfer Schema
+const GuildMasterTransfer = sequelize.define('GuildMasterTransfer', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    old_gm_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    new_gm_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    transferred_at: {
+        type: DataTypes.DATE,
+        allowNull: false
+    }
+}, {
+    tableName: 'guild_master_transfers',
+    underscored: true,
+    timestamps: true
+});
+
 // Associations
+RoleChangeLog.belongsTo(User, { foreignKey: 'member_id', as: 'member' });
+RoleChangeLog.belongsTo(User, { foreignKey: 'changed_by', as: 'changer' });
+GuildMasterTransfer.belongsTo(User, { foreignKey: 'old_gm_id', as: 'oldGuildMaster' });
+GuildMasterTransfer.belongsTo(User, { foreignKey: 'new_gm_id', as: 'newGuildMaster' });
 User.hasMany(DKPTransaction);
 LootRequest.belongsTo(User);
 Team.belongsTo(Event, { foreignKey: 'event_id' });
@@ -366,5 +443,7 @@ module.exports = {
    Team,
    TeamMember,
    TeamPreset,
-   GuildStorageItem
+   GuildStorageItem,
+   RoleChangeLog,
+   GuildMasterTransfer
 };

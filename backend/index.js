@@ -244,6 +244,112 @@ app.put('/api/members/:id', async (req, res) => {
   }
 });
 
+app.put('/api/members/:id/update-role', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { role, username } = req.body;
+
+    if (!id) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Member ID is required' });
+    }
+
+    // Verify current user is Guild Master or Guild Advisor
+    const currentUser = await db.User.findByPk(req.user.id);
+    if (!['Guild Master', 'Guild Advisor'].includes(currentUser.role)) {
+      await t.rollback();
+      return res.status(403).json({ error: 'Unauthorized: Only Guild Master or Guild Advisor can update members' });
+    }
+
+    // Check if target role is Guild Master and if one already exists
+    if (role === 'Guild Master') {
+      const existingGM = await db.User.findOne({
+        where: { role: 'Guild Master' }
+      });
+      if (existingGM && existingGM.id !== id) {
+        await t.rollback();
+        return res.status(400).json({ error: 'There can only be one Guild Master' });
+      }
+    }
+
+    // Update the user
+    await db.User.update(
+      { 
+        role,
+        username,
+        updated_at: new Date()
+      },
+      { 
+        where: { id },
+        transaction: t
+      }
+    );
+
+    await t.commit();
+
+    // Fetch and return the updated user
+    const updatedUser = await db.User.findByPk(id);
+    res.json(updatedUser);
+
+  } catch (error) {
+    console.error('Update role error:', error);
+    if (!t.finished) await t.rollback();
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/members/transfer-guildmaster', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { memberId, username } = req.body;
+
+    if (!memberId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Member ID is required' });
+    }
+
+    // Verify current user is Guild Master
+    const currentUser = await db.User.findByPk(req.user.id);
+    if (currentUser.role !== 'Guild Master') {
+      await t.rollback();
+      return res.status(403).json({ error: 'Only Guild Master can transfer role' });
+    }
+
+    // Demote current Guild Master
+    await db.User.update(
+      { role: 'Guild Member' },
+      { 
+        where: { role: 'Guild Master' },
+        transaction: t 
+      }
+    );
+
+    // Promote new Guild Master and update username if provided
+    await db.User.update(
+      { 
+        role: 'Guild Master',
+        ...(username && { username }),
+        updated_at: new Date()
+      },
+      { 
+        where: { id: memberId },
+        transaction: t 
+      }
+    );
+
+    await t.commit();
+
+    const updatedUser = await db.User.findByPk(memberId);
+    res.json(updatedUser);
+
+  } catch (error) {
+    console.error('Guild Master transfer error:', error);
+    if (!t.finished) await t.rollback();
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // UUID validation helper
 function validateUUID(uuid) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);

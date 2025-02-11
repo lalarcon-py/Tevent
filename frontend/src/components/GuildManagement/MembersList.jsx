@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import StarIcon from '@mui/icons-material/Star';
 
 // Weapon Logic (Items Icons, CP, Etc..)
 const WEAPON_SPECS = {
@@ -39,6 +40,13 @@ const WEAPON_SPECS = {
   'Spear|Bow': 'Impaler'
 };
 
+const GUILD_ROLES = {
+  'Guild Master': 4,
+  'Guild Advisor': 3,
+  'Guild Guardian': 2,
+  'Guild Member': 1
+};
+
 const getWeaponSpec = (primary, secondary) => {
   const combo1 = `${primary}|${secondary}`;
   const combo2 = `${secondary}|${primary}`;
@@ -49,6 +57,172 @@ const getWeaponIcon = (weaponName) => {
   if (!weaponName) return null;
   const formattedName = weaponName.replace(/\s+/g, ' ').trim();
   return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
+};
+
+const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
+  const [selectedRole, setSelectedRole] = useState(member.role);
+  const [confirmTransfer, setConfirmTransfer] = useState(false);
+  const [username, setUsername] = useState(member.username);
+  const [error, setError] = useState(null);
+
+  const handleRoleChange = async (newRole) => {
+    setError(null);
+
+    if (newRole === 'Guild Master') {
+      setConfirmTransfer(true);
+      return;
+    }
+
+    if (newRole === 'Guild Guardian') {
+      const guardianCount = await fetch('http://localhost:5000/api/members/count-guardians', {
+        credentials: 'include'
+      }).then(res => res.json());
+      
+      if (guardianCount >= 5 && member.role !== 'Guild Guardian') {
+        setError('Maximum of 5 Guild Guardians allowed');
+        return;
+      }
+    }
+
+    setSelectedRole(newRole);
+  };
+
+  const getAvailableRoles = () => {
+    const currentUserRoleLevel = GUILD_ROLES[currentUserRole];
+    return Object.keys(GUILD_ROLES).filter(role => {
+      const roleLevel = GUILD_ROLES[role];
+      if (currentUserRole === 'Guild Master') {
+        return role !== 'Guild Master' || member.role === 'Guild Master';
+      }
+      if (currentUserRole === 'Guild Advisor') {
+        return roleLevel < GUILD_ROLES['Guild Advisor'];
+      }
+      return false;
+    });
+  };
+
+  return (
+    <>
+      <Dialog 
+        open={!confirmTransfer} 
+        onClose={onClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+          Manage {member.username}'s Profile
+        </DialogTitle>
+        <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
+          {error && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {error}
+            </Typography>
+          )}
+          {(currentUserRole === 'Guild Master' || currentUserRole === 'Guild Advisor') && (
+            <Box sx={{ mb: 2 }}>
+              <Typography color="white" sx={{ mb: 1 }}>Username</Typography>
+              <TextField
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                fullWidth
+                sx={{ 
+                  bgcolor: '#2d2d2d',
+                  input: { color: 'white' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                    '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                    '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+                  }
+                }}
+              />
+            </Box>
+          )}
+          <Box sx={{ mb: 2 }}>
+            <Typography color="white" sx={{ mb: 1 }}>Role</Typography>
+            <Select
+              value={selectedRole}
+              onChange={(e) => handleRoleChange(e.target.value)}
+              fullWidth
+              sx={{ 
+                bgcolor: '#2d2d2d',
+                color: 'white',
+                '& .MuiSelect-icon': { color: 'white' }
+              }}
+            >
+              {getAvailableRoles().map((role) => (
+                <MenuItem key={role} value={role}>{role}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+          <Button 
+            variant="contained"
+            onClick={() => onSave({ 
+              ...member, 
+              role: selectedRole,
+              username: username 
+            })}
+            sx={{ 
+              bgcolor: '#90caf9',
+              '&:hover': { bgcolor: '#64b5f6' }
+            }}
+          >
+            Save Changes
+          </Button>
+        </DialogContent>
+      </Dialog>
+  
+      <Dialog
+        open={confirmTransfer}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ 
+          bgcolor: '#1a1a1a', 
+          color: 'red',
+          fontSize: '24px',
+          textAlign: 'center'
+        }}>
+          ⚠️ WARNING: Guild Master Transfer ⚠️
+        </DialogTitle>
+        <DialogContent sx={{ 
+          bgcolor: '#1e1e1e', 
+          pt: 2,
+          textAlign: 'center' 
+        }}>
+          <Typography color="white" variant="h6" sx={{ mb: 3 }}>
+            You are about to transfer Guild Master status to:
+          </Typography>
+          <Typography color="#90caf9" variant="h5" sx={{ mb: 4 }}>
+            {member.username}
+          </Typography>
+          <Typography color="white" sx={{ mb: 4 }}>
+            This action is irreversible. You will lose all Guild Master privileges.
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+            <Button 
+              variant="contained"
+              color="error"
+              onClick={() => setConfirmTransfer(false)}
+              sx={{ minWidth: 120 }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="contained"
+              color="warning"
+              onClick={() => {
+                onSave({ ...member, role: 'Guild Master' });
+                setConfirmTransfer(false);
+              }}
+              sx={{ minWidth: 120 }}
+            >
+              Confirm Transfer
+            </Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 };
 
 // Edit button functions
@@ -62,7 +236,7 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
       spec: 'DPS'
     }],
     weapon_spec: member.weapon_spec,
-    combat_power: member.combat_power || '' // Add this
+    combat_power: member.combat_power || ''
   } : null);
 
   const [showCombatPower, setShowCombatPower] = useState(false);
@@ -124,6 +298,8 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
     updatedBuilds[buildIndex].spec = value;
     setEditedMember({ ...editedMember, builds: updatedBuilds });
   };
+
+  
 // End of edit button functions
 
   return (
@@ -266,6 +442,8 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
 
 
 const MembersList = ({ searchTerm }) => {
+  const [roleManagementMember, setRoleManagementMember] = useState(null);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
   const [members, setMembers] = useState([]);
   const [editMember, setEditMember] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -280,6 +458,62 @@ const MembersList = ({ searchTerm }) => {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+  };
+
+  useEffect(() => {
+    const fetchCurrentUserRole = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/auth/status', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        setCurrentUserRole(data.role);
+      } catch (error) {
+        console.error('Error fetching current user role:', error);
+      }
+    };
+    fetchCurrentUserRole();
+  }, []);
+  
+  const handleRoleSave = async (updatedMember) => {
+    try {
+      const endpoint = updatedMember.role === 'Guild Master' 
+        ? 'http://localhost:5000/api/members/transfer-guildmaster'
+        : `http://localhost:5000/api/members/${updatedMember.id}/update-role`;
+  
+      console.log('Sending update:', {
+        memberId: updatedMember.id,
+        role: updatedMember.role,
+        username: updatedMember.username
+      });
+  
+      const response = await fetch(endpoint, {
+        method: updatedMember.role === 'Guild Master' ? 'POST' : 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          memberId: updatedMember.id,  // Explicitly include the ID
+          role: updatedMember.role,
+          username: updatedMember.username
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update member');
+      }
+  
+      await fetchMembers();
+      setRoleManagementMember(null);
+  
+      if (updatedMember.role === 'Guild Master') {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error updating member:', error);
+    }
   };
   
   const getSortedMembers = (membersToSort) => {
@@ -319,55 +553,54 @@ const MembersList = ({ searchTerm }) => {
     console.log('Current editMember state:', editMember);
   }, [editMember]);
 
-  useEffect(() => {
-    const fetchMembers = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/members', {
-          credentials: 'include'
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch members');
-        }
-  
-        const data = await response.json();
-        console.log('Raw data from API:', data);
-  
-        const processedData = data.map(member => {
-          try {
-            // Handle the nested array structure directly
-            const builds = Array.isArray(member.builds[0]) ? 
-              member.builds[0] : member.builds;
-  
-            return {
-              ...member,
-              builds: builds,
-              weapon_spec: member.weapon_spec || (builds[0]?.weapon_spec || '')
-            };
-          } catch (error) {
-            console.error('Error processing member:', error);
-            const defaultBuild = {
-              primary: 'Greatsword',
-              secondary: 'Crossbow',
-              spec: 'DPS'
-            };
-            return {
-              ...member,
-              builds: [defaultBuild],
-              weapon_spec: getWeaponSpec(defaultBuild.primary, defaultBuild.secondary)
-            };
-          }
-        });
-  
-        console.log('Processed data:', processedData);
-        setMembers(processedData);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching members:', error);
-        setLoading(false);
+  const fetchMembers = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/members', {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch members');
       }
-    };
-  
+
+      const data = await response.json();
+      console.log('Raw data from API:', data);
+
+      const processedData = data.map(member => {
+        try {
+          const builds = Array.isArray(member.builds[0]) ? 
+            member.builds[0] : member.builds;
+
+          return {
+            ...member,
+            builds: builds,
+            weapon_spec: member.weapon_spec || (builds[0]?.weapon_spec || '')
+          };
+        } catch (error) {
+          console.error('Error processing member:', error);
+          const defaultBuild = {
+            primary: 'Greatsword',
+            secondary: 'Crossbow',
+            spec: 'DPS'
+          };
+          return {
+            ...member,
+            builds: [defaultBuild],
+            weapon_spec: getWeaponSpec(defaultBuild.primary, defaultBuild.secondary)
+          };
+        }
+      });
+
+      console.log('Processed data:', processedData);
+      setMembers(processedData);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchMembers();
   }, []);
 
@@ -461,20 +694,17 @@ const MembersList = ({ searchTerm }) => {
     <>
       <TableContainer component={Paper} sx={{ bgcolor: '#1e1e1e' }}>
         <Table>
-        <TableHead>
-          <TableRow sx={{ bgcolor: '#1a1a1a' }}>
-            {headers.map((header, index) => {
-              // Use header.label instead of header directly
-              const key = header.key;
-              return (
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#1a1a1a' }}>
+              {headers.map((header, index) => (
                 <TableCell 
                   key={index}
-                  onClick={() => header.key && handleSort(header.key)} // Only allow sorting if key exists
+                  onClick={() => header.key && handleSort(header.key)}
                   sx={{ 
                     color: 'white', 
                     fontWeight: 'bold',
                     borderBottom: '2px solid #90caf9',
-                    cursor: header.key ? 'pointer' : 'default', // Only show pointer cursor if sortable
+                    cursor: header.key ? 'pointer' : 'default',
                     userSelect: 'none',
                     '&:hover': {
                       backgroundColor: header.key ? 'rgba(144, 202, 249, 0.1)' : 'inherit',
@@ -490,10 +720,9 @@ const MembersList = ({ searchTerm }) => {
                     )}
                   </Box>
                 </TableCell>
-              );
-            })}
-          </TableRow>
-        </TableHead>
+              ))}
+            </TableRow>
+          </TableHead>
           <TableBody>
             {sortedMembers.map((member) => (
               <TableRow 
@@ -602,22 +831,43 @@ const MembersList = ({ searchTerm }) => {
                   ))}
                 </TableCell>
                 <TableCell>
-                  <IconButton 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      console.log('Edit button clicked for member:', member);
-                      setEditMember(member);
-                    }}
-                    sx={{ 
-                      color: '#90caf9',
-                      '&:hover': { 
-                        bgcolor: 'rgba(144, 202, 249, 0.2)',
-                        transform: 'scale(1.1)'
-                      }
-                    }}
-                  >
-                    <EditIcon />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <IconButton 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditMember(member);
+                      }}
+                      sx={{ 
+                        color: '#90caf9',
+                        '&:hover': { 
+                          bgcolor: 'rgba(144, 202, 249, 0.2)',
+                          transform: 'scale(1.1)'
+                        }
+                      }}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    {(currentUserRole === 'Guild Master' || 
+                      (currentUserRole === 'Guild Advisor' && 
+                       member.role !== 'Guild Master' && 
+                       member.role !== 'Guild Advisor')) && (
+                      <IconButton
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRoleManagementMember(member);
+                        }}
+                        sx={{ 
+                          color: '#ffd700',
+                          '&:hover': { 
+                            bgcolor: 'rgba(255, 215, 0, 0.2)',
+                            transform: 'scale(1.1)'
+                          }
+                        }}
+                      >
+                        <StarIcon />
+                      </IconButton>
+                    )}
+                  </Box>
                 </TableCell>
               </TableRow>
             ))}
@@ -638,8 +888,16 @@ const MembersList = ({ searchTerm }) => {
           }}
         />
       )}
+
+      {roleManagementMember && (
+        <RoleManagementDialog
+          member={roleManagementMember}
+          currentUserRole={currentUserRole}
+          onClose={() => setRoleManagementMember(null)}
+          onSave={handleRoleSave}
+        />
+      )}
     </>
   );
 }
-
 export default MembersList;
