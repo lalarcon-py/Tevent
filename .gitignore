@@ -66,3 +66,4 @@ docker-compose.override.yml
 *.bak
 *.patch
 *.diff
+backend/.env.production
