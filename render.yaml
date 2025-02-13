@@ -3,7 +3,7 @@ services:
     name: guild-manager
     runtime: node
     plan: free
-    buildCommand: npm install && cd frontend && npm install && npm run build && cd .. && npm install
+    buildCommand: npm install dotenv && npm install && cd frontend && npm install && npm run build && cd .. && npm install
     startCommand: node backend/index.js
     envVars:
       - key: NODE_ENV
