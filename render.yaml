@@ -3,35 +3,10 @@ services:
     name: guild-manager
     runtime: node
     plan: free
-    buildCommand: npm install dotenv && npm install && cd frontend && npm install && npm run build && cd .. && npm install
+    buildCommand: npm install && cd frontend && npm run build
     startCommand: node backend/index.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
-      - key: DB_HOST
-        fromDatabase:
-          name: guild-db
-          property: host
-      - key: DB_NAME
-        fromDatabase:
-          name: guild-db
-          property: database
-      - key: DB_USER
-        fromDatabase:
-          name: guild-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: guild-db
-          property: password
-      - key: DB_PORT
-        fromDatabase:
-          name: guild-db
-          property: port
-
-databases:
-  - name: guild-db
-    plan: free
-    ipAllowList: []
