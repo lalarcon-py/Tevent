@@ -20,6 +20,10 @@ const guildStorageItemsRouter = require('./routes/guildStorageItems');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
 // Database connection check
 sequelize.authenticate()
   .then(async () => {

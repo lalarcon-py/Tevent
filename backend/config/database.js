@@ -1,4 +1,3 @@
-// config/database.js
 const { Sequelize } = require('sequelize');
 
 const sequelize = new Sequelize(
@@ -8,7 +7,14 @@ const sequelize = new Sequelize(
   {
     host: process.env.DB_HOST,
     dialect: 'postgres',
-    logging: console.log,
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    ssl: process.env.NODE_ENV === 'production',
+    dialectOptions: {
+      ssl: process.env.NODE_ENV === 'production' ? {
+        require: true,
+        rejectUnauthorized: false
+      } : false
+    },
     define: {
       timestamps: false,
       underscored: true,
