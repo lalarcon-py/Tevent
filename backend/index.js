@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
@@ -48,18 +47,35 @@ sequelize.authenticate()
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3002',
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://tevent-guild-manager.onrender.com' 
+    : 'http://localhost:3002',
   credentials: true
 }));
+
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  // Serve static files from the React frontend app
+  app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+  // Handle React routing, return all requests to React app
+  app.get('*', function(req, res) {
+    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  });
+}
 
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: true, // Required for Render
   cookie: {
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    domain: process.env.NODE_ENV === 'production' 
+      ? '.onrender.com'  // Adjust if needed
+      : undefined
   }
 }));
 
@@ -67,6 +83,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.use(express.json());
+app.set('trust proxy', 1);
 
 app.use('/api/guild-storage-items', guildStorageItemsRouter);
 app.use('/api/items',authMiddleware, itemsRouter);
