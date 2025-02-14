@@ -34,10 +34,10 @@ module.exports = {
           allowNull: true
         },
         builds: {
-          type: Sequelize.ARRAY(Sequelize.JSONB),
-          defaultValue: [],
-          allowNull: false
-        },
+            type: Sequelize.JSONB,
+            defaultValue: Sequelize.literal('\'[]\'::jsonb'),
+            allowNull: false
+          },
         weapon_spec: {
           type: Sequelize.STRING(50),
           allowNull: true
