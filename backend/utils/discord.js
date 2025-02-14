@@ -15,4 +15,4 @@ module.exports = {
       console.error('Discord webhook failed:', error);
     }
   }
-};
+}; 
