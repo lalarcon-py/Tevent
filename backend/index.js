@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
-const sequelize = require('./config/database');
+const { sequelize } = require('./config/database');
 const itemsRouter = require('./routes/items');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
@@ -13,6 +13,7 @@ const eventsRouter = require('./routes/events');
 const teamsRouter = require('./routes/teams');
 const teamPresetsRouter = require('./routes/teamPresets');
 const dashboardRouter = require('./routes/dashboardRoutes');
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;

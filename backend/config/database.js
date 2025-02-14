@@ -11,15 +11,11 @@ const commonConfig = {
   }
 };
 
-const config = {
-  development: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
-    ...commonConfig
-  },
-  production: {
+let sequelize;
+const env = process.env.NODE_ENV || 'development';
+
+if (env === 'production') {
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
     ...commonConfig,
     dialectOptions: {
       ssl: {
@@ -27,20 +23,16 @@ const config = {
         rejectUnauthorized: false
       }
     }
-  }
-};
-
-let sequelize;
-const env = process.env.NODE_ENV || 'development';
-
-if (env === 'production') {
-  sequelize = new Sequelize(process.env.DATABASE_URL, config.production);
+  });
 } else {
   sequelize = new Sequelize(
-    config.development.database,
-    config.development.username,
-    config.development.password,
-    config.development
+    process.env.DB_NAME,
+    process.env.DB_USER,
+    process.env.DB_PASSWORD,
+    {
+      host: process.env.DB_HOST,
+      ...commonConfig
+    }
   );
 }
 
