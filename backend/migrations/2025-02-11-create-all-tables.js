@@ -268,9 +268,10 @@ module.exports = {
       });
 
       // Items table
-    await queryInterface.createTable('items', {
+      await queryInterface.createTable('items', {
         id: {
           type: Sequelize.UUID,
+          defaultValue: Sequelize.literal('gen_random_uuid()'), // Add defaultValue
           primaryKey: true,
           allowNull: false
         },
@@ -307,6 +308,17 @@ module.exports = {
         },
         traits: {
           type: Sequelize.ARRAY(Sequelize.STRING),
+          allowNull: true
+        },
+        // Add these timestamp fields
+        created_at: {
+          type: Sequelize.DATE,
+          defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+          allowNull: true
+        },
+        updated_at: {
+          type: Sequelize.DATE,
+          defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
           allowNull: true
         }
       });
