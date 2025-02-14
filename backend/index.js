@@ -41,7 +41,9 @@ sequelize.authenticate()
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3002',
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://tevent-guild-manager.onrender.com' 
+    : 'http://localhost:3002',
   credentials: true
 }));
 
@@ -49,10 +51,14 @@ app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: true, // Required for Render
   cookie: {
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    domain: process.env.NODE_ENV === 'production' 
+      ? '.onrender.com'  
+      : undefined
   }
 }));
 
@@ -238,6 +244,17 @@ app.put('/api/members/:id', async (req, res) => {
     });
   }
 });
+
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  app.use(express.static(path.join(__dirname, '../frontend/build')));
+  
+
+  app.get('*', function(req, res) {
+    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  });
+}
+
 
 // UUID validation helper
 function validateUUID(uuid) {

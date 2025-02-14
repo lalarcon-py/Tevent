@@ -1,20 +1,21 @@
 import { useState } from 'react';
 import { Button, Box } from '@mui/material';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const DiscordLogin = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     try {
       setLoading(true);
-      // First check if the backend is accessible
-      const response = await fetch('http://localhost:5000', {
+      const response = await fetch(`${API_URL}`, {
         method: 'GET',
         credentials: 'include'
       });
       
       if (response.ok) {
-        window.location.href = 'http://localhost:5000/auth/discord';
+        window.location.href = `${API_URL}/auth/discord`;
       } else {
         console.error('Backend server not responding');
         setLoading(false);

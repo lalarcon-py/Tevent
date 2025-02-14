@@ -17,6 +17,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { format, isSameDay, startOfDay } from 'date-fns';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const EventListView = ({ events, onEventSelect, onEventUpdate }) => {
   const [expandedDay, setExpandedDay] = useState(null);
 
@@ -32,7 +34,7 @@ const EventListView = ({ events, onEventSelect, onEventUpdate }) => {
 
   const handleDelete = async (eventId) => {
     try {
-      await fetch(`http://localhost:5000/api/events/${eventId}`, {
+      await fetch(`${API_URL}/api/events/${eventId}`, {
         method: 'DELETE',
         credentials: 'include'
       });

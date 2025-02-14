@@ -7,6 +7,8 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 // Weapon Logic (Items Icons, CP, Etc..)
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
@@ -322,7 +324,7 @@ const MembersList = ({ searchTerm }) => {
   useEffect(() => {
     const fetchMembers = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/members', {
+        const response = await fetch(`${API_URL}/api/members`, {
           credentials: 'include'
         });
         
@@ -392,7 +394,7 @@ const MembersList = ({ searchTerm }) => {
   
       console.log('Sending update data:', JSON.stringify(memberToUpdate, null, 2));
     
-      const response = await fetch(`http://localhost:5000/api/members/${memberToUpdate.id}`, {
+      const response = await fetch(`${API_URL}/api/members/${memberToUpdate.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

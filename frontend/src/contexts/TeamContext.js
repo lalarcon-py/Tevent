@@ -1,6 +1,7 @@
 // frontend/src/contexts/TeamContext.js
 import React, { createContext, useContext, useState } from 'react';
 
+const API_URL = process.env.REACT_APP_API_URL;
 const TeamContext = createContext();
 
 export const TeamProvider = ({ children }) => {
@@ -11,7 +12,7 @@ export const TeamProvider = ({ children }) => {
   const fetchTeams = async (eventId) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/events/${eventId}/teams`, {
+      const response = await fetch(`${API_URL}/api/events/${eventId}/teams`, {
         credentials: 'include'
       });
       const data = await response.json();

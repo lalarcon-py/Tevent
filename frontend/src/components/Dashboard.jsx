@@ -11,6 +11,8 @@ import CombatStats from './DashboardComponents/CombatStats';
 import AttendanceStats from './DashboardComponents/AttendanceStats';
 import WeaponStats from './DashboardComponents/WeaponStats';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const Dashboard = () => {
   const [guildStats, setGuildStats] = useState({
     memberStats: null,
@@ -23,10 +25,10 @@ const Dashboard = () => {
     const fetchGuildStats = async () => {
       try {
         const [memberResponse, combatResponse, attendanceResponse, weaponResponse] = await Promise.all([
-          fetch('http://localhost:5000/api/stats/members', { credentials: 'include' }),
-          fetch('http://localhost:5000/api/stats/combat', { credentials: 'include' }),
-          fetch('http://localhost:5000/api/stats/attendance', { credentials: 'include' }),
-          fetch('http://localhost:5000/api/stats/weapons', { credentials: 'include' })
+          fetch(`${API_URL}/api/stats/members`, { credentials: 'include' }),
+          fetch(`${API_URL}/api/stats/combat`, { credentials: 'include' }),
+          fetch(`${API_URL}/api/stats/attendance`, { credentials: 'include' }),
+          fetch(`${API_URL}/api/stats/weapons`, { credentials: 'include' })
         ]);
 
         const [memberStats, combatStats, attendanceStats, weaponStats] = await Promise.all([

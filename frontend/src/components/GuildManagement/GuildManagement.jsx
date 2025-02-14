@@ -6,6 +6,8 @@ import InviteLinkButton from '../InviteLinkButton';
 import GearCheckButton from './GearCheckButton';
 import DiscordLogin from '../Auth/DiscordLogin';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const GuildManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [members, setMembers] = useState([]);
@@ -16,7 +18,7 @@ const GuildManagement = () => {
     // Check authentication status
     const checkAuth = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/status', {
+        const response = await fetch(`${API_URL}/api/auth/status`, {
           credentials: 'include'
         });
         if (response.ok) {
@@ -37,7 +39,7 @@ const GuildManagement = () => {
 
   const fetchMembers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/members', {
+      const response = await fetch(`${API_URL}/api/members`, {
         credentials: 'include'
       });
       if (response.ok) {

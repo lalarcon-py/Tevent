@@ -6,6 +6,8 @@ import CalendarView from './CalendarView';
 import EventForm from './EventForm';
 import EventDetails from './EventDetails';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const EventPlanner = () => {
   const [events, setEvents] = useState([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -17,7 +19,7 @@ const EventPlanner = () => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/status', {
+        const response = await fetch(`${API_URL}/api/auth/status`, {
           credentials: 'include'
         });
         if (response.ok) {
@@ -38,7 +40,7 @@ const EventPlanner = () => {
 
   const fetchEvents = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/events', {
+      const response = await fetch(`${API_URL}/api/events`, {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to fetch events');
@@ -59,7 +61,7 @@ const EventPlanner = () => {
       console.log('Creating event as user:', user);
       console.log('Attempting to create event with data:', eventData);
 
-      const response = await fetch('http://localhost:5000/api/events', {
+      const response = await fetch(`${API_URL}/api/events`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +122,7 @@ const EventPlanner = () => {
           </Typography>
           <Button 
             variant="contained" 
-            href="http://localhost:5000/auth/discord" 
+            href={`${API_URL}/auth/discord`}
             sx={{ mt: 2 }}
           >
             Login with Discord

@@ -17,6 +17,8 @@ import {
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const DraggableMember = ({ member, onRemove }) => {
   const [userData, setUserData] = useState(null);
   console.log('Raw member data:', member);
@@ -304,10 +306,10 @@ const TeamPlanner = () => {
     
       try {
         const [participantsResponse, teamsResponse] = await Promise.all([
-          fetch(`http://localhost:5000/api/events/${eventId}/participants`, {
+          fetch(`${API_URL}/api/events/${eventId}/participants`, {
             credentials: 'include'
           }),
-          fetch(`http://localhost:5000/api/teams/event/${eventId}`, {
+          fetch(`${API_URL}/api/teams/event/${eventId}`, {
             credentials: 'include'
           })
         ]);
@@ -345,7 +347,7 @@ const TeamPlanner = () => {
 
   const handleEditTeam = async (updatedTeam) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/teams/${updatedTeam.id}`, {
+      const response = await fetch(`${API_URL}/api/teams/${updatedTeam.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -363,7 +365,7 @@ const TeamPlanner = () => {
 
   const handleCreateTeam = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/teams', {
+      const response = await fetch(`${API_URL}/api/teams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -387,7 +389,7 @@ const TeamPlanner = () => {
         throw new Error('Invalid member data');
       }
   
-      const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members/${member.user_id}`, {
+      const response = await fetch(`${API_URL}/api/teams/${teamId}/members/${member.user_id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -434,7 +436,7 @@ const TeamPlanner = () => {
         User: member.User
       }))]);
   
-      const response = await fetch(`http://localhost:5000/api/teams/${teamId}`, {
+      const response = await fetch(`${API_URL}/api/teams/${teamId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -468,7 +470,7 @@ const TeamPlanner = () => {
       if (!member) return;
       if (sourceTeamId === teamId) return;
   
-      const response = await fetch(`http://localhost:5000/api/teams/${teamId}/members`, {
+      const response = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -531,7 +533,7 @@ const TeamPlanner = () => {
 
   const handleSavePreset = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/team-presets', {
+      const response = await fetch(`${API_URL}/api/team-presets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -552,7 +554,7 @@ const TeamPlanner = () => {
 
   const loadPresets = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/team-presets/event/${eventId}`, {
+      const response = await fetch(`${API_URL}/api/team-presets/event/${eventId}`, {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to load presets');
@@ -567,7 +569,7 @@ const TeamPlanner = () => {
     try {
       await Promise.all(
         teams.map(team => 
-          fetch(`http://localhost:5000/api/teams/${team.id}`, {
+          fetch(`${API_URL}/api/teams/${team.id}`, {
             method: 'DELETE',
             credentials: 'include'
           })
@@ -583,7 +585,7 @@ const TeamPlanner = () => {
     try {
       await cleanupExistingTeams();
   
-      const response = await fetch(`http://localhost:5000/api/team-presets/${presetId}`, {
+      const response = await fetch(`${API_URL}/api/team-presets/${presetId}`, {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to load preset');
@@ -602,7 +604,7 @@ const TeamPlanner = () => {
   
       const createdTeams = await Promise.all(
         data.teams_data.map(async (teamData) => {
-          const createTeamResponse = await fetch('http://localhost:5000/api/teams', {
+          const createTeamResponse = await fetch(`${API_URL}/api/teams`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -626,7 +628,7 @@ const TeamPlanner = () => {
                 );
   
                 if (!memberInOtherTeam) {
-                  await fetch(`http://localhost:5000/api/teams/${newTeam.id}/members`, {
+                  await fetch(`${API_URL}/api/teams/${newTeam.id}/members`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
@@ -699,7 +701,7 @@ const TeamPlanner = () => {
 
   const handleDeletePreset = async (preset) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/team-presets/${preset.id}`, {
+      const response = await fetch(`${API_URL}/api/team-presets/${preset.id}`, {
         method: 'DELETE',
         credentials: 'include'
       });

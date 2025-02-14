@@ -26,6 +26,7 @@ import { format } from 'date-fns';
 import EventForm from './EventForm';
 
 const PARTICIPANTS_PER_PAGE = 10;
+const API_URL = process.env.REACT_APP_API_URL;
 
 const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const navigate = useNavigate();
@@ -62,7 +63,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleSignUp = async (role) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/events/${event.id}/signup`, {
+      const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +85,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRoleChange = async (userId, newRole) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/events/${event.id}/signup`, {
+      const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +107,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRemoveParticipant = async (userId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/events/${event.id}/participants/${userId}`, {
+      const response = await fetch(`${API_URL}/api/events/${event.id}/participants/${userId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -318,7 +319,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           }}
           onSubmit={async (updatedData) => {
             try {
-              const response = await fetch(`http://localhost:5000/api/events/${event.id}`, {
+              const response = await fetch(`${API_URL}/api/events/${event.id}`, {
                 method: 'PUT',
                 headers: {
                   'Content-Type': 'application/json',
