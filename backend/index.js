@@ -99,32 +99,32 @@ app.use((req, res, next) => {
 
 // Passport Discord Strategy
 passport.use(new DiscordStrategy({
- clientID: process.env.DISCORD_CLIENT_ID,
- clientSecret: process.env.DISCORD_CLIENT_SECRET,
- callbackURL: process.env.DISCORD_REDIRECT_URI,
- scope: ['identify', 'guilds']
+  clientID: process.env.DISCORD_CLIENT_ID,
+  clientSecret: process.env.DISCORD_CLIENT_SECRET,
+  callbackURL: process.env.DISCORD_REDIRECT_URI,
+  scope: ['identify', 'guilds']
 }, async (accessToken, refreshToken, profile, done) => {
- try {
-   let user = await db.User.findOne({ where: { discord_id: profile.id } });
-   
-   if (!user) {
-     user = await db.User.create({
-       discord_id: profile.id,
-       username: profile.username,
-       role: (await db.User.count()) === 0 ? 'Guild Master' : 'Member',
-       status: 'Active',
-       avatar_url: profile.avatar 
-         ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
-         : null,
-       builds: [] // Explicitly set empty array
-     });
-   }
-   
-   done(null, user);
- } catch (error) {
-   console.error('Auth error:', error);
-   done(error, null);
- }
+  try {
+    let user = await db.User.findOne({ where: { discord_id: profile.id } });
+    
+    if (!user) {
+      user = await db.User.create({
+        discord_id: profile.id,
+        username: profile.username,
+        role: (await db.User.count()) === 0 ? 'Guild Master' : 'Member',
+        status: 'Active',
+        avatar_url: profile.avatar 
+          ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+          : null,
+        builds: [] // This will now be properly handled as JSONB
+      });
+    }
+    
+    done(null, user);
+  } catch (error) {
+    console.error('Auth error:', error);
+    done(error, null);
+  }
 }));
 
 passport.serializeUser((user, done) => done(null, user.id));

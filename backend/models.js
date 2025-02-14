@@ -53,20 +53,23 @@ const DKPTransaction = sequelize.define('DKPTransaction', {
 
 // User Schema
 const User = sequelize.define('User', {
-   id: { 
-       type: DataTypes.UUID,
-       defaultValue: DataTypes.UUIDV4,
-       primaryKey: true 
-   },
-   discord_id: { type: DataTypes.STRING },
-   username: { type: DataTypes.STRING },
-   role: { type: DataTypes.STRING },
-   status: { type: DataTypes.STRING },
-   avatar_url: { type: DataTypes.STRING },
-   builds: { type: DataTypes.JSONB }
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    discord_id: { type: DataTypes.STRING },
+    username: { type: DataTypes.STRING },
+    role: { type: DataTypes.STRING },
+    status: { type: DataTypes.STRING },
+    avatar_url: { type: DataTypes.STRING },
+    builds: { 
+        type: DataTypes.JSONB,
+        defaultValue: []  // Add this line
+    }
 }, {
-   tableName: 'users',
-   freezeTableName: true
+    tableName: 'users',
+    freezeTableName: true
 });
 
 // Event Schema
