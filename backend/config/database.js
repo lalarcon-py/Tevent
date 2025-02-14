@@ -20,7 +20,6 @@ const config = {
     ...commonConfig
   },
   production: {
-    use_env_variable: 'DATABASE_URL',
     ...commonConfig,
     dialectOptions: {
       ssl: {
@@ -31,4 +30,18 @@ const config = {
   }
 };
 
-module.exports = config;
+let sequelize;
+const env = process.env.NODE_ENV || 'development';
+
+if (env === 'production') {
+  sequelize = new Sequelize(process.env.DATABASE_URL, config.production);
+} else {
+  sequelize = new Sequelize(
+    config.development.database,
+    config.development.username,
+    config.development.password,
+    config.development
+  );
+}
+
+module.exports = { sequelize };
