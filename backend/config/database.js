@@ -8,16 +8,10 @@ const commonConfig = {
     timestamps: false,
     underscored: true,
     freezeTableName: true
-  },
-  pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
   }
 };
 
-module.exports = {
+const config = {
   development: {
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -26,7 +20,7 @@ module.exports = {
     ...commonConfig
   },
   production: {
-    url: process.env.DATABASE_URL,
+    use_env_variable: 'DATABASE_URL',
     ...commonConfig,
     dialectOptions: {
       ssl: {
@@ -34,16 +28,7 @@ module.exports = {
         rejectUnauthorized: false
       }
     }
-  },
-  // Keep your Sequelize instance export for your app to use
-  sequelize: new Sequelize(process.env.DATABASE_URL || `postgres://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`, {
-    ...commonConfig,
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
-    dialectOptions: {
-      ssl: process.env.NODE_ENV === 'production' ? {
-        require: true,
-        rejectUnauthorized: false
-      } : false
-    }
-  })
+  }
 };
+
+module.exports = config;
