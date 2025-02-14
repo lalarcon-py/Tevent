@@ -108,6 +108,7 @@ passport.use(new DiscordStrategy({
     let user = await db.User.findOne({ where: { discord_id: profile.id } });
     
     if (!user) {
+      const defaultBuilds = []; // Create as actual array
       user = await db.User.create({
         discord_id: profile.id,
         username: profile.username,
@@ -116,7 +117,10 @@ passport.use(new DiscordStrategy({
         avatar_url: profile.avatar 
           ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
           : null,
-        builds: [] // This will now be properly handled as JSONB
+        builds: defaultBuilds  // Pass the actual array
+      }, {
+        // Add this to ensure proper handling of JSONB
+        fields: ['discord_id', 'username', 'role', 'status', 'avatar_url', 'builds']
       });
     }
     
