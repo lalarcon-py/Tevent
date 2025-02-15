@@ -7,24 +7,24 @@ const DiscordLogin = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    console.log('Login attempt started');
+    console.log('API_URL:', API_URL);
+
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}`, {
-        method: 'GET',
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        window.location.href = `${API_URL}/auth/discord`;
-      } else {
-        console.error('Backend server not responding');
-        setLoading(false);
-      }
+      console.log('Redirecting to Discord auth at:', `${API_URL}/auth/discord`);
+      window.location.href = `${API_URL}/auth/discord`;
     } catch (error) {
-      console.error('Error connecting to backend:', error);
+      console.error('Login attempt failed with error:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       setLoading(false);
     }
   };
+
+  console.log('Component rendered with API_URL:', API_URL);
 
   return (
     <Box sx={{ 
