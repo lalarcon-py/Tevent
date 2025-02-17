@@ -43,7 +43,7 @@ sequelize.authenticate()
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? 'https://tevent-guild-manager.onrender.com'
+    ? process.env.CLIENT_BASE_URL
     : 'http://localhost:3002',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -59,9 +59,6 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 24 * 60 * 60 * 1000,
-    domain: process.env.NODE_ENV === 'production' 
-      ? '.onrender.com'  
-      : undefined,
     httpOnly: true
   }
 }));
