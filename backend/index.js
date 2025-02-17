@@ -13,6 +13,7 @@ const eventsRouter = require('./routes/events');
 const teamsRouter = require('./routes/teams');
 const teamPresetsRouter = require('./routes/teamPresets');
 const dashboardRouter = require('./routes/dashboardRoutes');
+const pgSession = require('connect-pg-simple')(session);
 
 
 const app = express();
@@ -51,6 +52,14 @@ app.use(cors({
 }));
 
 app.use(session({
+  store: new pgSession({
+    conObject: {
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    }
+  }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -62,6 +71,14 @@ app.use(session({
     httpOnly: true
   }
 }));
+
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    error: 'Internal Server Error', 
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined 
+  });
+});
 
 app.use(passport.initialize());
 app.use(passport.session());
