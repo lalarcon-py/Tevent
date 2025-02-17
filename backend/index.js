@@ -123,7 +123,6 @@ passport.use(new DiscordStrategy({
   scope: ['identify', 'guilds']
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    console.log('Discord profile:', profile);
     let user = await db.User.findOne({ where: { discord_id: profile.id } });
     
     if (!user) {
