@@ -123,6 +123,7 @@ passport.use(new DiscordStrategy({
   scope: ['identify', 'guilds']
 }, async (accessToken, refreshToken, profile, done) => {
   try {
+    console.log('Discord profile:', profile);
     let user = await db.User.findOne({ where: { discord_id: profile.id } });
     
     if (!user) {
@@ -161,8 +162,15 @@ passport.deserializeUser(async (id, done) => {
 app.get('/auth/discord', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback',
- passport.authenticate('discord', { failureRedirect: '/login' }),
- (req, res) => res.redirect(`${process.env.CLIENT_BASE_URL}/guild-management`)
+  (req, res, next) => {
+    console.log('Hitting callback route');
+    next();
+  },
+  passport.authenticate('discord', { failureRedirect: '/login' }),
+  (req, res) => {
+    console.log('Authentication successful');
+    res.redirect(`${process.env.CLIENT_BASE_URL}/guild-management`);
+  }
 );
 
 app.get('/auth/logout', (req, res) => {
