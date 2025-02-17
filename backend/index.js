@@ -42,25 +42,28 @@ sequelize.authenticate()
 
 // Middleware
 app.use(cors({
- origin: process.env.NODE_ENV === 'production' 
-   ? 'https://tevent-guild-manager.onrender.com' 
-   : 'http://localhost:3002',
- credentials: true
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://tevent-guild-manager.onrender.com'
+    : 'http://localhost:3002',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(session({
- secret: process.env.SESSION_SECRET,
- resave: false,
- saveUninitialized: false,
- proxy: true,
- cookie: {
-   secure: process.env.NODE_ENV === 'production',
-   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-   maxAge: 24 * 60 * 60 * 1000,
-   domain: process.env.NODE_ENV === 'production' 
-     ? '.onrender.com'  
-     : undefined
- }
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  proxy: true,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    domain: process.env.NODE_ENV === 'production' 
+      ? '.onrender.com'  
+      : undefined,
+    httpOnly: true
+  }
 }));
 
 app.use(passport.initialize());
@@ -85,6 +88,7 @@ app.use((req, res, next) => {
  next();
 });
 
+app.enable('trust proxy');
 
 app.use((req, res, next) => {
  if (req.method === 'PUT') {
