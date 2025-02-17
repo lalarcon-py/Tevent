@@ -5,6 +5,18 @@ const path = require('path');
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     try {
+      // Check if items already exist
+      const existingItems = await queryInterface.sequelize.query(
+        'SELECT COUNT(*) FROM items',
+        { type: Sequelize.QueryTypes.SELECT }
+      );
+
+      // If items exist, skip seeding
+      if (existingItems[0].count > 0) {
+        console.log('📝 Items table already has data, skipping seed');
+        return;
+      }
+
       // Read the JSON file
       const jsonData = await fs.readFile(
         path.join(__dirname, '../tnl_filtered_items.json'),

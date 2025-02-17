@@ -14,6 +14,9 @@ const teamsRouter = require('./routes/teams');
 const teamPresetsRouter = require('./routes/teamPresets');
 const dashboardRouter = require('./routes/dashboardRoutes');
 const pgSession = require('connect-pg-simple')(session);
+const databaseMiddleware = require('./middleware/databaseMiddleware');
+const schemaMiddleware = require('./middleware/schemaMiddleware');
+const guildRouter = require('./routes/guildRoutes');
 
 
 const app = express();
@@ -84,12 +87,14 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.use(express.json());
+app.use(schemaMiddleware);
 
-app.use('/api/items', itemsRouter);
-app.use('/api/events', eventsRouter);
-app.use('/api/teams', teamsRouter);
-app.use('/api/team-presets', teamPresetsRouter);
-app.use('/api', dashboardRouter);
+app.use('/api/guilds', guildRouter);
+app.use('/api/items',databaseMiddleware, itemsRouter);
+app.use('/api/events',databaseMiddleware, eventsRouter);
+app.use('/api/teams',databaseMiddleware, teamsRouter);
+app.use('/api/team-presets',databaseMiddleware, teamPresetsRouter);
+app.use('/api',databaseMiddleware, dashboardRouter);
 
 app.use((req, res, next) => {
  if (req.method === 'PUT') {
@@ -161,14 +166,25 @@ passport.deserializeUser(async (id, done) => {
 app.get('/auth/discord', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback',
-  (req, res, next) => {
-    console.log('Hitting callback route');
-    next();
-  },
   passport.authenticate('discord', { failureRedirect: '/login' }),
-  (req, res) => {
-    console.log('Authentication successful');
-    res.redirect(`/guild-management`);
+  async (req, res) => {
+    try {
+      // Check if user is in any guilds
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id }
+      });
+
+      if (guildMember) {
+        // User is in a guild, redirect to guild management
+        res.redirect(`/guild/${guildMember.guild_id}/management`);
+      } else {
+        // User is not in a guild, redirect to guild creation/join page
+        res.redirect('/guild-setup');
+      }
+    } catch (error) {
+      console.error('Auth callback error:', error);
+      res.redirect('/error');
+    }
   }
 );
 
