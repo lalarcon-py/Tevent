@@ -31,18 +31,22 @@ const AttendanceManagement = () => {
   const fetchEvents = async () => {
     try {
       const response = await axiosInstance.get('/api/events');
-      setEvents(response.data);
+      console.log('Events response:', response.data); // Debug log
+      setEvents(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Failed to fetch events:', error);
+      setEvents([]); // Set empty array on error
     }
   };
 
   const fetchPlayers = async () => {
     try {
       const response = await axiosInstance.get('/api/players');
-      setPlayers(response.data);
+      console.log('Players response:', response.data); // Debug log
+      setPlayers(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Failed to fetch players:', error);
+      setPlayers([]); // Set empty array on error
     }
   };
 

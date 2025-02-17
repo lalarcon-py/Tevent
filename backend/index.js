@@ -168,7 +168,7 @@ app.get('/auth/discord/callback',
   passport.authenticate('discord', { failureRedirect: '/login' }),
   (req, res) => {
     console.log('Authentication successful');
-    res.redirect(`${process.env.CLIENT_BASE_URL}/guild-management`);
+    res.redirect(`/guild-management`);
   }
 );
 
