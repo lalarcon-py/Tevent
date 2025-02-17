@@ -228,7 +228,7 @@ app.put('/api/members/:id', async (req, res) => {
        role = :role,
        status = :status,
        avatar_url = :avatar_url,
-       builds = ARRAY[:builds]::jsonb[],
+       builds = :builds::jsonb,
        combat_power = :combat_power,
        updated_at = NOW()
       WHERE id = :id`,
@@ -240,7 +240,7 @@ app.put('/api/members/:id', async (req, res) => {
          role: updateData.role,
          status: updateData.status,
          avatar_url: updateData.avatar_url,
-         builds: buildsJson,
+         builds: JSON.stringify(updateData.builds),
          combat_power: updateData.combat_power || null // Added this line
        },
        type: sequelize.QueryTypes.UPDATE,
