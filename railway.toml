@@ -3,12 +3,12 @@ builder = "nixpacks"
 buildCommand = "cd backend && npm install"
 
 [deploy]
-startCommand = "cd backend && npx sequelize-cli --env production db:migrate:undo:all && npx sequelize-cli --env production db:migrate && node index.js"
+startCommand = "cd backend && npx sequelize-cli db:migrate --force && node index.js"
 restartPolicyType = "ON_FAILURE"
 
 [mount]
 source = "backend"
-destination = "/app/backend"
+destination = "/app"
 
 [service]
 name = "TVGM"
