@@ -38,6 +38,7 @@ function App() {
 
   return (
     <ThemeProvider theme={theme}>
+      <AuthProvider>
       <GuildProvider>
         <LootProvider>
           <AttendanceProvider>
@@ -81,6 +82,7 @@ function App() {
           </AttendanceProvider>
         </LootProvider>
       </GuildProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
