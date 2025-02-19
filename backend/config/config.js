@@ -6,7 +6,9 @@ const baseConfig = {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     host: process.env.DB_HOST,
-    dialect: 'postgres'
+    dialect: 'postgres',
+    migrationStorageTableName: 'SequelizeMeta',
+    migrationPath: path.resolve(__dirname, '../migrations')
   },
   production: {
     dialect: 'postgres',
@@ -16,7 +18,9 @@ const baseConfig = {
         rejectUnauthorized: false
       }
     },
-    url: process.env.DATABASE_URL
+    url: process.env.DATABASE_URL,
+    migrationStorageTableName: 'SequelizeMeta',
+    migrationPath: path.resolve(__dirname, '../migrations')
   }
 };
 
