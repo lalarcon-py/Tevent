@@ -30,20 +30,27 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { itemId } = req.body;
+    console.log('Request body:', req.body);
+    console.log('User:', req.user);
+    
     if (!req.isAuthenticated()) {
+      console.log('User not authenticated');
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
     const userId = req.user.id;
+    console.log('UserId:', userId);
+    console.log('ItemId:', itemId);
 
     // Check if user already has a pending request for this item
     const existingRequest = await db.LootRequest.findOne({
       where: {
         itemId,
         userId,
-        status: 'Pending'  
+        status: 'Pending'
       }
     });
+    console.log('Existing request:', existingRequest);
 
     if (existingRequest) {
       return res.status(400).json({ error: 'You already have a pending request for this item' });
@@ -52,13 +59,23 @@ router.post('/', async (req, res) => {
     const newRequest = await db.LootRequest.create({
       itemId,
       userId,
-      status: 'Pending' 
+      status: 'Pending'
     });
+    console.log('New request created:', newRequest);
 
     res.status(201).json(newRequest);
   } catch (error) {
-    console.error('Error creating request:', error);
-    res.status(500).json({ error: 'Failed to create request' });
+    console.error('Detailed error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code,
+      errors: error.errors
+    });
+    res.status(500).json({ 
+      error: 'Failed to create request',
+      details: error.message
+    });
   }
 });
 
