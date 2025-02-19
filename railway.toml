@@ -1,9 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = """
-cd frontend && rm -rf node_modules && npm install --legacy-peer-deps && npm run build && 
-cd ../backend && npm install
-"""
+buildCommand = "cd frontend && npm install --legacy-peer-deps && npm run build && cd ../backend && npm install"
 
 [deploy]
 startCommand = "cd backend && npm run migrate:undo && npm run migrate && node index.js"

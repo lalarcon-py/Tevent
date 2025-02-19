@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ['nodejs@18', 'npm@9']
+
+[phases.install]
+cmds = ['npm ci']
+
+[phases.build]
+cmds = [
+  'cd frontend && npm install --legacy-peer-deps && npm run build',
+  'cd ../backend && npm install'
+]
