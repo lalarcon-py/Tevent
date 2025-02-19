@@ -1,7 +1,7 @@
 // routes/waitlist.js
 const express = require('express');
 const router = express.Router();
-const { WaitList, Item, Player } = require('../models');
+const { LootRequest, Item, User } = require('../models');
 
 // Get all wait list requests
 router.get('/', async (req, res) => {
@@ -43,7 +43,7 @@ router.post('/', async (req, res) => {
     console.log('ItemId:', itemId);
 
     // Check if user already has a pending request for this item
-    const existingRequest = await db.LootRequest.findOne({
+    const existingRequest = await LootRequest.findOne({
       where: {
         itemId,
         userId,
@@ -56,7 +56,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'You already have a pending request for this item' });
     }
 
-    const newRequest = await db.LootRequest.create({
+    const newRequest = await LootRequest.create({
       itemId,
       userId,
       status: 'Pending'
