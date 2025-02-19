@@ -65,7 +65,7 @@ const User = sequelize.define('User', {
     avatar_url: { type: DataTypes.STRING },
     builds: { 
         type: DataTypes.JSONB,
-        defaultValue: []  // Add this line
+        defaultValue: [] 
     }
 }, {
     tableName: 'users',
@@ -247,7 +247,7 @@ const Team = sequelize.define('Team', {
         }
     },
     teams_data: {
-        type: DataTypes.JSONB,  // Using JSONB since you're using it elsewhere
+        type: DataTypes.JSONB,
         allowNull: false
     },
     created_by: {

@@ -17,6 +17,7 @@ const pgSession = require('connect-pg-simple')(session);
 const databaseMiddleware = require('./middleware/databaseMiddleware');
 const schemaMiddleware = require('./middleware/schemaMiddleware');
 const guildRouter = require('./routes/guildRoutes');
+const waitlistRouter = require('./routes/waitlist');
 
 
 const app = express();
@@ -90,6 +91,7 @@ app.use(express.json());
 app.use(schemaMiddleware);
 
 app.use('/api/guilds', guildRouter);
+app.use('/api/waitlist', databaseMiddleware, waitlistRouter);
 app.use('/api/items',databaseMiddleware, itemsRouter);
 app.use('/api/events',databaseMiddleware, eventsRouter);
 app.use('/api/teams',databaseMiddleware, teamsRouter);

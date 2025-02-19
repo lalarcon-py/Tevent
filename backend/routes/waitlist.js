@@ -6,15 +6,15 @@ const { WaitList, Item, Player } = require('../models');
 // Get all wait list requests
 router.get('/', async (req, res) => {
   try {
-    const waitListItems = await WaitList.findAll({
+    const waitListItems = await db.LootRequest.findAll({
       include: [
         {
-          model: Item,
+          model: db.Item,
           attributes: ['name', 'type', 'icon', 'dkpCost']
         },
         {
-          model: Player,
-          attributes: ['name', 'dkp', 'attendanceRate']
+          model: db.User,
+          attributes: ['username', 'discord_id', 'avatar_url']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -30,14 +30,18 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { itemId } = req.body;
-    const playerId = req.user.id; // Assuming authentication middleware
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const userId = req.user.id;
 
-    // Check if player already has a pending request for this item
-    const existingRequest = await WaitList.findOne({
+    // Check if user already has a pending request for this item
+    const existingRequest = await db.LootRequest.findOne({
       where: {
         itemId,
-        playerId,
-        status: 'pending'
+        userId,
+        status: 'Pending'  
       }
     });
 
@@ -45,10 +49,10 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'You already have a pending request for this item' });
     }
 
-    const newRequest = await WaitList.create({
+    const newRequest = await db.LootRequest.create({
       itemId,
-      playerId,
-      status: 'pending'
+      userId,
+      status: 'Pending' 
     });
 
     res.status(201).json(newRequest);
