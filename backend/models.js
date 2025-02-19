@@ -22,20 +22,44 @@ const Item = sequelize.define('Item', {
 
 // Loot Request Schema
 const LootRequest = sequelize.define('LootRequest', {
-   id: { 
-       type: DataTypes.UUID,
-       defaultValue: DataTypes.UUIDV4,
-       primaryKey: true 
-   },
-   status: { 
-       type: DataTypes.ENUM('Pending', 'Approved', 'Denied', 'Fulfilled'),
-       defaultValue: 'Pending'
-   },
-   priority: { type: DataTypes.INTEGER, defaultValue: 0 }
-}, {
-   tableName: 'loot_requests',
-   freezeTableName: true
-});
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    storageItemId: {  // Changed from itemId to storageItemId
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'guild_storage_items',
+            key: 'id'
+        },
+        field: 'storage_item_id'
+    },
+    userId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'users',
+            key: 'id'
+        },
+        field: 'user_id'
+    },
+    status: { 
+        type: DataTypes.STRING(255),
+        defaultValue: 'Pending',
+        allowNull: true
+    },
+    priority: { 
+        type: DataTypes.INTEGER, 
+        defaultValue: 0,
+        allowNull: true
+    }
+ }, {
+    tableName: 'loot_requests',
+    freezeTableName: true,
+    underscored: true
+ });
 
 // DKP Transaction Schema  
 const DKPTransaction = sequelize.define('DKPTransaction', {

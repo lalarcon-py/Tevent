@@ -30,38 +30,31 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { itemId } = req.body;
-    console.log('Request body:', req.body);
-    console.log('User:', req.user);
     
     if (!req.isAuthenticated()) {
-      console.log('User not authenticated');
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
     const userId = req.user.id;
-    console.log('UserId:', userId);
-    console.log('ItemId:', itemId);
 
     // Check if user already has a pending request for this item
     const existingRequest = await LootRequest.findOne({
       where: {
-        itemId,
-        userId,
+        storage_item_id: itemId,  // Changed to match database column name
+        user_id: userId,          // Changed to match database column name
         status: 'Pending'
       }
     });
-    console.log('Existing request:', existingRequest);
 
     if (existingRequest) {
       return res.status(400).json({ error: 'You already have a pending request for this item' });
     }
 
     const newRequest = await LootRequest.create({
-      itemId,
-      userId,
+      storage_item_id: itemId,  // Changed to match database column name
+      user_id: userId,          // Changed to match database column name
       status: 'Pending'
     });
-    console.log('New request created:', newRequest);
 
     res.status(201).json(newRequest);
   } catch (error) {
