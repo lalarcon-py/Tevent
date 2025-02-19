@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "cd backend && npm install"
 
 [deploy]
-startCommand = "cd backend && npx sequelize-cli db:migrate --force && node index.js"
+startCommand = "cd backend && npm run migrate:undo && npm run migrate && node index.js"
 restartPolicyType = "ON_FAILURE"
 
 [mount]
