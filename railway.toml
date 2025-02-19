@@ -1,13 +1,16 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd backend && npm install"
+buildCommand = """
+cd frontend && npm install && npm run build && 
+cd ../backend && npm install
+"""
 
 [deploy]
 startCommand = "cd backend && npm run migrate:undo && npm run migrate && node index.js"
 restartPolicyType = "ON_FAILURE"
 
 [mount]
-source = "backend"
+source = "."
 destination = "/app"
 
 [service]
