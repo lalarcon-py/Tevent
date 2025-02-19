@@ -22,6 +22,7 @@ import AttendanceManagement from './components/LootManagement/AttendanceManageme
 import TeamPlanner from './components/TeamPlanner/TeamPlanner';
 import { TeamProvider } from './contexts/TeamContext';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { AuthProvider } from './contexts/AuthContext';
 
 
 
