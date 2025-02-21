@@ -8,7 +8,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.NODE_ENV === 'development' 
+  ? 'http://localhost:5000' 
+  : process.env.REACT_APP_API_URL;
 
 // Weapon Logic (Items Icons, CP, Etc..)
 const WEAPON_SPECS = {
@@ -76,7 +78,7 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
     }
 
     if (newRole === 'Guild Guardian') {
-      const guardianCount = await fetch('http://localhost:5000/api/members/count-guardians', {
+      const guardianCount = await fetch(`${API_URL}/api/members/count-guardians`, {
         credentials: 'include'
       }).then(res => res.json());
       
@@ -442,6 +444,8 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
 
 
 const MembersList = ({ searchTerm }) => {
+  const [roleManagementMember, setRoleManagementMember] = useState(null);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
   const [members, setMembers] = useState([]);
   const [editMember, setEditMember] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -456,6 +460,62 @@ const MembersList = ({ searchTerm }) => {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+  };
+
+  useEffect(() => {
+    const fetchCurrentUserRole = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/auth/status`, {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        setCurrentUserRole(data.role);
+      } catch (error) {
+        console.error('Error fetching current user role:', error);
+      }
+    };
+    fetchCurrentUserRole();
+  }, []);
+  
+  const handleRoleSave = async (updatedMember) => {
+    try {
+      const endpoint = updatedMember.role === 'Guild Master' 
+      ? `${API_URL}/api/members/transfer-guildmaster`
+      : `${API_URL}/api/members/${updatedMember.id}/update-role`;
+  
+      console.log('Sending update:', {
+        memberId: updatedMember.id,
+        role: updatedMember.role,
+        username: updatedMember.username
+      });
+  
+      const response = await fetch(endpoint, {
+        method: updatedMember.role === 'Guild Master' ? 'POST' : 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          memberId: updatedMember.id,  // Explicitly include the ID
+          role: updatedMember.role,
+          username: updatedMember.username
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update member');
+      }
+  
+      await fetchMembers();
+      setRoleManagementMember(null);
+  
+      if (updatedMember.role === 'Guild Master') {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error updating member:', error);
+    }
   };
   
   const getSortedMembers = (membersToSort) => {
@@ -495,55 +555,54 @@ const MembersList = ({ searchTerm }) => {
     console.log('Current editMember state:', editMember);
   }, [editMember]);
 
-  useEffect(() => {
-    const fetchMembers = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/members`, {
-          credentials: 'include'
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch members');
-        }
-  
-        const data = await response.json();
-        console.log('Raw data from API:', data);
-  
-        const processedData = data.map(member => {
-          try {
-            // Handle the nested array structure directly
-            const builds = Array.isArray(member.builds[0]) ? 
-              member.builds[0] : member.builds;
-  
-            return {
-              ...member,
-              builds: builds,
-              weapon_spec: member.weapon_spec || (builds[0]?.weapon_spec || '')
-            };
-          } catch (error) {
-            console.error('Error processing member:', error);
-            const defaultBuild = {
-              primary: 'Greatsword',
-              secondary: 'Crossbow',
-              spec: 'DPS'
-            };
-            return {
-              ...member,
-              builds: [defaultBuild],
-              weapon_spec: getWeaponSpec(defaultBuild.primary, defaultBuild.secondary)
-            };
-          }
-        });
-  
-        console.log('Processed data:', processedData);
-        setMembers(processedData);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching members:', error);
-        setLoading(false);
+  const fetchMembers = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/members`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch members');
       }
-    };
   
+      const data = await response.json();
+      console.log('Raw data from API:', data);
+  
+      const processedData = data.map(member => {
+        try {
+          const builds = Array.isArray(member.builds[0]) ? 
+            member.builds[0] : member.builds;
+  
+          return {
+            ...member,
+            builds: builds,
+            weapon_spec: member.weapon_spec || (builds[0]?.weapon_spec || '')
+          };
+        } catch (error) {
+          console.error('Error processing member:', error);
+          const defaultBuild = {
+            primary: 'Greatsword',
+            secondary: 'Crossbow',
+            spec: 'DPS'
+          };
+          return {
+            ...member,
+            builds: [defaultBuild],
+            weapon_spec: getWeaponSpec(defaultBuild.primary, defaultBuild.secondary)
+          };
+        }
+      });
+  
+      console.log('Processed data:', processedData);
+      setMembers(processedData);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      setLoading(false);
+    }
+  };
+  
+  useEffect(() => {
     fetchMembers();
   }, []);
 
