@@ -130,122 +130,130 @@ const WaitListTab = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {requests?.map((request) => (
-                <TableRow 
-                  key={request?.id}
-                  sx={{ 
-                    '&:hover': { 
-                      bgcolor: 'rgba(144, 202, 249, 0.1)',
-                      transform: 'scale(1.02)',
-                    },
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar 
-                        src={request?.StorageItem?.Item?.icon} 
-                        sx={{ 
-                          width: 40, 
-                          height: 40,
-                          border: '2px solid #90caf9'
-                        }}
-                      >
-                        {!request?.StorageItem?.Item?.icon && request?.StorageItem?.Item?.name?.[0]}
-                      </Avatar>
-                      <Box>
-                        <Typography sx={{ color: 'white' }}>
-                          {request?.StorageItem?.Item?.name}
-                        </Typography>
-                        {request?.StorageItem?.trait && (
-                          <Typography 
-                            variant="caption" 
-                            sx={{ 
-                              color: '#90caf9',
-                              mt: 0.5,
-                              display: 'block',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            {request?.StorageItem?.trait}
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ color: 'white' }}>{request?.StorageItem?.Item?.type}</TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar 
-                        src={request?.User?.avatar_url} 
-                        sx={{ 
-                          width: 40, 
-                          height: 40,
-                          border: '2px solid #90caf9'
-                        }}
-                      >
-                        {!request?.User?.avatar_url && request?.User?.username?.[0]}
-                      </Avatar>
-                      <Typography sx={{ color: 'white' }}>
-                        {request?.User?.username || 'Unknown User'}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ color: 'white' }}>{request?.priority || 0}</TableCell>
-                  <TableCell>
-                    <Typography sx={{ 
-                      color: request?.status === 'Approved' ? '#4caf50' : 
-                             request?.status === 'Denied' ? '#f44336' : '#ffb74d'
-                    }}>
-                      {request?.status || 'Pending'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      {request?.status === 'Pending' && (
-                        <>
-                          <Tooltip title="Approve">
-                            <IconButton
-                              onClick={() => handleApprove(request)}
-                              sx={{
-                                color: '#4caf50',
-                                '&:hover': { transform: 'scale(1.1)' }
-                              }}
-                            >
-                              <CheckCircleIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Deny">
-                            <IconButton
-                              onClick={() => handleDeny(request)}
-                              sx={{
-                                color: '#f44336',
-                                '&:hover': { transform: 'scale(1.1)' }
-                              }}
-                            >
-                              <CancelIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
-                      <Tooltip title="Delete">
-                        <IconButton
-                          onClick={() => handleDelete(request)}
-                          sx={{
-                            color: '#757575',
-                            '&:hover': { 
-                              color: '#f44336',
-                              transform: 'scale(1.1)'
-                            }
+              {Array.isArray(requests) && requests.length > 0 ? (
+                requests.map((request) => (
+                  <TableRow 
+                    key={request?.id || Math.random()}
+                    sx={{ 
+                      '&:hover': { 
+                        bgcolor: 'rgba(144, 202, 249, 0.1)',
+                        transform: 'scale(1.02)',
+                      },
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar 
+                          src={request?.StorageItem?.Item?.icon} 
+                          sx={{ 
+                            width: 40, 
+                            height: 40,
+                            border: '2px solid #90caf9'
                           }}
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
+                          {!request?.StorageItem?.Item?.icon && request?.StorageItem?.Item?.name?.[0]}
+                        </Avatar>
+                        <Box>
+                          <Typography sx={{ color: 'white' }}>
+                            {request?.StorageItem?.Item?.name || 'Unknown Item'}
+                          </Typography>
+                          {request?.StorageItem?.trait && (
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: '#90caf9',
+                                mt: 0.5,
+                                display: 'block',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              {request?.StorageItem?.trait}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ color: 'white' }}>{request?.StorageItem?.Item?.type || 'Unknown'}</TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar 
+                          src={request?.User?.avatar_url} 
+                          sx={{ 
+                            width: 40, 
+                            height: 40,
+                            border: '2px solid #90caf9'
+                          }}
+                        >
+                          {!request?.User?.avatar_url && request?.User?.username?.[0]}
+                        </Avatar>
+                        <Typography sx={{ color: 'white' }}>
+                          {request?.User?.username || 'Unknown User'}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ color: 'white' }}>{request?.priority || 0}</TableCell>
+                    <TableCell>
+                      <Typography sx={{ 
+                        color: request?.status === 'Approved' ? '#4caf50' : 
+                               request?.status === 'Denied' ? '#f44336' : '#ffb74d'
+                      }}>
+                        {request?.status || 'Pending'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {request?.status === 'Pending' && (
+                          <>
+                            <Tooltip title="Approve">
+                              <IconButton
+                                onClick={() => handleApprove(request)}
+                                sx={{
+                                  color: '#4caf50',
+                                  '&:hover': { transform: 'scale(1.1)' }
+                                }}
+                              >
+                                <CheckCircleIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Deny">
+                              <IconButton
+                                onClick={() => handleDeny(request)}
+                                sx={{
+                                  color: '#f44336',
+                                  '&:hover': { transform: 'scale(1.1)' }
+                                }}
+                              >
+                                <CancelIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                        <Tooltip title="Delete">
+                          <IconButton
+                            onClick={() => handleDelete(request)}
+                            sx={{
+                              color: '#757575',
+                              '&:hover': { 
+                                color: '#f44336',
+                                transform: 'scale(1.1)'
+                              }
+                            }}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: 'white', py: 3 }}>
+                    No item requests available
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -274,7 +282,7 @@ const WaitListTab = () => {
         </DialogActions>
       </Dialog>
     </Box>
-   );
+  );
 };
 
 export default WaitListTab;
