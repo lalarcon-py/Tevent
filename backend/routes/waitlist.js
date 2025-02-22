@@ -40,31 +40,29 @@ router.post('/', async (req, res) => {
     // Check if user already has a pending request for this item
     const existingRequest = await LootRequest.findOne({
       where: {
-        storage_item_id: itemId,  // Changed to match database column name
-        user_id: userId,          // Changed to match database column name
+        storage_item_id: itemId,
+        user_id: userId,
         status: 'Pending'
       }
     });
 
     if (existingRequest) {
-      return res.status(400).json({ error: 'You already have a pending request for this item' });
+      return res.status(400).json({ 
+        error: 'You already have a pending request for this item' 
+      });
     }
 
+    // Note: id is UUID type and will be auto-generated
     const newRequest = await LootRequest.create({
-      storage_item_id: itemId,  // Changed to match database column name
-      user_id: userId,          // Changed to match database column name
-      status: 'Pending'
+      storage_item_id: itemId,
+      user_id: userId,
+      status: 'Pending',
+      priority: 0  // Added this since it has a default in your schema
     });
 
     res.status(201).json(newRequest);
   } catch (error) {
-    console.error('Detailed error:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      code: error.code,
-      errors: error.errors
-    });
+    console.error('Create request error:', error);
     res.status(500).json({ 
       error: 'Failed to create request',
       details: error.message

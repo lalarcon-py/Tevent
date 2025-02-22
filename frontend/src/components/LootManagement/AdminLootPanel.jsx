@@ -90,18 +90,15 @@ const AdminLootPanel = () => {
  };
 
  const handleRequestItem = async (item) => {
-  try {
-    console.log('Requesting item:', item);
-    const response = await axiosInstance.post('/api/waitlist', {
-      itemId: item.id,
-    });
-    console.log('Request response:', response.data);
-    console.log('Item requested successfully');
-  } catch (error) {
-    console.error('Failed to request item:', error);
-    console.error('Error details:', error.response?.data);
-  }
-};
+   try {
+     const response = await axiosInstance.post('/api/waitlist', {
+       itemId: item.id,
+     });
+     console.log('Item requested successfully');
+   } catch (error) {
+     console.error('Failed to request item:', error);
+   }
+ };
 
  return (
    <Box>

@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "nodemon": "^3.1.9",
     "source-map-loader": "^4.0.1"
   },
   "dependencies": {

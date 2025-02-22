@@ -27,23 +27,21 @@ const LootRequest = sequelize.define('LootRequest', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true 
     },
-    storageItemId: {  // Changed from itemId to storageItemId
+    storage_item_id: {  // Changed to match DB column name exactly
         type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'guild_storage_items',
             key: 'id'
-        },
-        field: 'storage_item_id'
+        }
     },
-    userId: {
+    user_id: {  // Changed to match DB column name exactly
         type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'users',
             key: 'id'
-        },
-        field: 'user_id'
+        }
     },
     status: { 
         type: DataTypes.STRING(255),
@@ -55,11 +53,12 @@ const LootRequest = sequelize.define('LootRequest', {
         defaultValue: 0,
         allowNull: true
     }
- }, {
+}, {
     tableName: 'loot_requests',
     freezeTableName: true,
+    timestamps: true,
     underscored: true
- });
+});
 
 // DKP Transaction Schema  
 const DKPTransaction = sequelize.define('DKPTransaction', {
@@ -292,8 +291,12 @@ const Team = sequelize.define('Team', {
 User.hasMany(LootRequest);
 Item.hasMany(LootRequest);
 User.hasMany(DKPTransaction);
-LootRequest.belongsTo(User);
-LootRequest.belongsTo(Item);
+LootRequest.belongsTo(User, {
+    foreignKey: 'user_id'
+});
+LootRequest.belongsTo(GuildStorageItem, {  // You'll need to define this model
+    foreignKey: 'storage_item_id'
+});
 Team.belongsTo(Event, { foreignKey: 'event_id' });
 Team.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 Team.hasMany(TeamMember, { foreignKey: 'team_id', as: 'members' });
