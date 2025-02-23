@@ -13,13 +13,13 @@ const AdminLootPanel = () => {
  const [templateItems, setTemplateItems] = useState([]);
  const [loading, setLoading] = useState(false);
  const [newItem, setNewItem] = useState({
-   name: '',
-   type: '',
-   dkpCost: 0,
-   quantity: 1,
-   inStorage: true,
-   icon: ''
- });
+  id: null,          // Add this to store the selected item's ID
+  name: '',
+  type: '',
+  dkpCost: 0,
+  quantity: 1,
+  icon: ''
+});
 
  useEffect(() => {
    fetchAddedItems();
@@ -102,216 +102,217 @@ const AdminLootPanel = () => {
   }
 };
 
- return (
-   <Box>
-     <Paper sx={{ 
-       p: 4, 
-       mb: 4,
-       background: 'rgba(30, 30, 30, 0.6)',
-       backdropFilter: 'blur(12px)',
-       transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
-       '&:hover': {
-         transform: 'translateY(-5px)',
-         boxShadow: '0 8px 32px rgba(144, 202, 249, 0.2)'
-       }
-     }}>
-       <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add New Item</Typography>
-       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-         <Autocomplete
-           freeSolo
-           options={templateItems}
-           getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
-           value={newItem}
-           onChange={(_, newValue) => {
-             if (newValue && typeof newValue === 'object') {
-               setNewItem({
-                 ...newItem,
-                 name: newValue.name,
-                 type: newValue.type,
-                 icon: newValue.icon || '',
-                 dkpCost: newValue.dkpCost || 0
-               });
-             }
-           }}
-           renderInput={(params) => (
-             <TextField
-               {...params}
-               label="Item Name"
-               sx={{
-                 minWidth: 300,
-                 '& .MuiOutlinedInput-root': {
-                   background: 'rgba(30, 30, 30, 0.4)',
-                   backdropFilter: 'blur(12px)'
-                 }
-               }}
-             />
-           )}
-           renderOption={(props, option, state) => {
-             const { key, ...otherProps } = props;
-             return (
-               <ListItem 
-                 key={key} 
-                 {...otherProps}
-               >
-                 <ListItemAvatar>
-                   <Avatar
-                     src={option.icon}
-                     sx={{
-                       width: 40,
-                       height: 40,
-                       bgcolor: 'rgba(144, 202, 249, 0.1)',
-                       border: '1px solid rgba(144, 202, 249, 0.2)'
-                     }}
-                   >
-                     {!option.icon && option.name?.[0]}
-                   </Avatar>
-                 </ListItemAvatar>
-                 <ListItemText 
-                   primary={option.name} 
-                   secondary={option.type}
-                 />
-               </ListItem>
-             );
-           }}
-         />
-         <TextField
-           label="DKP Cost"
-           type="number"
-           value={newItem.dkpCost}
-           onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
-           sx={{
-             '& .MuiOutlinedInput-root': {
-               background: 'rgba(30, 30, 30, 0.4)',
-               backdropFilter: 'blur(12px)'
-             }
-           }}
-         />
-         <TextField
-           label="Quantity"
-           type="number"
-           value={newItem.quantity}
-           onChange={(e) => setNewItem({ ...newItem, quantity: Math.max(1, Number(e.target.value)) })}
-           InputProps={{ inputProps: { min: 1 } }}
-           sx={{
-             '& .MuiOutlinedInput-root': {
-               background: 'rgba(30, 30, 30, 0.4)',
-               backdropFilter: 'blur(12px)'
-             }
-           }}
-         />
-         <Button 
-           variant="contained" 
-           onClick={handleAddItem}
-           disabled={!newItem.name}
-           sx={{
-             background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
-             backdropFilter: 'blur(12px)',
-             transition: 'all 0.3s ease',
-             '&:hover': {
-               transform: 'translateY(-2px)',
-               boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
-             }
-           }}
-         >
-           Add Item
-         </Button>
-       </Box>
-     </Paper>
-
-     <TableContainer component={Paper} sx={{
-       background: 'rgba(30, 30, 30, 0.6)',
-       backdropFilter: 'blur(12px)'
-     }}>
-       <Table>
-         <TableHead>
-           <TableRow>
-             <TableCell>Item</TableCell>
-             <TableCell>Type</TableCell>
-             <TableCell>DKP Cost</TableCell>
-             <TableCell>In Storage</TableCell>
-             <TableCell>Quantity</TableCell>
-             <TableCell>Actions</TableCell>
-             <TableCell>Request</TableCell>
-           </TableRow>
-         </TableHead>
-         <TableBody>
-           {addedItems.map((item) => (
-             <TableRow key={item.id} sx={{
-               '&:hover': {
-                 backgroundColor: 'rgba(144, 202, 249, 0.1)'
-               }
-             }}>
-               <TableCell>
-                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                   <Avatar src={item.icon} sx={{ width: 40, height: 40 }}>
-                     {!item.icon && item.name[0]}
-                   </Avatar>
-                   {item.name}
-                 </Box>
-               </TableCell>
-               <TableCell>{item.type}</TableCell>
-               <TableCell>
-                 <TextField
-                   type="number"
-                   value={item.dkpCost}
-                   onChange={(e) => handleUpdate(item.id, 'dkpCost', Number(e.target.value))}
-                   sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
-                 />
-               </TableCell>
-               <TableCell>
-                 <Checkbox
-                   checked={item.inStorage}
-                   onChange={(e) => handleUpdate(item.id, 'inStorage', e.target.checked)}
-                 />
-               </TableCell>
-               <TableCell>
-                 <TextField
-                   type="number"
-                   value={item.quantity}
-                   onChange={(e) => handleUpdate(item.id, 'quantity', Number(e.target.value))}
-                   sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
-                 />
-               </TableCell>
-               <TableCell>
-                 <IconButton 
-                   onClick={() => handleDelete(item.id)}
-                   sx={{ 
-                     '&:hover': { 
-                       color: '#ff4444',
-                       transform: 'scale(1.1)'
-                     }
-                   }}
-                 >
-                   <DeleteIcon />
-                 </IconButton>
-               </TableCell>
-               <TableCell>
-                 <Button 
-                   variant="contained"
-                   disabled={!item.inStorage || item.quantity === 0}
-                   onClick={() => handleRequestItem(item)}
-                   sx={{
-                     background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
-                     backdropFilter: 'blur(12px)',
-                     '&:hover': {
-                       transform: 'translateY(-2px)',
-                       boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
-                     },
-                     '&:disabled': {
-                       background: 'rgba(144, 202, 249, 0.1)',
-                       color: 'rgba(255, 255, 255, 0.3)'
-                     }
-                   }}
-                 >
-                   Request
-                 </Button>
-               </TableCell>
-             </TableRow>
-           ))}
-         </TableBody>
-       </Table>
-     </TableContainer>
-   </Box>
+return (
+  <Box>
+    <Paper sx={{ 
+      p: 4, 
+      mb: 4,
+      background: 'rgba(30, 30, 30, 0.6)',
+      backdropFilter: 'blur(12px)',
+      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+      '&:hover': {
+        transform: 'translateY(-5px)',
+        boxShadow: '0 8px 32px rgba(144, 202, 249, 0.2)'
+      }
+    }}>
+      <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add to Guild Storage</Typography>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <Autocomplete
+          freeSolo
+          options={templateItems}
+          getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
+          value={newItem}
+          onChange={(_, newValue) => {
+            if (newValue && typeof newValue === 'object') {
+              setNewItem({
+                id: newValue.id,
+                name: newValue.name,
+                type: newValue.type,
+                icon: newValue.icon || '',
+                dkpCost: newValue.dkpCost || 0,
+                quantity: 1
+              });
+            }
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Item Name"
+              sx={{
+                minWidth: 300,
+                '& .MuiOutlinedInput-root': {
+                  background: 'rgba(30, 30, 30, 0.4)',
+                  backdropFilter: 'blur(12px)'
+                }
+              }}
+            />
+          )}
+          renderOption={(props, option, state) => {
+            const { key, ...otherProps } = props;
+            return (
+              <ListItem 
+                key={key} 
+                {...otherProps}
+              >
+                <ListItemAvatar>
+                  <Avatar
+                    src={option.icon}
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: 'rgba(144, 202, 249, 0.1)',
+                      border: '1px solid rgba(144, 202, 249, 0.2)'
+                    }}
+                  >
+                    {!option.icon && option.name?.[0]}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText 
+                  primary={option.name} 
+                  secondary={option.type}
+                />
+              </ListItem>
+            );
+          }}
+        />
+        <TextField
+          label="DKP Cost"
+          type="number"
+          value={newItem.dkpCost}
+          onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              background: 'rgba(30, 30, 30, 0.4)',
+              backdropFilter: 'blur(12px)'
+            }
+          }}
+        />
+        <TextField
+          label="Quantity"
+          type="number"
+          value={newItem.quantity}
+          onChange={(e) => setNewItem({ ...newItem, quantity: Math.max(1, Number(e.target.value)) })}
+          InputProps={{ inputProps: { min: 1 } }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              background: 'rgba(30, 30, 30, 0.4)',
+              backdropFilter: 'blur(12px)'
+            }
+          }}
+        />
+        <Button 
+          variant="contained" 
+          onClick={handleAddItem}
+          disabled={!newItem.id}
+          sx={{
+            background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+            backdropFilter: 'blur(12px)',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+            }
+          }}
+        >
+          Add to Storage
+        </Button>
+      </Box>
+    </Paper>
+ 
+    <TableContainer component={Paper} sx={{
+      background: 'rgba(30, 30, 30, 0.6)',
+      backdropFilter: 'blur(12px)'
+    }}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Item</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>DKP Cost</TableCell>
+            <TableCell>In Storage</TableCell>
+            <TableCell>Quantity</TableCell>
+            <TableCell>Actions</TableCell>
+            <TableCell>Request</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {addedItems.map((item) => (
+            <TableRow key={item.id} sx={{
+              '&:hover': {
+                backgroundColor: 'rgba(144, 202, 249, 0.1)'
+              }
+            }}>
+              <TableCell>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Avatar src={item.icon} sx={{ width: 40, height: 40 }}>
+                    {!item.icon && item.name[0]}
+                  </Avatar>
+                  {item.name}
+                </Box>
+              </TableCell>
+              <TableCell>{item.type}</TableCell>
+              <TableCell>
+                <TextField
+                  type="number"
+                  value={item.dkpCost}
+                  onChange={(e) => handleUpdate(item.id, 'dkpCost', Number(e.target.value))}
+                  sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
+                />
+              </TableCell>
+              <TableCell>
+                <Checkbox
+                  checked={item.inStorage}
+                  onChange={(e) => handleUpdate(item.id, 'inStorage', e.target.checked)}
+                />
+              </TableCell>
+              <TableCell>
+                <TextField
+                  type="number"
+                  value={item.quantity}
+                  onChange={(e) => handleUpdate(item.id, 'quantity', Number(e.target.value))}
+                  sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
+                />
+              </TableCell>
+              <TableCell>
+                <IconButton 
+                  onClick={() => handleDelete(item.id)}
+                  sx={{ 
+                    '&:hover': { 
+                      color: '#ff4444',
+                      transform: 'scale(1.1)'
+                    }
+                  }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </TableCell>
+              <TableCell>
+                <Button 
+                  variant="contained"
+                  disabled={!item.inStorage || item.quantity === 0}
+                  onClick={() => handleRequestItem(item)}
+                  sx={{
+                    background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+                    backdropFilter: 'blur(12px)',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+                    },
+                    '&:disabled': {
+                      background: 'rgba(144, 202, 249, 0.1)',
+                      color: 'rgba(255, 255, 255, 0.3)'
+                    }
+                  }}
+                >
+                  Request
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  </Box>
  );
 };
 
