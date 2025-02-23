@@ -69,17 +69,11 @@ const AdminLootPanel = () => {
   try {
     if (!newItem.name) return;
 
-    // First create/update the item in items table
-    const itemResponse = await axiosInstance.post('/api/items', {
-      ...newItem,
-      inStorage: true
-    });
-    
-    // Then create the guild storage item
+    // Create only a guild storage entry, referencing the existing item
     const storageResponse = await axiosInstance.post('/api/guild-storage', {
-      itemId: itemResponse.data.id,
+      item_id: newItem.id,  // This should be the ID of the selected item from autocomplete
       quantity: newItem.quantity,
-      dkpCost: newItem.dkpCost
+      dkp_cost: newItem.dkpCost
     });
     
     await fetchAddedItems();
