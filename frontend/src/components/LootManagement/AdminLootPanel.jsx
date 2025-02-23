@@ -66,28 +66,36 @@ const AdminLootPanel = () => {
  };
 
  const handleAddItem = async () => {
-   try {
-     if (!newItem.name) return;
+  try {
+    if (!newItem.name) return;
 
-     const response = await axiosInstance.post('/api/items', {
-       ...newItem,
-       inStorage: true
-     });
-     
-     await fetchAddedItems();
-     
-     setNewItem({
-       name: '',
-       type: '',
-       dkpCost: 0,
-       quantity: 1,
-       inStorage: true,
-       icon: ''
-     });
-   } catch (error) {
-     console.error('Create/Update error:', error);
-   }
- };
+    // First create/update the item in items table
+    const itemResponse = await axiosInstance.post('/api/items', {
+      ...newItem,
+      inStorage: true
+    });
+    
+    // Then create the guild storage item
+    const storageResponse = await axiosInstance.post('/api/guild-storage', {
+      itemId: itemResponse.data.id,
+      quantity: newItem.quantity,
+      dkpCost: newItem.dkpCost
+    });
+    
+    await fetchAddedItems();
+    
+    setNewItem({
+      name: '',
+      type: '',
+      dkpCost: 0,
+      quantity: 1,
+      inStorage: true,
+      icon: ''
+    });
+  } catch (error) {
+    console.error('Create/Update error:', error);
+  }
+};
 
  const handleRequestItem = async (item) => {
   try {
