@@ -27,7 +27,7 @@ const LootRequest = sequelize.define('LootRequest', {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true 
     },
-    storage_item_id: {  // Changed to match DB column name exactly
+    storage_item_id: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
@@ -35,7 +35,7 @@ const LootRequest = sequelize.define('LootRequest', {
             key: 'id'
         }
     },
-    user_id: {  // Changed to match DB column name exactly
+    user_id: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
@@ -43,21 +43,20 @@ const LootRequest = sequelize.define('LootRequest', {
             key: 'id'
         }
     },
-    status: { 
+    status: {
         type: DataTypes.STRING(255),
         defaultValue: 'Pending',
         allowNull: true
     },
-    priority: { 
-        type: DataTypes.INTEGER, 
+    priority: {
+        type: DataTypes.INTEGER,
         defaultValue: 0,
         allowNull: true
     }
 }, {
     tableName: 'loot_requests',
-    freezeTableName: true,
-    timestamps: true,
-    underscored: true
+    underscored: true,
+    timestamps: true
 });
 
 // DKP Transaction Schema  
@@ -327,12 +326,8 @@ const GuildStorageItem = sequelize.define('GuildStorageItem', {
 User.hasMany(LootRequest);
 Item.hasMany(LootRequest);
 User.hasMany(DKPTransaction);
-LootRequest.belongsTo(User, {
-    foreignKey: 'user_id'
-});
-LootRequest.belongsTo(GuildStorageItem, {  // You'll need to define this model
-    foreignKey: 'storage_item_id'
-});
+LootRequest.belongsTo(User, { foreignKey: 'user_id' });
+LootRequest.belongsTo(GuildStorageItem, { foreignKey: 'storage_item_id' });
 GuildStorageItem.belongsTo(Item, { foreignKey: 'item_id' });
 Item.hasMany(GuildStorageItem, { foreignKey: 'item_id' });
 Team.belongsTo(Event, { foreignKey: 'event_id' });
