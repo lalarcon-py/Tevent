@@ -319,17 +319,24 @@ const GuildStorageItem = sequelize.define('GuildStorageItem', {
 });
 
 // Associations
-User.hasMany(LootRequest);
-Item.hasMany(LootRequest);
 User.hasMany(DKPTransaction);
 LootRequest.belongsTo(User, { 
     foreignKey: 'user_id',
-    constraints: false // Add this if you want to prevent foreign key constraints
+    as: 'user'
 });
 
 LootRequest.belongsTo(GuildStorageItem, { 
     foreignKey: 'storage_item_id',
-    constraints: false
+    as: 'storageItem'
+});
+User.hasMany(LootRequest, { 
+    foreignKey: 'user_id',
+    as: 'lootRequests'
+});
+
+GuildStorageItem.hasMany(LootRequest, { 
+    foreignKey: 'storage_item_id',
+    as: 'requests'
 });
 GuildStorageItem.belongsTo(Item, { foreignKey: 'item_id' });
 Item.hasMany(GuildStorageItem, { foreignKey: 'item_id' });
@@ -369,5 +376,6 @@ module.exports = {
    EventParticipant,
    Team,
    TeamMember,
-   TeamPreset
+   TeamPreset,
+   GuildStorageItem
 };

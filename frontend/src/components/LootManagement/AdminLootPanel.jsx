@@ -92,12 +92,11 @@ const AdminLootPanel = () => {
  const handleRequestItem = async (item) => {
   try {
     const response = await axiosInstance.post('/api/waitlist', {
-      storageItemId: item.id,
+      storageItemId: item.id  // Make sure this matches the item ID from storage
     });
     console.log('Item requested successfully');
   } catch (error) {
     console.error('Failed to request item:', error);
-    console.error('Error details:', error.response?.data);  // Added more error details
   }
 };
 
