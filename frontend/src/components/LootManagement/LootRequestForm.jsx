@@ -48,11 +48,19 @@ const LootRequestForm = () => {
    return filtered;
  };
 
- const handleSubmit = () => {
-   if (selectedItem) {
-     console.log('Submitting request for:', selectedItem);
-   }
- };
+ const handleSubmit = async () => {
+  if (selectedItem) {
+    try {
+      await axiosInstance.post('/api/waitlist', {
+        storageItemId: selectedItem.id
+      });
+      console.log('Request submitted successfully');
+    } catch (error) {
+      console.error('Failed to submit request:', error);
+      console.error('Error details:', error.response?.data);
+    }
+  }
+};
 
  return (
    <Paper 
