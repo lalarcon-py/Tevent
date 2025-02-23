@@ -6,18 +6,21 @@ const { LootRequest, Item, User } = require('../models');
 // Get all wait list requests
 router.get('/', async (req, res) => {
   try {
-    const waitListItems = await db.LootRequest.findAll({
+    const waitListItems = await LootRequest.findAll({
       include: [
         {
-          model: db.Item,
-          attributes: ['name', 'type', 'icon', 'dkpCost']
+          model: GuildStorageItem,
+          include: [{
+            model: Item,
+            attributes: ['name', 'type', 'icon', 'dkp_cost']
+          }]
         },
         {
-          model: db.User,
+          model: User,
           attributes: ['username', 'discord_id', 'avatar_url']
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: [['created_at', 'DESC']]
     });
     res.json(waitListItems);
   } catch (error) {
@@ -29,7 +32,7 @@ router.get('/', async (req, res) => {
 // Create new request
 router.post('/', async (req, res) => {
   try {
-    const { itemId } = req.body;
+    const { storageItemId } = req.body;  // Changed from itemId to storageItemId
     
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
@@ -40,7 +43,7 @@ router.post('/', async (req, res) => {
     // Check if user already has a pending request for this item
     const existingRequest = await LootRequest.findOne({
       where: {
-        storage_item_id: itemId,
+        storage_item_id: storageItemId,  // Match column name
         user_id: userId,
         status: 'Pending'
       }
@@ -52,12 +55,11 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Note: id is UUID type and will be auto-generated
     const newRequest = await LootRequest.create({
-      storage_item_id: itemId,
+      storage_item_id: storageItemId,  // Match column name
       user_id: userId,
       status: 'Pending',
-      priority: 0  // Added this since it has a default in your schema
+      priority: 0
     });
 
     res.status(201).json(newRequest);
@@ -76,7 +78,14 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const request = await WaitList.findByPk(id);
+    const request = await LootRequest.findOne({
+      where: { id },
+      include: [{
+        model: GuildStorageItem,
+        include: [Item]
+      }]
+    });
+
     if (!request) {
       return res.status(404).json({ error: 'Request not found' });
     }
@@ -84,10 +93,9 @@ router.put('/:id', async (req, res) => {
     await request.update({ status });
 
     // If approved, update item quantity
-    if (status === 'approved') {
-      const item = await Item.findByPk(request.itemId);
-      if (item.quantity > 0) {
-        await item.update({ quantity: item.quantity - 1 });
+    if (status === 'Approved') {
+      if (request.GuildStorageItem.quantity > 0) {
+        await request.GuildStorageItem.decrement('quantity');
       }
     }
 
