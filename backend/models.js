@@ -287,6 +287,42 @@ const Team = sequelize.define('Team', {
     timestamps: true
 });
 
+//GuildStorageItem
+const GuildStorageItem = sequelize.define('GuildStorageItem', {
+    id: { 
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true 
+    },
+    item_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'items',
+            key: 'id'
+        }
+    },
+    quantity: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        allowNull: true
+    },
+    trait: {
+        type: DataTypes.STRING(255),
+        allowNull: true
+    },
+    dkp_cost: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        allowNull: true
+    }
+}, {
+    tableName: 'guild_storage_items',
+    freezeTableName: true,
+    underscored: true,
+    timestamps: true
+});
+
 // Associations
 User.hasMany(LootRequest);
 Item.hasMany(LootRequest);
@@ -297,6 +333,8 @@ LootRequest.belongsTo(User, {
 LootRequest.belongsTo(GuildStorageItem, {  // You'll need to define this model
     foreignKey: 'storage_item_id'
 });
+GuildStorageItem.belongsTo(Item, { foreignKey: 'item_id' });
+Item.hasMany(GuildStorageItem, { foreignKey: 'item_id' });
 Team.belongsTo(Event, { foreignKey: 'event_id' });
 Team.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 Team.hasMany(TeamMember, { foreignKey: 'team_id', as: 'members' });

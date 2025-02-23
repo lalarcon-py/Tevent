@@ -3,15 +3,16 @@ require('dotenv').config();
 
 const baseConfig = {
   development: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
+    url: process.env.DATABASE_URL,
     dialect: 'postgres',
+    dialectOptions: {
+      ssl: false
+    },
     migrationStorageTableName: 'SequelizeMeta',
     migrationPath: path.resolve(__dirname, '../migrations')
   },
   production: {
+    url: process.env.DATABASE_URL,
     dialect: 'postgres',
     dialectOptions: {
       ssl: {
@@ -19,7 +20,6 @@ const baseConfig = {
         rejectUnauthorized: false
       }
     },
-    url: process.env.DATABASE_URL,
     migrationStorageTableName: 'SequelizeMeta',
     migrationPath: path.resolve(__dirname, '../migrations')
   }
@@ -35,7 +35,9 @@ const getGuildConfig = (guildId = null) => {
       url.pathname = `/guild_manager_${guildId}`;
       config.production.url = url.toString();
     } else {
-      config.development.database = `guild_manager_${guildId}`;
+      const url = new URL(process.env.DATABASE_URL);
+      url.pathname = `/guild_manager_${guildId}`;
+      config.development.url = url.toString();
     }
   }
   
