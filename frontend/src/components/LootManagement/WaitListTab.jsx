@@ -25,43 +25,57 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLoot } from '../../contexts/LootContext';
 
 const WaitListTab = () => {
-  const { requests, loadRequests } = useLoot();
   const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     title: '',
     message: '',
     action: null
   });
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
-      const initialLoad = async () => {
-        try {
-          await loadRequests();
-        } finally {
-          setLoading(false);
-        }
-      };
-      initialLoad();
+      loadRequests();
     }
   }, [isAuthenticated]);
+
+  const loadRequests = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get('/api/waitlist');
+      
+      if (response.data && Array.isArray(response.data)) {
+        setRequests(response.data);
+      } else {
+        console.error('Unexpected response format:', response.data);
+        setRequests([]);
+      }
+    } catch (error) {
+      console.error('Failed to load requests:', error);
+      setError('Failed to load item requests');
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleApprove = async (request) => {
     setConfirmDialog({
       open: true,
       title: 'Approve Request',
-      message: `Are you sure you want to approve ${request?.User?.username}'s request for ${request?.Item?.name}?`,
+      message: `Are you sure you want to approve ${request?.User?.username || 'this user'}'s request for ${request?.StorageItem?.Item?.name || 'this item'}?`,
       action: async () => {
         try {
           await axiosInstance.put(`/api/loot/request/${request.id}/approve`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to approve request:', error);
+          setError('Failed to approve request');
         }
       }
     });
@@ -71,13 +85,14 @@ const WaitListTab = () => {
     setConfirmDialog({
       open: true,
       title: 'Deny Request',
-      message: `Are you sure you want to deny ${request?.User?.username}'s request for ${request?.Item?.name}?`,
+      message: `Are you sure you want to deny ${request?.User?.username || 'this user'}'s request for ${request?.StorageItem?.Item?.name || 'this item'}?`,
       action: async () => {
         try {
           await axiosInstance.put(`/api/loot/request/${request.id}/deny`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to deny request:', error);
+          setError('Failed to deny request');
         }
       }
     });
@@ -87,13 +102,14 @@ const WaitListTab = () => {
     setConfirmDialog({
       open: true,
       title: 'Delete Request',
-      message: `Are you sure you want to delete ${request?.User?.username}'s request for ${request?.Item?.name}?`,
+      message: `Are you sure you want to delete ${request?.User?.username || 'this user'}'s request for ${request?.StorageItem?.Item?.name || 'this item'}?`,
       action: async () => {
         try {
           await axiosInstance.delete(`/api/loot/request/${request.id}`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to delete request:', error);
+          setError('Failed to delete request');
         }
       }
     });
@@ -103,6 +119,22 @@ const WaitListTab = () => {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
         <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3, color: 'error.main', textAlign: 'center' }}>
+        <Typography>{error}</Typography>
+        <Button 
+          variant="contained" 
+          color="primary" 
+          onClick={loadRequests} 
+          sx={{ mt: 2 }}
+        >
+          Try Again
+        </Button>
       </Box>
     );
   }
@@ -130,10 +162,10 @@ const WaitListTab = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {Array.isArray(requests) && requests.length > 0 ? (
+              {requests.length > 0 ? (
                 requests.map((request) => (
                   <TableRow 
-                    key={request?.id || Math.random()}
+                    key={request.id}
                     sx={{ 
                       '&:hover': { 
                         bgcolor: 'rgba(144, 202, 249, 0.1)',
@@ -145,20 +177,20 @@ const WaitListTab = () => {
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar 
-                          src={request?.StorageItem?.Item?.icon} 
+                          src={(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.icon : null} 
                           sx={{ 
                             width: 40, 
                             height: 40,
                             border: '2px solid #90caf9'
                           }}
                         >
-                          {!request?.StorageItem?.Item?.icon && request?.StorageItem?.Item?.name?.[0]}
+                          {(request.StorageItem && request.StorageItem.Item && request.StorageItem.Item.name) ? request.StorageItem.Item.name[0] : '?'}
                         </Avatar>
                         <Box>
                           <Typography sx={{ color: 'white' }}>
-                            {request?.StorageItem?.Item?.name || 'Unknown Item'}
+                            {(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.name : 'Unknown Item'}
                           </Typography>
-                          {request?.StorageItem?.trait && (
+                          {request.StorageItem && request.StorageItem.trait && (
                             <Typography 
                               variant="caption" 
                               sx={{ 
@@ -168,42 +200,44 @@ const WaitListTab = () => {
                                 fontSize: '0.75rem'
                               }}
                             >
-                              {request?.StorageItem?.trait}
+                              {request.StorageItem.trait}
                             </Typography>
                           )}
                         </Box>
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ color: 'white' }}>{request?.StorageItem?.Item?.type || 'Unknown'}</TableCell>
+                    <TableCell sx={{ color: 'white' }}>
+                      {(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.type : 'Unknown'}
+                    </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar 
-                          src={request?.User?.avatar_url} 
+                          src={request.User ? request.User.avatar_url : null} 
                           sx={{ 
                             width: 40, 
                             height: 40,
                             border: '2px solid #90caf9'
                           }}
                         >
-                          {!request?.User?.avatar_url && request?.User?.username?.[0]}
+                          {request.User && request.User.username ? request.User.username[0] : '?'}
                         </Avatar>
                         <Typography sx={{ color: 'white' }}>
-                          {request?.User?.username || 'Unknown User'}
+                          {request.User ? request.User.username : 'Unknown User'}
                         </Typography>
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ color: 'white' }}>{request?.priority || 0}</TableCell>
+                    <TableCell sx={{ color: 'white' }}>{request.priority || 0}</TableCell>
                     <TableCell>
                       <Typography sx={{ 
-                        color: request?.status === 'Approved' ? '#4caf50' : 
-                               request?.status === 'Denied' ? '#f44336' : '#ffb74d'
+                        color: request.status === 'Approved' ? '#4caf50' : 
+                               request.status === 'Denied' ? '#f44336' : '#ffb74d'
                       }}>
-                        {request?.status || 'Pending'}
+                        {request.status || 'Pending'}
                       </Typography>
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        {request?.status === 'Pending' && (
+                        {request.status === 'Pending' && (
                           <>
                             <Tooltip title="Approve">
                               <IconButton

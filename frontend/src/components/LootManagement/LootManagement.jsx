@@ -1,12 +1,19 @@
-// components/LootManagement/LootManagement.jsx
 import { useState } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
 import AdminLootPanel from './AdminLootPanel';
 import WaitListTab from './WaitListTab';
 import AttendanceManagement from './AttendanceManagement';
+import LootRequestForm from './LootRequestForm';
+import LootWaitlist from './LootWaitlist';
+import { useAuth } from '../../contexts/AuthContext';
 
 const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
+  const { isAuthenticated } = useAuth();
+  
+  // Check if user is admin - this would typically come from your auth context
+  // For now we'll default to true for demonstration
+  const isAdmin = true;
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -23,19 +30,33 @@ const LootManagement = () => {
           }
         }}
       >
-        <Tab label="Loot Management" />
-        <Tab label="Wait List" />
-        <Tab label="Attendance" />
+        <Tab label="Item Storage" />
+        <Tab label="Requests" />
+        <Tab label={isAdmin ? "Manage Attendance" : "My Waitlist"} />
       </Tabs>
 
-      <Box hidden={currentTab !== 0}>
-        <AdminLootPanel />
+      <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
+        {isAdmin ? (
+          <AdminLootPanel />
+        ) : (
+          <LootRequestForm />
+        )}
       </Box>
-      <Box hidden={currentTab !== 1}>
-        <WaitListTab />
+      
+      <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
+        {isAdmin ? (
+          <WaitListTab />
+        ) : (
+          <LootRequestForm />
+        )}
       </Box>
-      <Box hidden={currentTab !== 2}>
-        <AttendanceManagement />
+      
+      <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
+        {isAdmin ? (
+          <AttendanceManagement />
+        ) : (
+          <LootWaitlist />
+        )}
       </Box>
     </Box>
   );

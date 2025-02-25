@@ -22,6 +22,9 @@ const waitlistRouter = require('./routes/waitlist');
 const guildStorageRouter = require('./routes/guildStorage');
 const statsRoutes = require('./routes/statsRoutes');
 
+const waitlistRoutes = require('./routes/waitlist');
+const guildStorageRoutes = require('./routes/guildStorage');
+
 
 console.log('Environment Variables Check:', {
   DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
