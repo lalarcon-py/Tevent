@@ -36,41 +36,77 @@ const dashboardController = {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
-
+  
       const users = await User.findAll({
-        where: {
-          combat_power: {
-            [Op.not]: null
+        attributes: ['id', 'builds', 'combat_power'],
+        raw: true
+      });
+  
+      console.log('Found users:', users.length);
+      
+      const stats = {
+        roles: {},
+        weapons: {
+          primary: {},
+          secondary: {}
+        },
+        specs: {}
+      };
+  
+      users.forEach(user => {
+        try {
+          const buildsData = user.builds;
+          let builds = [];
+          
+          if (Array.isArray(buildsData)) {
+            builds = buildsData;
+          } else if (typeof buildsData === 'string') {
+            builds = JSON.parse(buildsData);
+          } else if (buildsData && typeof buildsData === 'object') {
+            builds = [buildsData];
           }
+          
+          builds.forEach(build => {
+            if (!build) return;
+            
+            const role = (build.spec || '').toLowerCase();
+            const weaponSpec = (build.weapon_spec || '').toLowerCase();
+            const primary = (build.primary || '').toLowerCase();
+            const secondary = (build.secondary || '').toLowerCase();
+  
+            if (role) stats.roles[role] = (stats.roles[role] || 0) + 1;
+            if (weaponSpec) stats.specs[weaponSpec] = (stats.specs[weaponSpec] || 0) + 1;
+            if (primary) stats.weapons.primary[primary] = (stats.weapons.primary[primary] || 0) + 1;
+            if (secondary) stats.weapons.secondary[secondary] = (stats.weapons.secondary[secondary] || 0) + 1;
+          });
+        } catch (error) {
+          console.error('Error processing user builds:', {
+            userId: user.id,
+            builds: user.builds,
+            error: error.message
+          });
         }
       });
-
-      const cpValues = users.map(u => u.combat_power).filter(Boolean);
-
-      const stats = {
-        average_cp: cpValues.length ? Math.round(cpValues.reduce((a, b) => a + b, 0) / cpValues.length) : 0,
-        max_cp: Math.max(...cpValues, 0),
-        min_cp: Math.min(...cpValues, Infinity),
-        cp_distribution: cpValues.reduce((acc, cp) => {
-          const range = cp < 1000 ? '<1000' :
-                       cp < 2000 ? '1000-2000' :
-                       cp < 3000 ? '2000-3000' : '3000+';
-          if (!acc[range]) acc[range] = 0;
-          acc[range]++;
-          return acc;
-        }, {})
-      };
-
-      res.json({
-        ...stats,
-        cp_distribution: Object.entries(stats.cp_distribution).map(([cp_range, count]) => ({
-          cp_range,
-          count
-        }))
+  
+      console.log('Stats prepared with counts:', {
+        rolesCount: Object.keys(stats.roles).length,
+        specsCount: Object.keys(stats.specs).length,
+        primaryWeaponsCount: Object.keys(stats.weapons.primary).length,
+        secondaryWeaponsCount: Object.keys(stats.weapons.secondary).length
       });
+  
+      res.json(stats);
     } catch (error) {
-      console.error('Error in getCombatStats:', error);
-      res.status(500).json({ error: 'Failed to fetch combat stats', details: error.message });
+      console.error('Combat stats error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        code: error.code
+      });
+      res.status(500).json({ 
+        error: 'Failed to get combat stats',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   },
 
