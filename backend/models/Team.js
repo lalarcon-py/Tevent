@@ -1,9 +1,20 @@
+'use strict';
+const { Model } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
-  const Team = sequelize.define('Team', {
-    id: {
+  class Team extends Model {
+    static associate(models) {
+      Team.belongsTo(models.Event, { foreignKey: 'event_id' });
+      Team.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
+      Team.hasMany(models.TeamMember, { foreignKey: 'team_id', as: 'members' });
+    }
+  }
+
+  Team.init({
+    id: { 
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+      primaryKey: true 
     },
     name: {
       type: DataTypes.STRING,
@@ -11,31 +22,27 @@ module.exports = (sequelize, DataTypes) => {
     },
     event_id: {
       type: DataTypes.UUID,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'events',
+        key: 'id'
+      }
     },
     created_by: {
       type: DataTypes.UUID,
-      allowNull: false
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
     }
   }, {
+    sequelize,
+    modelName: 'Team',
     tableName: 'teams',
-    timestamps: true,
-    underscored: true
+    underscored: true,
+    timestamps: true
   });
-
-  Team.associate = (models) => {
-    Team.belongsTo(models.Event, { foreignKey: 'event_id' });
-    Team.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
-    Team.hasMany(models.TeamMember, { foreignKey: 'team_id', as: 'members' });
-  };
 
   return Team;
 };

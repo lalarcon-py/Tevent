@@ -1,34 +1,32 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+'use strict';
+const { Model } = require('sequelize');
 
-const Item = sequelize.define('Item', {
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  type: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  dkpCost: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  icon: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  inStorage: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-  quantity: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
-}, {
-  tableName: 'items',
-  timestamps: true,
-});
+module.exports = (sequelize, DataTypes) => {
+  class Item extends Model {
+    static associate(models) {
+      Item.hasMany(models.GuildStorageItem, { foreignKey: 'item_id' });
+    }
+  }
 
-module.exports = Item;
+  Item.init({
+    id: { 
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true 
+    },
+    name: { type: DataTypes.STRING, allowNull: false },
+    type: { type: DataTypes.STRING },
+    rarity: { type: DataTypes.ENUM('Common', 'Rare', 'Epic', 'Legendary') },
+    dkpCost: { type: DataTypes.INTEGER, defaultValue: 0 },
+    inStorage: { type: DataTypes.BOOLEAN, defaultValue: false }, 
+    quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
+    icon: { type: DataTypes.STRING }
+  }, {
+    sequelize,
+    modelName: 'Item',
+    tableName: 'items',
+    freezeTableName: true
+  });
+
+  return Item;
+};

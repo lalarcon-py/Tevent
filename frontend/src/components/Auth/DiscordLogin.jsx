@@ -1,30 +1,22 @@
 import { useState } from 'react';
 import { Button, Box } from '@mui/material';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 
 const DiscordLogin = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    console.log('Login attempt started');
-    console.log('API_URL:', API_URL);
-
+    const authUrl = `${BACKEND_URL}/auth/discord`;
+    console.log('Attempting to redirect to:', authUrl);
     try {
       setLoading(true);
-      console.log('Redirecting to Discord auth at:', `${API_URL}/auth/discord`);
-      window.location.href = `${API_URL}/auth/discord`;
+      window.location.href = authUrl;
     } catch (error) {
-      console.error('Login attempt failed with error:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
+      console.error('Login attempt failed:', error);
       setLoading(false);
     }
   };
-
-  console.log('Component rendered with API_URL:', API_URL);
 
   return (
     <Box sx={{ 
@@ -39,9 +31,7 @@ const DiscordLogin = () => {
         disabled={loading}
         sx={{
           bgcolor: '#5865F2',
-          '&:hover': { 
-            bgcolor: '#4752C4'
-          },
+          '&:hover': { bgcolor: '#4752C4' },
           py: 1.5,
           px: 4,
           fontSize: '1rem',

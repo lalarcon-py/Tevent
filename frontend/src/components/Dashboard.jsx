@@ -5,10 +5,10 @@ import MembershipStats from './DashboardComponents/MembershipStats';
 import CombatStats from './DashboardComponents/CombatStats';
 import AttendanceStats from './DashboardComponents/AttendanceStats';
 import WeaponStats from './DashboardComponents/WeaponStats';
-import { useAuth } from '../contexts/AuthContext'; // Add this
+import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard = () => {
-  const { isAuthenticated, loading: authLoading } = useAuth(); // Add this
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [guildStats, setGuildStats] = useState({
     memberStats: null,
     combatStats: null,
@@ -19,28 +19,60 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Only fetch if authenticated
     if (!isAuthenticated) return;
 
     const fetchGuildStats = async () => {
       try {
         setLoading(true);
-        const responses = await Promise.all([
-          axiosInstance.get('/api/stats/members'),
-          axiosInstance.get('/api/stats/combat'),
-          axiosInstance.get('/api/stats/attendance'),
-          axiosInstance.get('/api/stats/weapons')
+        setError(null);
+
+        // Add headers to ensure we're sending auth tokens
+        const config = {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          withCredentials: true
+        };
+
+        const responses = await Promise.allSettled([
+          axiosInstance.get('/api/stats/members', config),
+          axiosInstance.get('/api/stats/combat', config),
+          axiosInstance.get('/api/stats/attendance', config),
+          axiosInstance.get('/api/stats/weapons', config)
         ]);
 
-        setGuildStats({
-          memberStats: responses[0].data,
-          combatStats: responses[1].data,
-          attendanceStats: responses[2].data,
-          weaponStats: responses[3].data
+        // Process each response, checking for errors
+        const processedResponses = responses.map(response => {
+          if (response.status === 'fulfilled') {
+            return response.value.data;
+          } else {
+            console.error('API call failed:', response.reason);
+            return null;
+          }
         });
+
+        const [members, combat, attendance, weapons] = processedResponses;
+
+        // Format the data before setting state
+        setGuildStats({
+          memberStats: members ? {
+            ...members,
+            cp_distribution: members.cp_distribution || [],
+            role_distribution: members.role_distribution || {},
+            weapon_combinations: members.weapon_combinations || {}
+          } : null,
+          combatStats: combat ? {
+            roles: combat.roles || {},
+            weapons: combat.weapons || { primary: {}, secondary: {} },
+            specs: combat.specs || {}
+          } : null,
+          attendanceStats: attendance || null,
+          weaponStats: weapons || null
+        });
+
       } catch (error) {
         console.error('Error fetching guild stats:', error);
-        setError('Failed to fetch guild stats');
+        setError(error.response?.data?.error || 'Failed to fetch guild stats');
       } finally {
         setLoading(false);
       }
@@ -49,9 +81,9 @@ const Dashboard = () => {
     fetchGuildStats();
     const interval = setInterval(fetchGuildStats, 300000);
     return () => clearInterval(interval);
-  }, [isAuthenticated]); // Add isAuthenticated as dependency
+  }, [isAuthenticated]);
 
-  // Show loading state while checking auth
+  // Your existing loading and error states remain the same
   if (authLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="#121212">
@@ -60,7 +92,6 @@ const Dashboard = () => {
     );
   }
 
-  // Show auth message if not authenticated
   if (!isAuthenticated) {
     return (
       <Box sx={{ p: 4, bgcolor: '#121212', minHeight: '100vh' }}>
@@ -71,7 +102,6 @@ const Dashboard = () => {
     );
   }
 
-  // Show loading state while fetching data
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="#121212">
@@ -80,7 +110,6 @@ const Dashboard = () => {
     );
   }
 
-  // Show error state if fetch failed
   if (error) {
     return (
       <Box sx={{ p: 4, bgcolor: '#121212', minHeight: '100vh' }}>
@@ -91,7 +120,7 @@ const Dashboard = () => {
     );
   }
 
-  // Only render stats components if we have data
+  // Your existing return statement remains the same
   return (
     <Box sx={{ p: 4, bgcolor: '#121212', minHeight: '100vh' }}>
       <Typography variant="h4" sx={{ color: 'white', mb: 4 }}>

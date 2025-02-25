@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { LootRequest, GuildStorageItem, Item, User } = require('../models');
+const db = require('../models');
 
 // Get all waitlist requests
 router.get('/', async (req, res) => {
   try {
-    const requests = await LootRequest.findAll({
+    const requests = await db.LootRequest.findAll({
       where: { status: 'Pending' },
       include: [
         {
@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
     const userId = req.user.id;
 
     // Check for existing request
-    const existingRequest = await LootRequest.findOne({
+    const existingRequest = await db.LootRequest.findOne({
       where: {
         storage_item_id: storageItemId,
         user_id: userId,
@@ -50,13 +50,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Request already exists' });
     }
 
-    const newRequest = await LootRequest.create({
+    const newRequest = await db.LootRequest.create({
       storage_item_id: storageItemId,
       user_id: userId,
       status: 'Pending'
     });
 
-    const fullRequest = await LootRequest.findOne({
+    const fullRequest = await db.LootRequest.findOne({
       where: { id: newRequest.id },
       include: [
         {
@@ -81,7 +81,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { status } = req.body;
-    const request = await LootRequest.findByPk(req.params.id, {
+    const request = await db.LootRequest.findByPk(req.params.id, {
       include: [
         {
           model: GuildStorageItem,
@@ -99,8 +99,8 @@ router.put('/:id', async (req, res) => {
 
     if (status === 'Approved') {
       // Decrease quantity in storage
-      if (request.GuildStorageItem.quantity > 0) {
-        await request.GuildStorageItem.decrement('quantity');
+      if (request.db.GuildStorageItem.quantity > 0) {
+        await request.db.GuildStorageItem.decrement('quantity');
       }
     }
 

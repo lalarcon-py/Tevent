@@ -1,58 +1,60 @@
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 const Sequelize = require('sequelize');
-const process = require('process');
 const basename = path.basename(__filename);
-const env = process.env.NODE_ENV || 'development';
-const config = require('../config/config')[env];
+const config = require('../config/database');
 const db = {};
 
-console.log('Starting model initialization...');
-console.log('Current directory:', __dirname);
-console.log('Starting model initialization...');
-console.log('Available models after initialization:', Object.keys(db));
+const sequelize = config.sequelize;
 
-let sequelize;
-if (config.use_env_variable) {
-  sequelize = new Sequelize(process.env[config.use_env_variable], config);
-} else {
-  sequelize = new Sequelize(
-    config.database, 
-    config.username, 
-    config.password, 
-    config
-  );
-}
+console.log('🔎 Scanning models directory for valid model files...');
 
-// Manually specify the models to load
-const models = {
-  Event: require('./Event'),
-  EventParticipant: require('./EventParticipant'),
-  User: require('./User'),
-  Item: require('./Item'),
-  LootRequest: require('./LootRequest'),
-  DKPTransaction: require('./DKPTransaction'),
-  Team: require('./Team'),
-  TeamMember: require('./TeamMember')
-};
+fs.readdirSync(__dirname)
+  .filter(file => {
+    const isValidModel = (
+      file !== basename &&
+      file.endsWith('.js') &&
+      !file.includes('.test.js') // Exclude test files
+    );
+    console.log(`📁 ${file} - ${isValidModel ? 'VALID' : 'IGNORED'}`);
+    return isValidModel;
+  })
+  .forEach(file => {
+    try {
+      console.log(`🔄 Attempting to load model from: ${file}`);
+      const modelPath = path.join(__dirname, file);
+      const modelModule = require(modelPath);
+      
+      // Validate the model file exports a function
+      if (typeof modelModule !== 'function') {
+        throw new Error(`❌ ${file} does not export a function (received ${typeof modelModule})`);
+      }
+      
+      // Initialize the model
+      const model = modelModule(sequelize, Sequelize.DataTypes);
+      db[model.name] = model;
+      console.log(`✅ Successfully loaded model: ${model.name}`);
+    } catch (error) {
+      console.error(`💥 Critical error loading ${file}:`, error.message);
+      console.error('🛑 Shutting down due to invalid model configuration');
+      process.exit(1); // Exit with error code
+    }
+  });
 
-// Initialize each model
-Object.entries(models).forEach(([name, model]) => {
-  console.log(`Initializing model: ${name}`);
-  db[name] = model(sequelize, Sequelize.DataTypes);
-});
-
-// Set up associations
-Object.values(db).forEach(model => {
-  if (model.associate) {
-    console.log(`Setting up associations for: ${model.name}`);
-    model.associate(db);
+console.log('🔗 Setting up model associations...');
+Object.keys(db).forEach(modelName => {
+  if (typeof db[modelName].associate === 'function') {
+    db[modelName].associate(db);
+    console.log(`➡️  Associated model: ${modelName}`);
   }
 });
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 
-console.log('Available models after initialization:', Object.keys(db));
+console.log('🎉 All models loaded successfully!');
+console.log('📦 Exported models:', Object.keys(db));
 
 module.exports = db;

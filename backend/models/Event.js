@@ -1,24 +1,19 @@
+'use strict';
 const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
   class Event extends Model {
     static associate(models) {
-      Event.belongsTo(models.User, {
-        foreignKey: 'created_by',
-        as: 'creator'
-      });
-      Event.hasMany(models.EventParticipant, {
-        foreignKey: 'event_id',
-        as: 'participants'
-      });
+      Event.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
+      Event.hasMany(models.EventParticipant, { foreignKey: 'event_id', as: 'participants' });
     }
   }
 
   Event.init({
-    id: {
+    id: { 
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+      primaryKey: true 
     },
     title: {
       type: DataTypes.STRING,
@@ -65,5 +60,4 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   return Event;
-}
-module.exports = Event;
+};

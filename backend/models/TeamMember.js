@@ -1,17 +1,35 @@
+'use strict';
+const { Model } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
-  const TeamMember = sequelize.define('TeamMember', {
-    id: {
+  class TeamMember extends Model {
+    static associate(models) {
+      TeamMember.belongsTo(models.Team, { foreignKey: 'team_id' });
+      TeamMember.belongsTo(models.User, { foreignKey: 'user_id' });
+    }
+  }
+
+  TeamMember.init({
+    id: { 
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+      primaryKey: true 
     },
     team_id: {
       type: DataTypes.UUID,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'teams',
+        key: 'id'
+      }
     },
     user_id: {
       type: DataTypes.UUID,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
     },
     role: {
       type: DataTypes.STRING,
@@ -20,25 +38,14 @@ module.exports = (sequelize, DataTypes) => {
     position: {
       type: DataTypes.INTEGER,
       allowNull: false
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
     }
   }, {
+    sequelize,
+    modelName: 'TeamMember',
     tableName: 'team_members',
-    timestamps: true,
-    underscored: true
+    underscored: true,
+    timestamps: true
   });
-
-  TeamMember.associate = (models) => {
-    TeamMember.belongsTo(models.Team, { foreignKey: 'team_id' });
-    TeamMember.belongsTo(models.User, { foreignKey: 'user_id' });
-  };
 
   return TeamMember;
 };

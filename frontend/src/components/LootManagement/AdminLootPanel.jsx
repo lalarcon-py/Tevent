@@ -27,13 +27,13 @@ const AdminLootPanel = () => {
  }, []);
 
  const fetchAddedItems = async () => {
-   try {
-     const response = await axiosInstance.get('/api/items');
-     setAddedItems(response.data.filter(item => item.quantity > 0 || item.inStorage));
-   } catch (error) {
-     console.error('Failed to fetch added items:', error);
-   }
- };
+  try {
+    const response = await axiosInstance.get(`/api/guild-storage/items?guildId=${currentGuildId}`);
+    setAddedItems(response.data);
+  } catch (error) {
+    console.error('Failed to fetch items:', error);
+  }
+};
 
  const fetchTemplateItems = async () => {
    try {
@@ -67,34 +67,21 @@ const AdminLootPanel = () => {
 
  const handleAddItem = async () => {
   try {
-    if (!newItem.name) return;
-
-    // Create only a guild storage entry, referencing the existing item
-    const storageResponse = await axiosInstance.post('/api/guild-storage', {
-      item_id: newItem.id,  // This should be the ID of the selected item from autocomplete
+    const response = await axiosInstance.post(`/api/guild-storage?guildId=${currentGuildId}`, {
+      item_id: newItem.id,
       quantity: newItem.quantity,
       dkp_cost: newItem.dkpCost
     });
-    
     await fetchAddedItems();
-    
-    setNewItem({
-      name: '',
-      type: '',
-      dkpCost: 0,
-      quantity: 1,
-      inStorage: true,
-      icon: ''
-    });
   } catch (error) {
-    console.error('Create/Update error:', error);
+    console.error('Failed to add item:', error);
   }
 };
 
- const handleRequestItem = async (item) => {
+const handleRequestItem = async (storageItem) => {
   try {
     const response = await axiosInstance.post('/api/waitlist', {
-      storageItemId: item.id  // Make sure this matches the item ID from storage
+      storageItemId: storageItem.id  // Use the guild_storage_items ID
     });
     console.log('Item requested successfully');
   } catch (error) {

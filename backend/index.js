@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
@@ -18,7 +19,18 @@ const databaseMiddleware = require('./middleware/databaseMiddleware');
 const schemaMiddleware = require('./middleware/schemaMiddleware');
 const guildRouter = require('./routes/guildRoutes');
 const waitlistRouter = require('./routes/waitlist');
+const guildStorageRouter = require('./routes/guildStorage');
 
+
+console.log('Environment Variables Check:', {
+  DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+  DISCORD_REDIRECT_URI: process.env.DISCORD_REDIRECT_URI,
+  NODE_ENV: process.env.NODE_ENV
+});
+
+const frontendURL = process.env.NODE_ENV === 'production' 
+  ? process.env.FRONTEND_URL 
+  : 'http://localhost:3002';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -47,9 +59,7 @@ sequelize.authenticate()
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.CLIENT_BASE_URL
-    : 'http://localhost:3002',
+  origin: frontendURL,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -59,22 +69,25 @@ app.use(session({
   store: new pgSession({
     conObject: {
       connectionString: process.env.DATABASE_URL,
-      ssl: {
+      ssl: process.env.NODE_ENV === 'production' ? {
         rejectUnauthorized: false
-      }
+      } : false
     }
   }),
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'fallback-secret-key',
   resave: false,
   saveUninitialized: false,
-  proxy: true,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
-    httpOnly: true
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
+
+app.use('/api/stats', dashboardController.getMemberStats);
+app.use('/api/stats', dashboardController.getCombatStats);
+app.use('/api/stats', dashboardController.getAttendanceStats);
+app.use('/api/stats', dashboardController.getWeaponStats);
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
@@ -90,13 +103,16 @@ app.use(passport.session());
 app.use(express.json());
 app.use(schemaMiddleware);
 
+const statsRoutes = require('./routes/statsRoutes');
+app.use('/api/stats', statsRoutes);
+app.use('/api/stats',databaseMiddleware, dashboardRouter);
+app.use('/api/guild-storage', databaseMiddleware, guildStorageRouter);
 app.use('/api/guilds', guildRouter);
 app.use('/api/waitlist', databaseMiddleware, waitlistRouter);
-app.use('/api/items',databaseMiddleware, itemsRouter);
-app.use('/api/events',databaseMiddleware, eventsRouter);
-app.use('/api/teams',databaseMiddleware, teamsRouter);
-app.use('/api/team-presets',databaseMiddleware, teamPresetsRouter);
-app.use('/api',databaseMiddleware, dashboardRouter);
+app.use('/api/items', databaseMiddleware, itemsRouter);
+app.use('/api/events', databaseMiddleware, eventsRouter);
+app.use('/api/teams', databaseMiddleware, teamsRouter);
+app.use('/api/team-presets', databaseMiddleware, teamPresetsRouter);
 
 app.use((req, res, next) => {
  if (req.method === 'PUT') {
@@ -133,6 +149,7 @@ passport.use(new DiscordStrategy({
     let user = await db.User.findOne({ where: { discord_id: profile.id } });
     
     if (!user) {
+      console.log('Creating new user');
       const defaultBuilds = [];
       user = await db.User.create({
         discord_id: profile.id,
@@ -143,14 +160,17 @@ passport.use(new DiscordStrategy({
           ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
           : null,
         builds: defaultBuilds
-      }, {
-        fields: ['discord_id', 'username', 'role', 'status', 'avatar_url', 'builds']
       });
     }
     
     done(null, user);
   } catch (error) {
-    console.error('Auth error:', error);
+    console.error('Auth error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      sql: error.sql
+    });
     done(error, null);
   }
 }));

@@ -1,16 +1,27 @@
-const { DataTypes } = require('sequelize');
+'use strict';
+const { Model } = require('sequelize');
 
-const DKPTransaction = (sequelize) => {
-  const DKPTransaction = sequelize.define('DKPTransaction', {
-    id: {
+module.exports = (sequelize, DataTypes) => {
+  class DKPTransaction extends Model {
+    static associate(models) {
+      DKPTransaction.belongsTo(models.User);
+    }
+  }
+
+  DKPTransaction.init({
+    id: { 
       type: DataTypes.UUID,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true 
     },
-    // Add other fields as needed
+    amount: { type: DataTypes.INTEGER, allowNull: false },
+    reason: { type: DataTypes.TEXT }
+  }, {
+    sequelize,
+    modelName: 'DKPTransaction',
+    tableName: 'DKPTransactions',
+    freezeTableName: true
   });
 
   return DKPTransaction;
 };
-
-module.exports = DKPTransaction;
