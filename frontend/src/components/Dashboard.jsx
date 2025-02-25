@@ -120,7 +120,13 @@ const Dashboard = () => {
     );
   }
 
-  // Your existing return statement remains the same
+  console.log('Data being passed to components:', {
+    memberStats: guildStats.memberStats,
+    combatStats: guildStats.combatStats,
+    attendanceStats: guildStats.attendanceStats,
+    weaponStats: guildStats.weaponStats
+  });
+
   return (
     <Box sx={{ p: 4, bgcolor: '#121212', minHeight: '100vh' }}>
       <Typography variant="h4" sx={{ color: 'white', mb: 4 }}>

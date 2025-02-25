@@ -9,26 +9,26 @@ const AttendanceStats = ({ data }) => {
       <Typography variant="h6" gutterBottom>
         Event Attendance
       </Typography>
-      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-        <Typography>Total Events: {data.total_events}</Typography>
-        <Typography>Average Attendance: {Math.round(data.average_attendance_rate)}%</Typography>
-      </Box>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {data.attendance_history?.map((item, index) => (
-          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography sx={{ minWidth: 100 }}>
-              {new Date(item.date).toLocaleDateString()}
+      <Typography>
+        Total Events: {data.total_events || 0}
+      </Typography>
+      <Typography>
+        Average Attendance: {Math.round(data.average_attendance_rate || 0)}%
+      </Typography>
+      
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Attendance History:
+        </Typography>
+        {Array.isArray(data.attendance_history) ? (
+          data.attendance_history.map((item, index) => (
+            <Typography key={index}>
+              {new Date(item.date).toLocaleDateString()}: {item.attendance_count} attendees
             </Typography>
-            <Box 
-              sx={{ 
-                height: 20, 
-                backgroundColor: '#8884d8',
-                width: `${(item.attendance_count / Math.max(...data.attendance_history.map(d => d.attendance_count))) * 100}%`
-              }} 
-            />
-            <Typography>{item.attendance_count}</Typography>
-          </Box>
-        ))}
+          ))
+        ) : (
+          <Typography>No attendance history available</Typography>
+        )}
       </Box>
     </Box>
   );

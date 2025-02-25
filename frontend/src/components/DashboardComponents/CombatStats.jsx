@@ -1,71 +1,206 @@
-// CombatStats.jsx
 import React from 'react';
-import { Typography, Box, LinearProgress } from '@mui/material';
+import { Typography, Box, Avatar, Divider, LinearProgress, Grid, Paper } from '@mui/material';
+
+const COLORS = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
 
 const CombatStats = ({ data }) => {
   if (!data) return <Typography>Loading combat stats...</Typography>;
 
-  // Process data into CP ranges
-  const processData = () => {
-    const ranges = [
-      { range: '<1000', min: 0, max: 999 },
-      { range: '1000-2000', min: 1000, max: 1999 },
-      { range: '2000-3000', min: 2000, max: 2999 },
-      { range: '3000-4000', min: 3000, max: 3999 },
-      { range: '4000+', min: 4000, max: Infinity }
-    ];
+  console.log("Combat stats data:", data); // Add this to see the structure of your data
+  
+  // Process weapons data from the actual API response
+  const primaryWeapons = Object.entries(data.weapons?.primary || {})
+    .map(([weapon, count]) => ({ weapon, count: Number(count) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  
+  const secondaryWeapons = Object.entries(data.weapons?.secondary || {})
+    .map(([weapon, count]) => ({ weapon, count: Number(count) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+    
+  // Process roles data
+  const roleData = Object.entries(data.roles || {})
+    .map(([role, count]) => ({ role, count: Number(count) }))
+    .sort((a, b) => b.count - a.count);
+    
+  // Process specs data
+  const specData = Object.entries(data.specs || {})
+    .map(([spec, count]) => ({ spec, count: Number(count) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
-    const distribution = ranges.map(range => ({
-      range: range.range,
-      count: data.users?.filter(user => 
-        user.combat_power >= range.min && user.combat_power <= range.max
-      ).length || 0
-    }));
+  // Find max values for progress bars
+  const maxPrimaryCount = primaryWeapons.length > 0 ? 
+    Math.max(...primaryWeapons.map(item => item.count)) : 1;
+  const maxSecondaryCount = secondaryWeapons.length > 0 ? 
+    Math.max(...secondaryWeapons.map(item => item.count)) : 1;
+  const maxRoleCount = roleData.length > 0 ? 
+    Math.max(...roleData.map(item => item.count)) : 1;
+  const maxSpecCount = specData.length > 0 ? 
+    Math.max(...specData.map(item => item.count)) : 1;
 
-    return distribution;
-  };
-
-  const validCPs = data.users?.map(u => u.combat_power).filter(cp => cp != null) || [];
-  const averageCP = validCPs.length ? Math.round(validCPs.reduce((a, b) => a + b, 0) / validCPs.length) : 0;
-  const maxCP = validCPs.length ? Math.max(...validCPs) : 0;
-  const minCP = validCPs.length ? Math.min(...validCPs) : 0;
-
-  const cpDistribution = processData();
-  const maxCount = Math.max(...cpDistribution.map(d => d.count));
+  // Calculate total players (approximate from primary weapons)
+  const totalPlayers = primaryWeapons.reduce((sum, item) => sum + item.count, 0);
 
   return (
     <Box>
       <Typography variant="h6" gutterBottom>
-        Combat Power Statistics
+        Combat Statistics
       </Typography>
-      <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-        <Typography>Average CP: {averageCP}</Typography>
-        <Typography>Max CP: {maxCP}</Typography>
-        <Typography>Min CP: {minCP}</Typography>
-      </Box>
-      <Box sx={{ mt: 2 }}>
-        {cpDistribution.map((item, index) => (
-          <Box key={index} sx={{ mb: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography>{item.range}</Typography>
-              <Typography>{item.count} players</Typography>
+      
+      {/* Class/Role Distribution */}
+      {roleData.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="subtitle1" sx={{ mb: 2 }}>
+            Class Distribution
+          </Typography>
+          
+          {roleData.map((item, index) => (
+            <Box key={index} sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                  {item.role}
+                </Typography>
+                <Typography variant="body2">
+                  {item.count} players ({Math.round((item.count / maxRoleCount) * 100)}%)
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={(item.count / maxRoleCount) * 100}
+                sx={{
+                  height: 8,
+                  borderRadius: 5,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: COLORS[index % COLORS.length],
+                    borderRadius: 5
+                  }
+                }}
+              />
             </Box>
-            <LinearProgress 
-              variant="determinate" 
-              value={(item.count / maxCount) * 100}
-              sx={{
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: 'rgba(136, 132, 216, 0.2)',
-                '& .MuiLinearProgress-bar': {
-                  backgroundColor: '#8884d8',
-                  borderRadius: 5
-                }
-              }}
-            />
-          </Box>
-        ))}
-      </Box>
+          ))}
+        </Box>
+      )}
+      
+      <Divider sx={{ my: 3 }} />
+      
+      {/* Primary Weapons */}
+      {primaryWeapons.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="subtitle1" sx={{ mb: 2 }}>
+            Top Primary Weapons
+          </Typography>
+          
+          {primaryWeapons.map((item, index) => (
+            <Box key={index} sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                  {item.weapon}
+                </Typography>
+                <Typography variant="body2">
+                  {item.count} players ({Math.round((item.count / maxPrimaryCount) * 100)}%)
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={(item.count / maxPrimaryCount) * 100}
+                sx={{
+                  height: 8,
+                  borderRadius: 5,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: COLORS[(index + 2) % COLORS.length],
+                    borderRadius: 5
+                  }
+                }}
+              />
+            </Box>
+          ))}
+        </Box>
+      )}
+      
+      <Divider sx={{ my: 3 }} />
+      
+      {/* Secondary Weapons */}
+      {secondaryWeapons.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="subtitle1" sx={{ mb: 2 }}>
+            Top Secondary Weapons
+          </Typography>
+          
+          {secondaryWeapons.map((item, index) => (
+            <Box key={index} sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                  {item.weapon}
+                </Typography>
+                <Typography variant="body2">
+                  {item.count} players ({Math.round((item.count / maxSecondaryCount) * 100)}%)
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={(item.count / maxSecondaryCount) * 100}
+                sx={{
+                  height: 8,
+                  borderRadius: 5,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: COLORS[(index + 4) % COLORS.length],
+                    borderRadius: 5
+                  }
+                }}
+              />
+            </Box>
+          ))}
+        </Box>
+      )}
+      
+      <Divider sx={{ my: 3 }} />
+      
+      {/* Weapon Specializations */}
+      {specData.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="subtitle1" sx={{ mb: 2 }}>
+            Top Weapon Specializations
+          </Typography>
+          
+          {specData.map((item, index) => (
+            <Box key={index} sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                  {item.spec}
+                </Typography>
+                <Typography variant="body2">
+                  {item.count} players ({Math.round((item.count / maxSpecCount) * 100)}%)
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={(item.count / maxSpecCount) * 100}
+                sx={{
+                  height: 8,
+                  borderRadius: 5,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: COLORS[(index + 1) % COLORS.length],
+                    borderRadius: 5
+                  }
+                }}
+              />
+            </Box>
+          ))}
+        </Box>
+      )}
+      
+      {!roleData.length && !primaryWeapons.length && 
+       !secondaryWeapons.length && !specData.length && (
+        <Typography sx={{ color: 'text.secondary', mt: 2, textAlign: 'center' }}>
+          No combat statistics available
+        </Typography>
+      )}
     </Box>
   );
 };

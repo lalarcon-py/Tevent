@@ -20,6 +20,7 @@ const schemaMiddleware = require('./middleware/schemaMiddleware');
 const guildRouter = require('./routes/guildRoutes');
 const waitlistRouter = require('./routes/waitlist');
 const guildStorageRouter = require('./routes/guildStorage');
+const statsRoutes = require('./routes/statsRoutes');
 
 
 console.log('Environment Variables Check:', {
@@ -84,11 +85,6 @@ app.use(session({
   }
 }));
 
-app.use('/api/stats', dashboardController.getMemberStats);
-app.use('/api/stats', dashboardController.getCombatStats);
-app.use('/api/stats', dashboardController.getAttendanceStats);
-app.use('/api/stats', dashboardController.getWeaponStats);
-
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({ 
@@ -103,9 +99,7 @@ app.use(passport.session());
 app.use(express.json());
 app.use(schemaMiddleware);
 
-const statsRoutes = require('./routes/statsRoutes');
 app.use('/api/stats', statsRoutes);
-app.use('/api/stats',databaseMiddleware, dashboardRouter);
 app.use('/api/guild-storage', databaseMiddleware, guildStorageRouter);
 app.use('/api/guilds', guildRouter);
 app.use('/api/waitlist', databaseMiddleware, waitlistRouter);
