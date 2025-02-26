@@ -4,6 +4,7 @@ import { Box, TextField } from '@mui/material';
 import MembersList from './MembersList';
 import InviteLinkButton from '../InviteLinkButton';
 import GearCheckButton from './GearCheckButton';
+import LeaveGuildButton from './LeaveGuildButton'; // Import the new component
 import DiscordLogin from '../Auth/DiscordLogin';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -13,6 +14,7 @@ const GuildManagement = () => {
   const [members, setMembers] = useState([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [guildId, setGuildId] = useState(null); // Add state for guildId
 
   useEffect(() => {
     // Check authentication status
@@ -25,6 +27,14 @@ const GuildManagement = () => {
           const userData = await response.json();
           setIsAuthenticated(true);
           setCurrentUser(userData);
+          
+          // Get the current guild ID from URL or from user data
+          const pathParts = window.location.pathname.split('/');
+          const guildIdIndex = pathParts.indexOf('guilds') + 1;
+          if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
+            setGuildId(pathParts[guildIdIndex]);
+          }
+          
           // Fetch members after authentication
           fetchMembers();
         }
@@ -96,6 +106,7 @@ const GuildManagement = () => {
             <Box sx={{ display: 'flex', gap: 2 }}>
               <InviteLinkButton />
               <GearCheckButton />
+              {guildId && <LeaveGuildButton guildId={guildId} currentUserRole={currentUser?.role} />}
             </Box>
           </Box>
 

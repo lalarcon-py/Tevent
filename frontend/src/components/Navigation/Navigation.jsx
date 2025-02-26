@@ -1,3 +1,4 @@
+// src/components/Navigation/Navigation.jsx
 import { Link } from 'react-router-dom';
 import { 
   Drawer, 
@@ -5,9 +6,12 @@ import {
   ListItem, 
   ListItemText, 
   useTheme,
-  useMediaQuery 
+  useMediaQuery,
+  Box,
+  Divider
 } from '@mui/material';
 import GuildHeader from './GuildHeader';
+import LogoutButton from '../Auth/LogoutButton';
 
 const Navigation = () => {
   const theme = useTheme();
@@ -44,21 +48,29 @@ const Navigation = () => {
           <ListItemText primary="Gear Check" sx={{ color: 'white' }} />
         </ListItem>
         <ListItem 
-            button 
-            component={Link} 
-            to="/event-planner" 
-            sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
-          >
-            <ListItemText primary="Event Planner" sx={{ color: 'white' }} />
-          </ListItem>
-          <ListItem 
-            button 
-            component={Link} 
-            to="/team-planner" 
-            sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
-          >
-            <ListItemText primary="Team Planner" sx={{ color: 'white' }} />
-          </ListItem>
+          button 
+          component={Link} 
+          to="/event-planner" 
+          sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
+        >
+          <ListItemText primary="Event Planner" sx={{ color: 'white' }} />
+        </ListItem>
+        <ListItem 
+          button 
+          component={Link} 
+          to="/team-planner" 
+          sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
+        >
+          <ListItemText primary="Team Planner" sx={{ color: 'white' }} />
+        </ListItem>
+        
+        {/* Add a divider before logout */}
+        <Divider sx={{ my: 2, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
+        
+        {/* Add the logout button at the bottom */}
+        <ListItem>
+          <LogoutButton fullWidth variant="text" sx={{ color: '#ff6b6b' }} />
+        </ListItem>
       </List>
     </Drawer>
   );

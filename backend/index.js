@@ -185,9 +185,17 @@ passport.deserializeUser(async (id, done) => {
 app.get('/auth/discord', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback',
-  passport.authenticate('discord', { failureRedirect: '/login' }),
+  passport.authenticate('discord', { 
+    failureRedirect: '/error', 
+    failWithError: true 
+  }),
   async (req, res) => {
     try {
+      // Check if user is authenticated
+      if (!req.isAuthenticated() || !req.user) {
+        return res.redirect('/error');
+      }
+
       // Check if user is in any guilds
       const guildMember = await db.GuildMember.findOne({
         where: { user_id: req.user.id }
@@ -195,10 +203,10 @@ app.get('/auth/discord/callback',
 
       if (guildMember) {
         // User is in a guild, redirect to guild management
-        res.redirect(`/guild/${guildMember.guild_id}/management`);
+        res.redirect(`/guilds/${guildMember.guild_id}/dashboard`);
       } else {
-        // User is not in a guild, redirect to guild creation/join page
-        res.redirect('/guild-setup');
+        // User is not in a guild, redirect to guild setup page
+        res.redirect('/guilds/setup');
       }
     } catch (error) {
       console.error('Auth callback error:', error);
@@ -208,9 +216,20 @@ app.get('/auth/discord/callback',
 );
 
 app.get('/auth/logout', (req, res) => {
- req.logout((err) => {
-   res.redirect(process.env.CLIENT_BASE_URL);
- });
+  req.logout(err => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    req.session.destroy(err => {
+      if (err) {
+        console.error('Session destroy error:', err);
+        return res.status(500).json({ error: 'Session destruction failed' });
+      }
+      res.clearCookie('connect.sid');
+      return res.redirect(process.env.CLIENT_BASE_URL || 'http://localhost:3002');
+    });
+  });
 });
 
 app.get('/api/auth/status', (req, res) => {
@@ -307,8 +326,22 @@ app.put('/api/members/:id', async (req, res) => {
  }
 });
 
-// Remove this line since it conflicts with frontend routing
-// app.get('/', (req, res) => res.send('Backend server is running!'));
+// Error route
+app.get('/error', (req, res) => {
+  // If this is a JSON API request
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.status(400).json({ error: 'Authentication failed' });
+  }
+  
+  // If production with static frontend
+  if (process.env.NODE_ENV === 'production') {
+    const path = require('path');
+    return res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  }
+  
+  // In development, redirect to the frontend error page
+  res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/auth-error`);
+});
 
 // Static file serving in production - moved to end of file before catch-all
 if (process.env.NODE_ENV === 'production') {

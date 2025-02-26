@@ -44,6 +44,13 @@ const WaitListTab = () => {
     }
   }, [isAuthenticated]);
 
+  // Debug function to see what we're getting
+  useEffect(() => {
+    if (requests.length > 0) {
+      console.log('First request data:', requests[0]);
+    }
+  }, [requests]);
+
   const loadRequests = async () => {
     try {
       setLoading(true);
@@ -68,10 +75,10 @@ const WaitListTab = () => {
     setConfirmDialog({
       open: true,
       title: 'Approve Request',
-      message: `Are you sure you want to approve ${request?.User?.username || 'this user'}'s request for ${request?.StorageItem?.Item?.name || 'this item'}?`,
+      message: `Are you sure you want to approve ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
-          await axiosInstance.put(`/api/loot/request/${request.id}/approve`);
+          await axiosInstance.put(`/api/waitlist/${request.id}/approve`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to approve request:', error);
@@ -85,10 +92,10 @@ const WaitListTab = () => {
     setConfirmDialog({
       open: true,
       title: 'Deny Request',
-      message: `Are you sure you want to deny ${request?.User?.username || 'this user'}'s request for ${request?.StorageItem?.Item?.name || 'this item'}?`,
+      message: `Are you sure you want to deny ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
-          await axiosInstance.put(`/api/loot/request/${request.id}/deny`);
+          await axiosInstance.put(`/api/waitlist/${request.id}/deny`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to deny request:', error);
@@ -102,10 +109,10 @@ const WaitListTab = () => {
     setConfirmDialog({
       open: true,
       title: 'Delete Request',
-      message: `Are you sure you want to delete ${request?.User?.username || 'this user'}'s request for ${request?.StorageItem?.Item?.name || 'this item'}?`,
+      message: `Are you sure you want to delete ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
-          await axiosInstance.delete(`/api/loot/request/${request.id}`);
+          await axiosInstance.delete(`/api/waitlist/${request.id}`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to delete request:', error);
@@ -113,6 +120,33 @@ const WaitListTab = () => {
         }
       }
     });
+  };
+
+  // Helper functions to extract data consistently
+  const getStorageItem = (request) => {
+    return request?.storageItem || request?.StorageItem;
+  };
+
+  const getItem = (storageItem) => {
+    return storageItem?.item || storageItem?.Item;
+  };
+
+  const getItemName = (request) => {
+    const storageItem = getStorageItem(request);
+    const item = getItem(storageItem);
+    return item?.name || 'Unknown Item';
+  };
+
+  const getItemType = (request) => {
+    const storageItem = getStorageItem(request);
+    const item = getItem(storageItem);
+    return item?.type || 'Unknown';
+  };
+
+  const getItemIcon = (request) => {
+    const storageItem = getStorageItem(request);
+    const item = getItem(storageItem);
+    return item?.icon || null;
   };
 
   if (loading) {
@@ -163,124 +197,128 @@ const WaitListTab = () => {
             </TableHead>
             <TableBody>
               {requests.length > 0 ? (
-                requests.map((request) => (
-                  <TableRow 
-                    key={request.id}
-                    sx={{ 
-                      '&:hover': { 
-                        bgcolor: 'rgba(144, 202, 249, 0.1)',
-                        transform: 'scale(1.02)',
-                      },
-                      transition: 'all 0.3s ease'
-                    }}
-                  >
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar 
-                          src={(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.icon : null} 
-                          sx={{ 
-                            width: 40, 
-                            height: 40,
-                            border: '2px solid #90caf9'
-                          }}
-                        >
-                          {(request.StorageItem && request.StorageItem.Item && request.StorageItem.Item.name) ? request.StorageItem.Item.name[0] : '?'}
-                        </Avatar>
-                        <Box>
-                          <Typography sx={{ color: 'white' }}>
-                            {(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.name : 'Unknown Item'}
-                          </Typography>
-                          {request.StorageItem && request.StorageItem.trait && (
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: '#90caf9',
-                                mt: 0.5,
-                                display: 'block',
-                                fontSize: '0.75rem'
-                              }}
-                            >
-                              {request.StorageItem.trait}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ color: 'white' }}>
-                      {(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.type : 'Unknown'}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar 
-                          src={request.User ? request.User.avatar_url : null} 
-                          sx={{ 
-                            width: 40, 
-                            height: 40,
-                            border: '2px solid #90caf9'
-                          }}
-                        >
-                          {request.User && request.User.username ? request.User.username[0] : '?'}
-                        </Avatar>
-                        <Typography sx={{ color: 'white' }}>
-                          {request.User ? request.User.username : 'Unknown User'}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ color: 'white' }}>{request.priority || 0}</TableCell>
-                    <TableCell>
-                      <Typography sx={{ 
-                        color: request.status === 'Approved' ? '#4caf50' : 
-                               request.status === 'Denied' ? '#f44336' : '#ffb74d'
-                      }}>
-                        {request.status || 'Pending'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        {request.status === 'Pending' && (
-                          <>
-                            <Tooltip title="Approve">
-                              <IconButton
-                                onClick={() => handleApprove(request)}
-                                sx={{
-                                  color: '#4caf50',
-                                  '&:hover': { transform: 'scale(1.1)' }
-                                }}
-                              >
-                                <CheckCircleIcon />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Deny">
-                              <IconButton
-                                onClick={() => handleDeny(request)}
-                                sx={{
-                                  color: '#f44336',
-                                  '&:hover': { transform: 'scale(1.1)' }
-                                }}
-                              >
-                                <CancelIcon />
-                              </IconButton>
-                            </Tooltip>
-                          </>
-                        )}
-                        <Tooltip title="Delete">
-                          <IconButton
-                            onClick={() => handleDelete(request)}
-                            sx={{
-                              color: '#757575',
-                              '&:hover': { 
-                                color: '#f44336',
-                                transform: 'scale(1.1)'
-                              }
+                requests.map((request) => {
+                  const storageItem = getStorageItem(request);
+                  
+                  return (
+                    <TableRow 
+                      key={request.id}
+                      sx={{ 
+                        '&:hover': { 
+                          bgcolor: 'rgba(144, 202, 249, 0.1)',
+                          transform: 'scale(1.02)',
+                        },
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Avatar 
+                            src={getItemIcon(request)} 
+                            sx={{ 
+                              width: 40, 
+                              height: 40,
+                              border: '2px solid #90caf9'
                             }}
                           >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))
+                            {getItemName(request)?.[0] || '?'}
+                          </Avatar>
+                          <Box>
+                            <Typography sx={{ color: 'white' }}>
+                              {getItemName(request)}
+                            </Typography>
+                            {storageItem && storageItem.trait && (
+                              <Typography 
+                                variant="caption" 
+                                sx={{ 
+                                  color: '#90caf9',
+                                  mt: 0.5,
+                                  display: 'block',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                {storageItem.trait}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ color: 'white' }}>
+                        {getItemType(request)}
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Avatar 
+                            src={request.user ? request.user.avatar_url : null} 
+                            sx={{ 
+                              width: 40, 
+                              height: 40,
+                              border: '2px solid #90caf9'
+                            }}
+                          >
+                            {request.user && request.user.username ? request.user.username[0] : '?'}
+                          </Avatar>
+                          <Typography sx={{ color: 'white' }}>
+                            {request.user ? request.user.username : 'Unknown User'}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ color: 'white' }}>{request.priority || 0}</TableCell>
+                      <TableCell>
+                        <Typography sx={{ 
+                          color: request.status === 'Approved' ? '#4caf50' : 
+                                 request.status === 'Denied' ? '#f44336' : '#ffb74d'
+                        }}>
+                          {request.status || 'Pending'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          {request.status === 'Pending' && (
+                            <>
+                              <Tooltip title="Approve">
+                                <IconButton
+                                  onClick={() => handleApprove(request)}
+                                  sx={{
+                                    color: '#4caf50',
+                                    '&:hover': { transform: 'scale(1.1)' }
+                                  }}
+                                >
+                                  <CheckCircleIcon />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Deny">
+                                <IconButton
+                                  onClick={() => handleDeny(request)}
+                                  sx={{
+                                    color: '#f44336',
+                                    '&:hover': { transform: 'scale(1.1)' }
+                                  }}
+                                >
+                                  <CancelIcon />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
+                          <Tooltip title="Delete">
+                            <IconButton
+                              onClick={() => handleDelete(request)}
+                              sx={{
+                                color: '#757575',
+                                '&:hover': { 
+                                  color: '#f44336',
+                                  transform: 'scale(1.1)'
+                                }
+                              }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} sx={{ textAlign: 'center', color: 'white', py: 3 }}>
