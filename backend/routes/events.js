@@ -74,6 +74,38 @@ router.get('/:eventId/teams', async (req, res) => {
   }
 });
 
+router.delete('/:id/signup', isAuthenticated, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { userId } = req.body;
+    const eventId = req.params.id;
+    
+    // Determine whose signup to remove - the current user or a specified user
+    const userIdToRemove = userId || req.user.id;
+    
+    // Find and delete the participant
+    const deleted = await EventParticipant.destroy({
+      where: {
+        event_id: eventId,
+        user_id: userIdToRemove
+      },
+      transaction: t
+    });
+    
+    if (deleted === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Participant not found' });
+    }
+    
+    await t.commit();
+    res.status(200).json({ message: 'Successfully removed from event' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Error removing participant:', error);
+    res.status(500).json({ error: 'Failed to remove from event' });
+  }
+});
+
 router.post('/', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {

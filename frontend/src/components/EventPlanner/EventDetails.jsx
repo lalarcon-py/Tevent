@@ -1,5 +1,5 @@
 // EventPlanner/EventDetails.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -33,6 +33,25 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/auth/status`, {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setCurrentUser(userData);
+        }
+      } catch (error) {
+        console.error('Failed to fetch current user:', error);
+      }
+    };
+
+    fetchCurrentUser();
+  }, []);
 
   const totalPages = Math.ceil((event.participants?.length || 0) / PARTICIPANTS_PER_PAGE);
   const paginatedParticipants = event.participants?.slice(
@@ -63,6 +82,25 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleSignUp = async (role) => {
     try {
+      if (!currentUser) {
+        setError('You must be logged in to sign up');
+        return;
+      }
+
+      // Check if user is already signed up for this event with any role
+      const existingSignup = event.participants?.find(p => p.User?.id === currentUser.id);
+      
+      if (existingSignup) {
+        // If already signed up with the same role, do nothing
+        if (existingSignup.role === role) {
+          return;
+        }
+        
+        // If signed up with different role, remove the existing signup first
+        await handleRemoveParticipant(currentUser.id);
+      }
+      
+      // Now proceed with the new signup
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
         headers: {
@@ -85,19 +123,21 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRoleChange = async (userId, newRole) => {
     try {
+      await handleRemoveParticipant(userId);
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ role: newRole })
+        body: JSON.stringify({ role: newRole, userId }) // Include userId for admin operations
       });
       
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to change role');
       }
+      
       await onEventUpdate();
     } catch (error) {
       console.error('Error changing role:', error);
@@ -107,12 +147,21 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRemoveParticipant = async (userId) => {
     try {
-      const response = await fetch(`${API_URL}/api/events/${event.id}/participants/${userId}`, {
+      // Send DELETE request to /api/events/{eventId}/signup with userId in the body
+      const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'DELETE',
-        credentials: 'include'
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ userId })
       });
       
-      if (!response.ok) throw new Error('Failed to remove participant');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove participant');
+      }
+      
       await onEventUpdate();
     } catch (error) {
       console.error('Error removing participant:', error);
