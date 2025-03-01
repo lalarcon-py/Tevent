@@ -305,8 +305,9 @@ const TeamPlanner = () => {
       if (!eventId) return;
     
       try {
-        const [participantsResponse, teamsResponse] = await Promise.all([
-          fetch(`${API_URL}/api/events/${eventId}/participants`, {
+        // Fetch all events first
+        const [eventsResponse, teamsResponse] = await Promise.all([
+          fetch(`${API_URL}/api/events`, {
             credentials: 'include'
           }),
           fetch(`${API_URL}/api/teams/event/${eventId}`, {
@@ -314,31 +315,73 @@ const TeamPlanner = () => {
           })
         ]);
         
-        if (!participantsResponse.ok) {
-          throw new Error('Failed to fetch participants');
+        if (!eventsResponse.ok) {
+          throw new Error('Failed to fetch events data');
         }
     
-        const [participantsData, teamsData] = await Promise.all([
-          participantsResponse.json(),
+        // Process the responses
+        const [eventsData, teamsData] = await Promise.all([
+          eventsResponse.json(),
           teamsResponse.ok ? teamsResponse.json() : []
         ]);
     
-        console.log('Raw participants data:', participantsData);
+        // Find the specific event from the list
+        const eventData = eventsData.find(event => event.id === eventId);
+        
+        if (!eventData) {
+          throw new Error(`Event with ID ${eventId} not found`);
+        }
+    
+        console.log('Found event data:', eventData);
+        
+        // Extract participants from event data
+        const participantsData = eventData.participants || [];
+    
+        console.log('Participants data:', participantsData);
     
         // Filter out participants who are already in teams
         const teamMemberIds = teamsData.flatMap(team => 
-          team.members?.map(member => member.user_id) || []
+          team.members?.map(member => member.user_id || member.User?.id) || []
         );
         
-        const availableParticipants = participantsData.filter(
-          participant => !teamMemberIds.includes(participant.user_id)
-        );
+        const availableParticipants = participantsData.filter(participant => {
+          const participantId = participant.user_id || participant.User?.id;
+          return !teamMemberIds.includes(participantId);
+        });
     
-        setParticipants(availableParticipants);
+        // Format participants to ensure they have the correct structure
+        const formattedParticipants = availableParticipants.map(participant => {
+          // Ensure participant has builds array
+          let builds = participant.User?.builds || participant.builds || [];
+          
+          // If builds is a string, parse it
+          if (typeof builds === 'string') {
+            try {
+              builds = JSON.parse(builds);
+            } catch (error) {
+              console.error('Error parsing builds:', error);
+              builds = [];
+            }
+          }
+          
+          // Ensure builds is an array
+          builds = Array.isArray(builds) ? builds : [];
+          
+          return {
+            ...participant,
+            User: {
+              ...(participant.User || {}),
+              builds: builds
+            },
+            builds: builds
+          };
+        });
+    
+        setParticipants(formattedParticipants);
         setTeams(teamsData);
       } catch (error) {
         console.error('Error fetching data:', error);
-        setError('Failed to load data');
+        setError(error.message || 'Failed to load data');
       }
     };
   
