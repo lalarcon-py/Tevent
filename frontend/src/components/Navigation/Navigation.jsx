@@ -58,10 +58,10 @@ const Navigation = () => {
         <ListItem 
           button 
           component={Link} 
-          to="/team-planner" 
+          to="/event-summaries" 
           sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
         >
-          <ListItemText primary="Team Planner" sx={{ color: 'white' }} />
+          <ListItemText primary="Current Events" sx={{ color: 'white' }} />
         </ListItem>
         
         {/* Add a divider before logout */}

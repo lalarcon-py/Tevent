@@ -20,6 +20,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthError from './pages/AuthError';
 import GuildSetupOverlay from './components/Guild/GuildSetupOverlay';
 import theme from './theme';
+import EventSummaries from './components/EventSummaries/EventSummaries';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -208,6 +209,7 @@ function AppContent() {
             <Route path="/event-planner" element={<EventPlanner />} />
             <Route path="/event-planner/:eventId" element={<EventDetails />} />
             <Route path="/events/:eventId/team-planner" element={<TeamPlanner />} />
+            <Route path="/event-summaries" element={<EventSummaries />} />
             <Route path="/auth-error" element={<AuthError />} />
             <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/guilds/setup" element={<Navigate to="/" replace />} />

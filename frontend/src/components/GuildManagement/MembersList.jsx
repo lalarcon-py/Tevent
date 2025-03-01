@@ -449,6 +449,7 @@ const MembersList = ({ searchTerm }) => {
   const [members, setMembers] = useState([]);
   const [editMember, setEditMember] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [sortConfig, setSortConfig] = useState({
     key: null,
     direction: 'asc'
@@ -480,11 +481,11 @@ const MembersList = ({ searchTerm }) => {
   const handleRoleSave = async (updatedMember) => {
     try {
       const endpoint = updatedMember.role === 'Guild Master' 
-      ? `${API_URL}/api/members/transfer-guildmaster`
-      : `${API_URL}/api/members/${updatedMember.id}/update-role`;
+        ? `${API_URL}/api/members/transfer-guildmaster`
+        : `${API_URL}/api/members/${updatedMember.id}`;
   
       console.log('Sending update:', {
-        memberId: updatedMember.id,
+        id: updatedMember.id,
         role: updatedMember.role,
         username: updatedMember.username
       });
@@ -496,9 +497,14 @@ const MembersList = ({ searchTerm }) => {
         },
         credentials: 'include',
         body: JSON.stringify({
-          memberId: updatedMember.id,  // Explicitly include the ID
+          id: updatedMember.id,
           role: updatedMember.role,
-          username: updatedMember.username
+          username: updatedMember.username,
+          discord_id: updatedMember.discord_id,
+          status: updatedMember.status,
+          avatar_url: updatedMember.avatar_url,
+          builds: updatedMember.builds,
+          combat_power: updatedMember.combat_power
         })
       });
   
@@ -515,6 +521,7 @@ const MembersList = ({ searchTerm }) => {
       }
     } catch (error) {
       console.error('Error updating member:', error);
+      setError(error.message || 'Failed to update member');
     }
   };
   
