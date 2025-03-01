@@ -1,3 +1,4 @@
+// frontend/src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
@@ -26,11 +27,12 @@ const API_URL = process.env.NODE_ENV === 'development'
 
 // Main App content with authentication checking
 function AppContent() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, checkAuth } = useAuth();
   const [hasGuild, setHasGuild] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentGuildId, setCurrentGuildId] = useState(null);
 
+  // Add effect for mouse tracking (visual effect)
   useEffect(() => {
     const handleMouseMove = (e) => {
       document.documentElement.style.setProperty('--mouse-x', `${e.clientX}px`);
@@ -41,16 +43,53 @@ function AppContent() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  // Add effect to ensure auth is checked periodically
+  useEffect(() => {
+    // Check auth immediately on mount
+    checkAuth();
+    
+    // And set up interval for periodic checks
+    const interval = setInterval(() => {
+      checkAuth();
+    }, 300000); // Check every 5 minutes
+    
+    return () => clearInterval(interval);
+  }, [checkAuth]);
+
+  // Safe localStorage access
+  const safeGetLocalStorage = (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.warn('localStorage access error:', error);
+      return null;
+    }
+  };
+
+  const safeSetLocalStorage = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.warn('localStorage set error:', error);
+      return false;
+    }
+  };
+
+  // Check guild membership when auth state changes
   useEffect(() => {
     const checkGuildMembership = async () => {
       try {
         setLoading(true);
         
         if (!isAuthenticated) {
+          console.log('Not authenticated, clearing guild state');
           setHasGuild(false);
           setCurrentGuildId(null);
           return;
         }
+        
+        console.log('Checking guild membership for authenticated user');
         
         // Check if user has guilds
         const guildsResponse = await fetch(`${API_URL}/api/guilds/my-guilds`, {
@@ -59,13 +98,14 @@ function AppContent() {
         
         if (guildsResponse.ok) {
           const guildsData = await guildsResponse.json();
+          console.log('Guild data received:', guildsData); // Debug log
           
           // If user has active guilds
           if (guildsData.length > 0) {
             setHasGuild(true);
             
             // Get guild ID from local storage or use first guild
-            const storedGuildId = localStorage.getItem('guildId');
+            const storedGuildId = safeGetLocalStorage('guildId');
             const activeGuild = guildsData.find(g => g.status === 'ACTIVE');
             
             if (storedGuildId && guildsData.some(g => g.id === storedGuildId && g.status === 'ACTIVE')) {
@@ -73,20 +113,33 @@ function AppContent() {
             } else if (activeGuild) {
               // If we have an active guild but no stored ID, use the first active guild
               setCurrentGuildId(activeGuild.id);
-              localStorage.setItem('guildId', activeGuild.id);
+              safeSetLocalStorage('guildId', activeGuild.id);
             } else {
               // If no active guilds, clear storage
-              localStorage.removeItem('guildId');
+              try {
+                localStorage.removeItem('guildId');
+              } catch (e) {
+                console.warn('Failed to remove from localStorage:', e);
+              }
               setHasGuild(false);
             }
           } else {
             // No guilds at all
             setHasGuild(false);
-            localStorage.removeItem('guildId');
+            try {
+              localStorage.removeItem('guildId');
+            } catch (e) {
+              console.warn('Failed to remove from localStorage:', e);
+            }
           }
         } else {
+          console.error('Failed to fetch guilds:', guildsResponse.status);
           setHasGuild(false);
-          localStorage.removeItem('guildId');
+          try {
+            localStorage.removeItem('guildId');
+          } catch (e) {
+            console.warn('Failed to remove from localStorage:', e);
+          }
         }
       } catch (error) {
         console.error('Guild check failed:', error);
@@ -97,7 +150,7 @@ function AppContent() {
     };
 
     checkGuildMembership();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user]); // Add user as a dependency
 
   if (loading) {
     return (
@@ -117,8 +170,8 @@ function AppContent() {
 
   return (
     <>
-      {/* Show guild setup overlay if authenticated but no guild */}
-      {isAuthenticated && !hasGuild && <GuildSetupOverlay />}
+      {/* Show overlay when not authenticated OR when authenticated but no guild */}
+      {(!isAuthenticated || (isAuthenticated && !hasGuild)) && <GuildSetupOverlay />}
       
       <Router>
         <AppHeader />
@@ -142,9 +195,9 @@ function AppContent() {
               pointerEvents: 'none',
               zIndex: 0,
             },
-            // If not authenticated or no guild, blur the content
-            filter: (!isAuthenticated || !hasGuild) ? 'blur(5px)' : 'none',
-            pointerEvents: (!isAuthenticated || !hasGuild) ? 'none' : 'auto'
+            // If not authenticated, blur the content - and only check authentication now
+            filter: !isAuthenticated ? 'blur(5px)' : 'none',
+            pointerEvents: !isAuthenticated ? 'none' : 'auto'
           }}
         >
           <Routes>

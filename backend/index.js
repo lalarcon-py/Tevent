@@ -63,8 +63,8 @@ sequelize.authenticate()
 
 // Middleware
 app.use(cors({
-  origin: frontendURL,
-  credentials: true,
+  origin: frontendURL, // Make sure this matches exactly (http://localhost:3002)
+  credentials: true,   // This is critical
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -182,8 +182,6 @@ passport.deserializeUser(async (id, done) => {
  }
 });
 
-app.get('/auth/discord', passport.authenticate('discord'));
-
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { 
     failureRedirect: '/error', 
@@ -193,9 +191,14 @@ app.get('/auth/discord/callback',
     try {
       // Check if user is authenticated
       if (!req.isAuthenticated() || !req.user) {
-        return res.redirect('/error');
+        // Get the redirect URL from query params or use default
+        const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+        return res.redirect(`${redirectUrl}/error`);
       }
 
+      // Get the redirect URL from query params or use default
+      const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+      
       // Check if user is in any guilds
       const guildMember = await db.GuildMember.findOne({
         where: { user_id: req.user.id }
@@ -203,17 +206,28 @@ app.get('/auth/discord/callback',
 
       if (guildMember) {
         // User is in a guild, redirect to guild management
-        res.redirect(`/guilds/${guildMember.guild_id}/dashboard`);
+        res.redirect(`${redirectUrl}/guilds/${guildMember.guild_id}/dashboard`);
       } else {
         // User is not in a guild, redirect to guild setup page
-        res.redirect('/guilds/setup');
+        res.redirect(`${redirectUrl}/guilds/setup`);
       }
     } catch (error) {
       console.error('Auth callback error:', error);
-      res.redirect('/error');
+      const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+      res.redirect(`${redirectUrl}/error`);
     }
   }
 );
+
+app.get('/auth/discord', (req, res, next) => {
+  const redirectUrl = req.query.redirectUrl || '';
+  const state = Buffer.from(JSON.stringify({ redirectUrl })).toString('base64');
+  
+  passport.authenticate('discord', { 
+    state,
+    scope: ['identify', 'guilds']
+  })(req, res, next);
+});
 
 app.get('/auth/logout', (req, res) => {
   req.logout(err => {

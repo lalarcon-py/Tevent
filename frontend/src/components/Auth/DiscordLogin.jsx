@@ -1,3 +1,4 @@
+// src/components/Auth/DiscordLogin.jsx
 import { useState } from 'react';
 import { Button, Box } from '@mui/material';
 
@@ -7,7 +8,8 @@ const DiscordLogin = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const authUrl = `${BACKEND_URL}/auth/discord`;
+    // Include current origin as redirect URL
+    const authUrl = `${BACKEND_URL}/auth/discord?redirectUrl=${encodeURIComponent(window.location.origin)}`;
     console.log('Attempting to redirect to:', authUrl);
     try {
       setLoading(true);

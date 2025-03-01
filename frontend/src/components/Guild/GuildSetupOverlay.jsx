@@ -24,7 +24,7 @@ const API_URL = process.env.NODE_ENV === 'development'
   : process.env.REACT_APP_API_URL;
 
 const GuildSetupOverlay = () => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, checkAuth } = useAuth();
   const [tab, setTab] = useState(0);
   const [guilds, setGuilds] = useState([]);
   const [newGuildName, setNewGuildName] = useState('');
@@ -40,6 +40,12 @@ const GuildSetupOverlay = () => {
       fetchAvailableGuilds();
     }
   }, [tab, isAuthenticated]);
+
+
+  // Add effect to refresh auth on mount
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const fetchAvailableGuilds = async () => {
     try {
@@ -105,6 +111,8 @@ const GuildSetupOverlay = () => {
       
       const data = await response.json();
       setSuccess(`Guild "${data.name}" created successfully!`);
+
+      await checkAuth(); // Re-check auth status
       
       // Save guild ID to local storage
       localStorage.setItem('guildId', data.id);
@@ -141,6 +149,8 @@ const GuildSetupOverlay = () => {
       
       const data = await response.json();
       setSuccess(`Successfully joined guild!`);
+
+      await checkAuth(); // Re-check auth status
       
       // Save guild ID to local storage
       localStorage.setItem('guildId', guildId);
@@ -164,6 +174,7 @@ const GuildSetupOverlay = () => {
       fetchAvailableGuilds();
     }
   };
+
 
   return (
     <Box
@@ -195,7 +206,7 @@ const GuildSetupOverlay = () => {
         {!isAuthenticated ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <Typography variant="h4" sx={{ mb: 4, color: '#f0f0f0' }}>
-              Welcome to Guild Manager
+              Welcome to Tevent Guild Manager
             </Typography>
             <Typography variant="body1" sx={{ mb: 6, color: '#bbb' }}>
               Please log in with Discord to continue.
@@ -203,7 +214,8 @@ const GuildSetupOverlay = () => {
             <Button
               variant="contained"
               color="primary"
-              href={`${API_URL}/auth/discord`}
+              // Add proper redirect parameter
+              onClick={() => window.location.href = `${API_URL}/auth/discord?redirectUrl=${encodeURIComponent(window.location.origin)}`}
               size="large"
               sx={{
                 py: 1.5,
@@ -241,7 +253,7 @@ const GuildSetupOverlay = () => {
             
             <Tabs 
               value={tab} 
-              onChange={handleTabChange} 
+              onChange={(_, newValue) => setTab(newValue)} 
               centered
               sx={{ 
                 mb: 4,

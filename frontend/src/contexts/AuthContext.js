@@ -1,30 +1,75 @@
 // frontend/src/contexts/AuthContext.js
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import axiosInstance from '../config/axios';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await axiosInstance.get('/api/auth/status');
-        setIsAuthenticated(!!response.data);
-      } catch (error) {
+  const checkAuth = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log('Checking authentication status...');
+      const response = await axiosInstance.get('/api/auth/status', {
+        withCredentials: true
+      });
+      
+      if (response.data && response.data.id) {
+        console.log('Authentication successful:', response.data);
+        setIsAuthenticated(true);
+        setUser(response.data);
+      } else {
+        console.log('Not authenticated or invalid user data');
         setIsAuthenticated(false);
-      } finally {
-        setLoading(false);
+        setUser(null);
       }
-    };
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setIsAuthenticated(false);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
+  // Run once on mount
+  useEffect(() => {
     checkAuth();
+  }, [checkAuth]);
+
+  const logout = useCallback(async () => {
+    try {
+      console.log('Logging out...');
+      
+      // Pre-emptively set auth state to false for immediate UI feedback
+      setIsAuthenticated(false);
+      setUser(null);
+      
+      // Then make the API call
+      await axiosInstance.get('/auth/logout', {
+        withCredentials: true
+      });
+      
+      console.log('Logout successful');
+      return true;
+    } catch (error) {
+      console.error('Logout error:', error);
+      // We've already set auth state to false, so the UI should still update
+      return false;
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading }}>
+    <AuthContext.Provider value={{ 
+      isAuthenticated, 
+      user, 
+      loading, 
+      checkAuth,
+      logout
+    }}>
       {children}
     </AuthContext.Provider>
   );

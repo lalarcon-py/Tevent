@@ -1,32 +1,39 @@
 // src/components/Auth/LogoutButton.jsx
-import React from 'react';
-import { Button } from '@mui/material';
+import React, { useState } from 'react';
+import { Button, CircularProgress } from '@mui/material';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
-import { useNavigate } from 'react-router-dom';
-
-const API_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:5000' 
-  : process.env.REACT_APP_API_URL;
+import { useAuth } from '../../contexts/AuthContext';
 
 const LogoutButton = ({ variant = 'text', color = 'inherit', ...props }) => {
-  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   const handleLogout = async () => {
     try {
-      await fetch(`${API_URL}/auth/logout`, {
-        method: 'GET',
-        credentials: 'include'
-      });
+      setIsLoggingOut(true);
       
-      // Clear any local storage if needed
-      localStorage.removeItem('guildId');
+      // Clear localStorage first (in case logout API fails)
+      try {
+        localStorage.removeItem('guildId');
+        console.log('Successfully cleared localStorage');
+      } catch (storageError) {
+        console.warn('Failed to access localStorage:', storageError);
+        // Continue with logout even if localStorage fails
+      }
       
-      // Redirect to home page
-      navigate('/');
-      // Force reload to clear any in-memory state
+      // Call the logout function from context
+      await logout();
+      console.log('Logout API call completed');
+      
+      // Force a complete reload - this is the most reliable way to reset all state
+      console.log('Reloading page to reset state...');
       window.location.reload();
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Logout process failed:', error);
+      
+      // Even if the API call fails, reload to reset UI state
+      console.log('Reloading page despite error...');
+      window.location.reload();
     }
   };
   
@@ -35,10 +42,11 @@ const LogoutButton = ({ variant = 'text', color = 'inherit', ...props }) => {
       variant={variant}
       color={color}
       onClick={handleLogout}
-      startIcon={<ExitToAppIcon />}
+      startIcon={isLoggingOut ? <CircularProgress size={20} color="inherit" /> : <ExitToAppIcon />}
+      disabled={isLoggingOut}
       {...props}
     >
-      Logout
+      {isLoggingOut ? 'Logging out...' : 'Logout'}
     </Button>
   );
 };
