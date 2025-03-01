@@ -32,7 +32,6 @@ const LootManagement = () => {
       >
         <Tab label="Item Storage" />
         <Tab label="Requests" />
-        <Tab label={isAdmin ? "Manage Attendance" : "My Waitlist"} />
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
