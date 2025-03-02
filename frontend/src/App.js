@@ -22,6 +22,7 @@ import GuildSetupOverlay from './components/Guild/GuildSetupOverlay';
 import theme from './theme';
 import EventSummaries from './components/EventSummaries/EventSummaries';
 import GuildSettings from './components/GuildSettings/GuildSettings';
+import { GuildSettingsProvider } from './contexts/GuildSettingsContext';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -227,6 +228,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <AuthProvider>
         <GuildProvider>
+          <GuildSettingsProvider>
           <LootProvider>
             <AttendanceProvider>
               <TeamProvider>
@@ -234,6 +236,7 @@ function App() {
               </TeamProvider>
             </AttendanceProvider>
           </LootProvider>
+          </GuildSettingsProvider>
         </GuildProvider>
       </AuthProvider>
     </ThemeProvider>

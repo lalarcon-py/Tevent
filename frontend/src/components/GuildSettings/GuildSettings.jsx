@@ -1,9 +1,10 @@
-// components/GuildSettings/GuildSettings.jsx
+// components/GuildSettings/GuildSettings.jsx (Fixed version)
 import { useState, useEffect } from 'react';
 import { 
   Box, Paper, Tabs, Tab, Typography, Divider, CircularProgress,
-  Alert, Container
+  Alert, Container, Button
 } from '@mui/material';
+import { useParams, useNavigate } from 'react-router-dom';
 import SettingsIcon from '@mui/icons-material/Settings';
 import PeopleIcon from '@mui/icons-material/People';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
@@ -22,35 +23,74 @@ const GuildSettings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [guildData, setGuildData] = useState(null);
-  const [guildId, setGuildId] = useState(null);
+  const { guildId } = useParams(); // Use the useParams hook to get the guildId
   const { isAuthenticated, user } = useAuth();
   const [isGuildMaster, setIsGuildMaster] = useState(false);
+  const [actualGuildId, setActualGuildId] = useState(null);
+  const navigate = useNavigate();
   
+  // First, find the guild ID using multiple methods
   useEffect(() => {
-    // Extract guild ID from URL
+    // Method 1: From URL parameters (React Router)
+    if (guildId && guildId !== 'undefined') {
+      console.log('Using guildId from route params:', guildId);
+      setActualGuildId(guildId);
+      return;
+    }
+    
+    // Method 2: From URL path
     const pathParts = window.location.pathname.split('/');
     const guildIdIndex = pathParts.indexOf('guilds') + 1;
     if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
-      setGuildId(pathParts[guildIdIndex]);
+      const urlGuildId = pathParts[guildIdIndex];
+      if (urlGuildId && urlGuildId !== 'undefined') {
+        console.log('Using guildId from URL path:', urlGuildId);
+        setActualGuildId(urlGuildId);
+        return;
+      }
     }
-  }, []);
+    
+    // Method 3: From localStorage
+    try {
+      const storedGuildId = localStorage.getItem('guildId');
+      if (storedGuildId && storedGuildId !== 'undefined') {
+        console.log('Using guildId from localStorage:', storedGuildId);
+        setActualGuildId(storedGuildId);
+        return;
+      }
+    } catch (e) {
+      console.warn('Failed to access localStorage', e);
+    }
+    
+    // No valid guild ID found
+    console.error('No valid guild ID found');
+    setError('No guild ID found. Please go back to the dashboard and try again.');
+    setLoading(false);
+  }, [guildId]);
   
+  // Then, fetch guild data if we have a valid ID
   useEffect(() => {
-    if (isAuthenticated && guildId) {
+    if (isAuthenticated && actualGuildId) {
       fetchGuildData();
     }
-  }, [isAuthenticated, guildId]);
+  }, [isAuthenticated, actualGuildId]);
   
   const fetchGuildData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch guild details
-      const guildResponse = await axiosInstance.get(`/api/guilds/${guildId}`);
+      console.log('Fetching guild data with ID:', actualGuildId);
       
-      // Fetch guild settings (create this endpoint in your backend)
-      const settingsResponse = await axiosInstance.get(`/api/guilds/${guildId}/settings`);
+      if (!actualGuildId || actualGuildId === 'undefined') {
+        throw new Error('Invalid guild ID');
+      }
+      
+      // Fetch guild details
+      const guildResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}`);
+      
+      // Fetch guild settings
+      const settingsResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}/settings`);
       
       // Check if current user is guild master
       const isGM = guildResponse.data.userRole === 'Guild Master';
@@ -76,7 +116,7 @@ const GuildSettings = () => {
       setLoading(false);
     }
   };
-  
+
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
   };
@@ -85,8 +125,12 @@ const GuildSettings = () => {
     try {
       setLoading(true);
       
+      if (!actualGuildId || actualGuildId === 'undefined') {
+        throw new Error('Invalid guild ID');
+      }
+      
       // Update settings in backend
-      await axiosInstance.put(`/api/guilds/${guildId}/settings`, {
+      await axiosInstance.put(`/api/guilds/${actualGuildId}/settings`, {
         settingGroup,
         settings: updatedSettings
       });
@@ -119,8 +163,15 @@ const GuildSettings = () => {
   
   if (error) {
     return (
-      <Box sx={{ p: 5 }}>
-        <Alert severity="error">{error}</Alert>
+      <Box sx={{ p: 5, textAlign: 'center' }}>
+        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
+        <Button 
+          variant="contained" 
+          onClick={() => navigate('/')}
+          sx={{ mt: 2 }}
+        >
+          Return to Dashboard
+        </Button>
       </Box>
     );
   }
@@ -218,7 +269,7 @@ const GuildSettings = () => {
             {currentTab === 4 && (
               <DestructiveActions 
                 guildData={guildData} 
-                guildId={guildId}
+                guildId={actualGuildId}
               />
             )}
           </Box>

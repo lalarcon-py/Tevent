@@ -7,7 +7,7 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 
-const AdminLootPanel = () => {
+const AdminLootPanel = ({ dkpEnabled }) => {
   const [addedItems, setAddedItems] = useState([]);
   const [templateItems, setTemplateItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -209,18 +209,23 @@ const AdminLootPanel = () => {
               );
             }}
           />
-          <TextField
-            label="DKP Cost"
-            type="number"
-            value={newItem.dkpCost}
-            onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                background: 'rgba(30, 30, 30, 0.4)',
-                backdropFilter: 'blur(12px)'
-              }
-            }}
-          />
+          
+          {/* Only show DKP Cost field if DKP is enabled */}
+          {dkpEnabled && (
+            <TextField
+              label="DKP Cost"
+              type="number"
+              value={newItem.dkpCost}
+              onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  background: 'rgba(30, 30, 30, 0.4)',
+                  backdropFilter: 'blur(12px)'
+                }
+              }}
+            />
+          )}
+          
           <TextField
             label="Quantity"
             type="number"
@@ -262,88 +267,94 @@ const AdminLootPanel = () => {
             <TableRow>
               <TableCell>Item</TableCell>
               <TableCell>Type</TableCell>
-              <TableCell>DKP Cost</TableCell>
+              {/* Only show DKP Cost column if DKP is enabled */}
+              {dkpEnabled && <TableCell>DKP Cost</TableCell>}
               <TableCell>In Storage</TableCell>
               <TableCell>Quantity</TableCell>
               <TableCell>Actions</TableCell>
               <TableCell>Request</TableCell>
             </TableRow>
           </TableHead>
-              <TableBody>
-      {addedItems.map((item) => (
-        <TableRow key={item.id} sx={{
-          '&:hover': {
-            backgroundColor: 'rgba(144, 202, 249, 0.1)'
-          }
-        }}>
-          <TableCell>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar src={item.Item ? item.Item.icon : item.icon} sx={{ width: 40, height: 40 }}>
-                {!item.Item?.icon && !item.icon && (item.Item?.name || item.name)?.[0]}
-              </Avatar>
-              {item.Item ? item.Item.name : item.name}
-            </Box>
-          </TableCell>
-          <TableCell>{item.Item ? item.Item.type : item.type}</TableCell>
-          <TableCell>
-            <TextField
-              type="number"
-              value={item.dkpCost || item.dkp_cost || 0}
-              onChange={(e) => handleUpdate(item.id, 'dkp_cost', Number(e.target.value))}
-              sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
-            />
-          </TableCell>
-          <TableCell>
-            <Checkbox
-              checked={true} // Guild storage items are always in storage
-              disabled={true} // Can't change this for storage items
-            />
-          </TableCell>
-          <TableCell>
-            <TextField
-              type="number"
-              value={item.quantity || 0}
-              onChange={(e) => handleUpdate(item.id, 'quantity', Number(e.target.value))}
-              sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
-            />
-          </TableCell>
-          <TableCell>
-            <IconButton 
-              onClick={() => handleDelete(item.id)}
-              sx={{ 
-                '&:hover': { 
-                  color: '#ff4444',
-                  transform: 'scale(1.1)'
-                }
-              }}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </TableCell>
-          <TableCell>
-            <Button 
-              variant="contained"
-              disabled={!(item.quantity > 0)}
-              onClick={() => handleRequestItem(item)}
-              sx={{
-                background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
-                backdropFilter: 'blur(12px)',
+          <TableBody>
+            {addedItems.map((item) => (
+              <TableRow key={item.id} sx={{
                 '&:hover': {
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
-                },
-                '&:disabled': {
-                  background: 'rgba(144, 202, 249, 0.1)',
-                  color: 'rgba(255, 255, 255, 0.3)'
+                  backgroundColor: 'rgba(144, 202, 249, 0.1)'
                 }
-              }}
-            >
-              Request
-            </Button>
-          </TableCell>
-        </TableRow>
-      ))}
-    </TableBody>
+              }}>
+                <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar src={item.Item ? item.Item.icon : item.icon} sx={{ width: 40, height: 40 }}>
+                      {!item.Item?.icon && !item.icon && (item.Item?.name || item.name)?.[0]}
+                    </Avatar>
+                    {item.Item ? item.Item.name : item.name}
+                  </Box>
+                </TableCell>
+                <TableCell>{item.Item ? item.Item.type : item.type}</TableCell>
+                
+                {/* Only show DKP Cost cell if DKP is enabled */}
+                {dkpEnabled && (
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      value={item.dkpCost || item.dkp_cost || 0}
+                      onChange={(e) => handleUpdate(item.id, 'dkp_cost', Number(e.target.value))}
+                      sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
+                    />
+                  </TableCell>
+                )}
+                
+                <TableCell>
+                  <Checkbox
+                    checked={true} // Guild storage items are always in storage
+                    disabled={true} // Can't change this for storage items
+                  />
+                </TableCell>
+                <TableCell>
+                  <TextField
+                    type="number"
+                    value={item.quantity || 0}
+                    onChange={(e) => handleUpdate(item.id, 'quantity', Number(e.target.value))}
+                    sx={{ '& .MuiOutlinedInput-root': { background: 'rgba(30, 30, 30, 0.4)' } }}
+                  />
+                </TableCell>
+                <TableCell>
+                  <IconButton 
+                    onClick={() => handleDelete(item.id)}
+                    sx={{ 
+                      '&:hover': { 
+                        color: '#ff4444',
+                        transform: 'scale(1.1)'
+                      }
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+                <TableCell>
+                  <Button 
+                    variant="contained"
+                    disabled={!(item.quantity > 0)}
+                    onClick={() => handleRequestItem(item)}
+                    sx={{
+                      background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+                      backdropFilter: 'blur(12px)',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+                      },
+                      '&:disabled': {
+                        background: 'rgba(144, 202, 249, 0.1)',
+                        color: 'rgba(255, 255, 255, 0.3)'
+                      }
+                    }}
+                  >
+                    Request
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
         </Table>
       </TableContainer>
     </Box>

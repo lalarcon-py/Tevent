@@ -26,7 +26,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 
-const WaitListTab = () => {
+const WaitListTab = ({ dkpEnabled }) => {
   const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState([]);
@@ -190,7 +190,10 @@ const WaitListTab = () => {
                 <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>Item</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>Type</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>Player</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>DKP</TableCell>
+                {/* Only show DKP column if DKP is enabled */}
+                {dkpEnabled && (
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>DKP</TableCell>
+                )}
                 <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>Status</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold', borderBottom: '2px solid #90caf9' }}>Actions</TableCell>
               </TableRow>
@@ -263,7 +266,12 @@ const WaitListTab = () => {
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell sx={{ color: 'white' }}>{request.priority || 0}</TableCell>
+                      
+                      {/* Only show DKP cell if DKP is enabled */}
+                      {dkpEnabled && (
+                        <TableCell sx={{ color: 'white' }}>{request.priority || 0}</TableCell>
+                      )}
+                      
                       <TableCell>
                         <Typography sx={{ 
                           color: request.status === 'Approved' ? '#4caf50' : 
@@ -321,7 +329,7 @@ const WaitListTab = () => {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: 'white', py: 3 }}>
+                  <TableCell colSpan={dkpEnabled ? 6 : 5} sx={{ textAlign: 'center', color: 'white', py: 3 }}>
                     No item requests available
                   </TableCell>
                 </TableRow>
@@ -330,7 +338,7 @@ const WaitListTab = () => {
           </Table>
         </TableContainer>
       </Paper>
-   
+     
       <Dialog
         open={confirmDialog.open}
         onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}

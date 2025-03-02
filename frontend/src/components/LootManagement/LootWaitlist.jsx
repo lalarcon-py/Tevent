@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import axiosInstance from '../../config/axios';
 
-const LootWaitlist = () => {
+const LootWaitlist = ({ dkpEnabled }) => {
   const { isAuthenticated } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +96,10 @@ const LootWaitlist = () => {
               <TableCell sx={{ color: '#90caf9' }}>Item</TableCell>
               <TableCell sx={{ color: '#90caf9' }}>Type</TableCell>
               <TableCell sx={{ color: '#90caf9' }}>Position</TableCell>
-              <TableCell sx={{ color: '#90caf9' }}>DKP Priority</TableCell>
+              {/* Only show DKP Priority column if DKP is enabled */}
+              {dkpEnabled && (
+                <TableCell sx={{ color: '#90caf9' }}>DKP Priority</TableCell>
+              )}
               <TableCell sx={{ color: '#90caf9' }}>Status</TableCell>
             </TableRow>
           </TableHead>
@@ -128,14 +131,17 @@ const LootWaitlist = () => {
                     {request.StorageItem?.Item?.type || 'Unknown Type'}
                   </TableCell>
                   <TableCell sx={{ color: 'white' }}>#{index + 1}</TableCell>
-                  <TableCell sx={{ color: 'white' }}>{request.priority || 0} DKP</TableCell>
+                  {/* Only show DKP Priority cell if DKP is enabled */}
+                  {dkpEnabled && (
+                    <TableCell sx={{ color: 'white' }}>{request.priority || 0} DKP</TableCell>
+                  )}
                   <TableCell>
                     <Chip 
                       label={request.status || 'Pending'}
                       sx={{ 
                         bgcolor: request.status === 'Approved' ? 'rgba(76, 175, 80, 0.2)' : 
-                                 request.status === 'Denied' ? 'rgba(244, 67, 54, 0.2)' : 
-                                 'rgba(255, 183, 77, 0.2)',
+                                request.status === 'Denied' ? 'rgba(244, 67, 54, 0.2)' : 
+                                'rgba(255, 183, 77, 0.2)',
                         color: request.status === 'Approved' ? '#4caf50' : 
                                request.status === 'Denied' ? '#f44336' : '#ffb74d',
                         fontWeight: 'medium'
@@ -146,7 +152,7 @@ const LootWaitlist = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={5} sx={{ color: 'white', textAlign: 'center', p: 3 }}>
+                <TableCell colSpan={dkpEnabled ? 5 : 4} sx={{ color: 'white', textAlign: 'center', p: 3 }}>
                   No items in your waitlist
                 </TableCell>
               </TableRow>
