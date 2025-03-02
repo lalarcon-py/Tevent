@@ -1,5 +1,5 @@
 // backend/controllers/guildSettingsController.js
-const { Guild } = require('../models');
+const db = require('../models');
 const { Op } = require('sequelize');
 
 const guildSettingsController = {
@@ -9,19 +9,33 @@ const guildSettingsController = {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
-
+  
       const { guildId } = req.params;
-      const guild = await Guild.findByPk(guildId);
+      const guild = await db.Guild.findByPk(guildId);
       
       if (!guild) {
         return res.status(404).json({ error: 'Guild not found' });
       }
-
-      // Return the settings (provide defaults for values not in DB yet)
+  
+      // Debug the raw value
+      console.log('DKP DEBUG - Database value:', {
+        raw: guild.dkp_enabled,
+        type: typeof guild.dkp_enabled
+      });
+  
+      // Make it explicitly true/false by forcing a boolean comparison
+      const dkpEnabledValue = guild.dkp_enabled === true;
+      
+      console.log('DKP DEBUG - Sending to frontend:', {
+        value: dkpEnabledValue,
+        type: typeof dkpEnabledValue
+      });
+  
+      // Return the settings as a plain object with explicit boolean
       res.json({
         name: guild.name,
         lastNameChange: guild.last_name_change || null,
-        dkpEnabled: guild.dkp_enabled !== false, // default to true
+        dkpEnabled: dkpEnabledValue, // Explicit boolean true/false
         maxTanks: guild.max_tanks || 10,
         maxHealers: guild.max_healers || 15,
         maxDps: guild.max_dps || 75,
@@ -35,6 +49,33 @@ const guildSettingsController = {
         error: 'Failed to fetch guild settings',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
+    }
+  },
+
+  directDkpCheck: async (req, res) => {
+    try {
+      const { guildId } = req.params;
+      
+      // Use raw SQL to bypass any ORM issues
+      const [results] = await db.sequelize.query(
+        `SELECT dkp_enabled FROM guilds WHERE id = :guildId`,
+        { 
+          replacements: { guildId },
+          type: db.sequelize.QueryTypes.SELECT
+        }
+      );
+      
+      // Log and return the direct value
+      console.log('DIRECT DKP CHECK:', results);
+      
+      res.json({
+        dkpEnabled: results.dkp_enabled === true,
+        rawValue: results.dkp_enabled,
+        valueType: typeof results.dkp_enabled
+      });
+    } catch (error) {
+      console.error('Direct DKP check error:', error);
+      res.status(500).json({ error: error.message });
     }
   },
 
@@ -61,7 +102,7 @@ const guildSettingsController = {
         return res.status(403).json({ error: 'Only Guild Masters can update settings' });
       }
       
-      const guild = await Guild.findByPk(guildId);
+      const guild = await db.Guild.findByPk(guildId);
       if (!guild) {
         return res.status(404).json({ error: 'Guild not found' });
       }
@@ -90,11 +131,13 @@ const guildSettingsController = {
           }
           break;
           
-        case 'dkp':
-          if (settings.dkpEnabled !== undefined) {
-            updateData.dkp_enabled = settings.dkpEnabled;
-          }
-          break;
+          case 'dkp':
+            if (settings.dkpEnabled !== undefined) {
+              // Ensure we're storing a boolean
+              updateData.dkp_enabled = settings.dkpEnabled === true;
+              console.log('Updating dkp_enabled to:', updateData.dkp_enabled, 'from input:', settings.dkpEnabled);
+            }
+            break;
           
         case 'roles':
           if (settings.maxTanks !== undefined) updateData.max_tanks = settings.maxTanks;

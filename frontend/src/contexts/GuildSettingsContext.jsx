@@ -11,23 +11,52 @@ export const GuildSettingsProvider = ({ children }) => {
   const [guildId, setGuildId] = useState(null);
 
   useEffect(() => {
-    // Extract guild ID from URL
-    const pathParts = window.location.pathname.split('/');
-    const guildIdIndex = pathParts.indexOf('guilds') + 1;
-    if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
-      setGuildId(pathParts[guildIdIndex]);
-    }
+    // Try to get guild ID from multiple sources in order of preference
+    const getGuildId = () => {
+      // 1. First try from URL
+      const pathParts = window.location.pathname.split('/');
+      const guildIdIndex = pathParts.indexOf('guilds') + 1;
+      if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
+        const urlGuildId = pathParts[guildIdIndex];
+        if (urlGuildId && urlGuildId !== 'undefined') {
+          console.log('GuildSettingsContext: Using guildId from URL path:', urlGuildId);
+          return urlGuildId;
+        }
+      }
+      
+      // 2. Then try from localStorage
+      try {
+        const storedGuildId = localStorage.getItem('guildId');
+        if (storedGuildId && storedGuildId !== 'undefined') {
+          console.log('GuildSettingsContext: Using guildId from localStorage:', storedGuildId);
+          return storedGuildId;
+        }
+      } catch (e) {
+        console.warn('GuildSettingsContext: Failed to access localStorage', e);
+      }
+      
+      return null;
+    };
+
+    const foundGuildId = getGuildId();
+    setGuildId(foundGuildId);
   }, []);
 
   useEffect(() => {
     const fetchSettings = async () => {
-      if (!guildId) return;
+      if (!guildId) {
+        setLoading(false);
+        return;
+      }
       
       try {
         setLoading(true);
         setError(null);
         
+        console.log('GuildSettingsContext: Fetching settings for guild ID:', guildId);
         const response = await axiosInstance.get(`/api/guilds/${guildId}/settings`);
+        
+        console.log('GuildSettingsContext: Settings received:', response.data);
         setSettings(response.data);
       } catch (err) {
         console.error('Failed to fetch guild settings:', err);

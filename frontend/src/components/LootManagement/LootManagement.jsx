@@ -11,53 +11,42 @@ import axiosInstance from '../../config/axios';
 
 const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
-  const { isAuthenticated } = useAuth();
-  const [dkpEnabled, setDkpEnabled] = useState(null);
+  const { isAuthenticated, user } = useAuth();
+  const [dkpEnabled, setDkpEnabled] = useState(false);
+  const [directDkpCheck, setDirectDkpCheck] = useState(null);
   
-  // Check if user is admin - this would typically come from your auth context
-  const isAdmin = true;
+  const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
 
   useEffect(() => {
-    const fetchSettings = async () => {
+    const checkDkpDirectly = async () => {
       try {
-        // Get current guild ID from URL
+        // Get guild ID
         const pathParts = window.location.pathname.split('/');
         const guildIdIndex = pathParts.indexOf('guilds') + 1;
         const guildId = guildIdIndex > 0 && guildIdIndex < pathParts.length 
           ? pathParts[guildIdIndex]
-          : null;
-          
-        if (guildId) {
-          const response = await axiosInstance.get(`/api/guilds/${guildId}/settings`);
-          console.log('Settings fetched:', response.data);
-          // Set DKP enabled state
-          setDkpEnabled(response.data.dkpEnabled !== false);
-        } else {
-          // If no guild ID is found, default to enabled
-          setDkpEnabled(true);
-        }
+          : localStorage.getItem('guildId');
+        
+        if (!guildId) return;
+        
+        console.log('Checking DKP directly for guild:', guildId);
+        
+        // Make direct API call
+        const response = await axiosInstance.get(`/api/guilds/${guildId}/direct-dkp-check`);
+        console.log('DIRECT DKP CHECK RESPONSE:', response.data);
+        
+        // Update DKP state directly from this check
+        setDirectDkpCheck(response.data);
+        setDkpEnabled(response.data.dkpEnabled);
       } catch (error) {
-        console.error('Failed to fetch guild settings:', error);
-        // Default to true if there's an error (backward compatibility)
-        setDkpEnabled(true);
+        console.error('Direct DKP check failed:', error);
       }
     };
     
-    fetchSettings();
-    
-    // Set a timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      if (dkpEnabled === null) {
-        console.warn('Settings fetch timed out, defaulting to DKP enabled');
-        setDkpEnabled(true);
-      }
-    }, 3000);
-    
-    return () => clearTimeout(timeout);
+    checkDkpDirectly();
   }, []);
 
-  // If settings haven't loaded yet, just default to enabled to avoid the spinner
-  const effectiveDkpEnabled = dkpEnabled === null ? true : dkpEnabled;
+  const effectiveDkpEnabled = directDkpCheck?.dkpEnabled === true ? true : dkpEnabled === true;
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -79,20 +68,20 @@ const LootManagement = () => {
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
-        {isAdmin ? (
-          <AdminLootPanel dkpEnabled={effectiveDkpEnabled} />
-        ) : (
-          <LootRequestForm dkpEnabled={effectiveDkpEnabled} />
-        )}
-      </Box>
-      
-      <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
-        {isAdmin ? (
-          <WaitListTab dkpEnabled={effectiveDkpEnabled} />
-        ) : (
-          <LootRequestForm dkpEnabled={effectiveDkpEnabled} />
-        )}
-      </Box>
+          {isAdmin ? (
+            <AdminLootPanel key={`admin-panel-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)}  />
+          ) : (
+            <LootRequestForm key={`request-form-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
+          )}
+        </Box>
+
+        <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
+          {isAdmin ? (
+            <WaitListTab key={`waitlist-tab-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)} />
+          ) : (
+            <LootRequestForm key={`request-form-tab-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
+          )}
+        </Box>
       
       <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
         {isAdmin ? (
@@ -101,6 +90,8 @@ const LootManagement = () => {
           <LootWaitlist dkpEnabled={effectiveDkpEnabled} />
         )}
       </Box>
+
+      
     </Box>
   );
 };

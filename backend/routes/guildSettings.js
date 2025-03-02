@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const guildSettingsController = require('../controllers/guildSettingsController');
 const { deleteGuild } = require('../controllers/guildController');
+router.get('/:guildId/direct-dkp-check', guildSettingsController.directDkpCheck);
 
 // Get guild settings
 router.get('/:guildId/settings', guildSettingsController.getGuildSettings);

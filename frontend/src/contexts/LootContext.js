@@ -1,12 +1,17 @@
 // frontend/src/contexts/LootContext.js
 import { createContext, useContext, useState } from 'react';
 import axios from 'axios';
+import { useAuth } from './AuthContext';
 
 const LootContext = createContext();
 
 export const LootProvider = ({ children }) => {
   const [items, setItems] = useState([]);
   const [requests, setRequests] = useState([]);
+  const { user } = useAuth();
+  
+  // Proper role-based admin check
+  const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
 
   const requestItem = async (itemId) => {
     try {
@@ -52,7 +57,7 @@ export const LootProvider = ({ children }) => {
       requestItem,
       loadItems,
       loadRequests,
-      isAdmin: true // Replace with actual auth check
+      isAdmin
     }}>
       {children}
     </LootContext.Provider>

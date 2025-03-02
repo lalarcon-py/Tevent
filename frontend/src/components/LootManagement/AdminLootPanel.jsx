@@ -8,10 +8,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 
 const AdminLootPanel = ({ dkpEnabled }) => {
+  console.log('AdminLootPanel rendering with dkpEnabled =', dkpEnabled);
   const [addedItems, setAddedItems] = useState([]);
   const [templateItems, setTemplateItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentGuildId, setCurrentGuildId] = useState('default'); // You might want to get this from context or props
+  const [currentGuildId, setCurrentGuildId] = useState('default');
   const [newItem, setNewItem] = useState({
     id: null,
     name: '',
@@ -19,6 +20,12 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     dkpCost: 0,
     quantity: 1,
     icon: ''
+  });
+
+  console.log('DKP DEBUG - AdminLootPanel received:', {
+    dkpEnabled: dkpEnabled,
+    type: typeof dkpEnabled,
+    strictCheck: dkpEnabled === true
   });
 
   useEffect(() => {

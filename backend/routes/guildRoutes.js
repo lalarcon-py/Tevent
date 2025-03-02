@@ -622,6 +622,29 @@ router.get('/:guildId/members', async (req, res) => {
   }
 });
 
+router.get('/:guildId/debug-settings', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    // Direct SQL query to bypass any ORM issues
+    const [results] = await db.sequelize.query(
+      `SELECT id, name, dkp_enabled FROM guilds WHERE id = :guildId`,
+      { 
+        replacements: { guildId },
+        type: db.sequelize.QueryTypes.SELECT
+      }
+    );
+    
+    res.json({
+      rawDatabaseValue: results,
+      message: "This is the direct database value for troubleshooting"
+    });
+  } catch (error) {
+    console.error('Debug query error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete a guild (admin only)
 router.delete('/:guildId', async (req, res) => {
   const t = await sequelize.transaction();
