@@ -1,5 +1,6 @@
 // backend/controllers/guildSettingsController.js
 const { Guild } = require('../models');
+const db = require('../models'); // Add this import 
 const { Op } = require('sequelize');
 
 const guildSettingsController = {
