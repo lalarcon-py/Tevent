@@ -121,5 +121,72 @@ module.exports = {
     }
     
     return embed;
+  },
+
+  createStorageEmbed: (items) => {
+    const embed = new EmbedBuilder()
+      .setTitle('📦 Guild Storage')
+      .setColor('#ff9800')
+      .setDescription(`Total items: ${items.length || 0}`);
+    
+    // Group by item type
+    const itemsByType = {};
+    items.forEach(item => {
+      const type = item.Item?.type || 'Unknown';
+      if (!itemsByType[type]) {
+        itemsByType[type] = [];
+      }
+      itemsByType[type].push(item);
+    });
+    
+    // Add each type as a field
+    for (const [type, typeItems] of Object.entries(itemsByType)) {
+      embed.addFields({
+        name: `${type} (${typeItems.length})`,
+        value: typeItems.map(item => 
+          `ID: ${item.id} - ${item.Item?.name || 'Unknown'} x${item.quantity || 0}`
+        ).join('\n') || 'None',
+        inline: false
+      });
+    }
+    
+    return embed;
+  },
+  
+  /**
+   * Create an embed for loot requests
+   */
+  createLootRequestsEmbed: (requests) => {
+    const embed = new EmbedBuilder()
+      .setTitle('🙏 Pending Loot Requests')
+      .setColor('#9c27b0')
+      .setDescription(`Total requests: ${requests.length || 0}`);
+    
+    if (!requests.length) {
+      embed.addFields({
+        name: 'No Requests',
+        value: 'There are no pending loot requests.'
+      });
+      
+      return embed;
+    }
+    
+    requests.forEach((request, index) => {
+      const storageItem = request.storageItem || request.StorageItem;
+      const item = storageItem?.Item || storageItem?.item;
+      const user = request.user || request.User;
+      
+      embed.addFields({
+        name: `Request #${index + 1} (ID: ${request.id})`,
+        value: `**Item:** ${item?.name || 'Unknown Item'}\n` +
+          `**Requester:** ${user?.username || 'Unknown User'}\n` +
+          `**Requested:** ${new Date(request.created_at).toLocaleString()}`,
+        inline: false
+      });
+    });
+    
+    embed.setFooter({ text: 'Use "/loot approve" or "/loot deny" to handle requests' });
+    
+    return embed;
   }
 };

@@ -170,5 +170,195 @@ module.exports = {
         attributes: ['id', 'username', 'discord_id', 'builds', 'combat_power']
       }]
     });
+  },
+
+  updateEventAttendance: async (eventId, userId, attended) => {
+    // Check if there's an existing record
+    const existingAttendance = await EventAttendance.findOne({
+      where: {
+        event_id: eventId,
+        user_id: userId
+      }
+    });
+    
+    if (existingAttendance) {
+      await existingAttendance.update({ 
+        attended,
+        status: attended ? 'ATTENDED' : 'ABSENT'
+      });
+    } else {
+      await EventAttendance.create({
+        event_id: eventId,
+        user_id: userId,
+        attended,
+        status: attended ? 'ATTENDED' : 'ABSENT'
+      });
+    }
+    
+    return { success: true };
+  },
+  
+  /**
+   * Get items in guild storage
+   */
+  getGuildStorageItems: async (guildId) => {
+    return await GuildStorageItem.findAll({
+      include: [{
+        model: Item,
+        attributes: ['name', 'type', 'icon']
+      }]
+    });
+  },
+  
+  /**
+   * Get pending loot requests
+   */
+  getLootRequests: async (guildId) => {
+    return await LootRequest.findAll({
+      where: { status: 'Pending' },
+      include: [
+        {
+          model: GuildStorageItem,
+          as: 'storageItem',
+          include: [Item]
+        },
+        {
+          model: User,
+          as: 'user'
+        }
+      ]
+    });
+  },
+  
+  /**
+   * Approve a loot request
+   */
+  approveLootRequest: async (guildId, requestId) => {
+    const request = await LootRequest.findByPk(requestId, {
+      include: [
+        {
+          model: GuildStorageItem,
+          as: 'storageItem',
+          include: [Item]
+        },
+        {
+          model: User,
+          as: 'user'
+        }
+      ]
+    });
+    
+    if (!request) {
+      return { success: false, message: 'Request not found' };
+    }
+    
+    // Check if item is still available
+    if (request.storageItem.quantity < 1) {
+      return { success: false, message: 'Item no longer available in storage' };
+    }
+    
+    // Update request status
+    await request.update({ status: 'Approved' });
+    
+    // Decrement quantity
+    await request.storageItem.decrement('quantity');
+    
+    return { 
+      success: true,
+      userId: request.user.id,
+      username: request.user.username,
+      discordId: request.user.discord_id,
+      itemName: request.storageItem.Item.name
+    };
+  },
+  
+  /**
+   * Deny a loot request
+   */
+  denyLootRequest: async (guildId, requestId) => {
+    const request = await LootRequest.findByPk(requestId, {
+      include: [
+        {
+          model: GuildStorageItem,
+          as: 'storageItem',
+          include: [Item]
+        },
+        {
+          model: User,
+          as: 'user'
+        }
+      ]
+    });
+    
+    if (!request) {
+      return { success: false, message: 'Request not found' };
+    }
+    
+    // Update request status
+    await request.update({ status: 'Denied' });
+    
+    return { 
+      success: true,
+      userId: request.user.id,
+      username: request.user.username,
+      discordId: request.user.discord_id,
+      itemName: request.storageItem.Item.name
+    };
+  },
+  
+  /**
+   * Create a loot request
+   */
+  createLootRequest: async (guildId, itemId, discordUserId) => {
+    const user = await User.findOne({
+      where: { discord_id: discordUserId }
+    });
+    
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
+    
+    const storageItem = await GuildStorageItem.findByPk(itemId, {
+      include: [Item]
+    });
+    
+    if (!storageItem) {
+      return { success: false, message: 'Item not found in storage' };
+    }
+    
+    // Check if user already has a pending request for this item
+    const existingRequest = await LootRequest.findOne({
+      where: {
+        storage_item_id: itemId,
+        user_id: user.id,
+        status: 'Pending'
+      }
+    });
+    
+    if (existingRequest) {
+      return { success: false, message: 'You already have a pending request for this item' };
+    }
+    
+    // Create new request
+    const request = await LootRequest.create({
+      storage_item_id: itemId,
+      user_id: user.id,
+      status: 'Pending'
+    });
+    
+    return { 
+      success: true,
+      requestId: request.id,
+      itemName: storageItem.Item.name
+    };
+  },
+  
+  /**
+   * Get a user by Discord ID
+   */
+  getUserByDiscordId: async (discordId) => {
+    return await User.findOne({
+      where: { discord_id: discordId }
+    });
   }
 };

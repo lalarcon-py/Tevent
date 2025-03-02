@@ -113,4 +113,58 @@ module.exports = (client) => {
       console.error('Error in daily events reminder:', error);
     }
   });
+
+  // Daily loot request reminder (8pm every day)
+cron.schedule('0 20 * * *', async () => {
+    try {
+      // Get all guilds with Discord integration
+      const guilds = await Guild.findAll({
+        where: { discord_server_id: { [Op.not]: null } },
+        include: [{
+          model: DiscordChannelConfig,
+          where: { channel_type: 'officers', enabled: true }
+        }]
+      });
+      
+      for (const guild of guilds) {
+        const channelId = guild.DiscordChannelConfigs[0].channel_id;
+        const channel = client.channels.cache.get(channelId);
+        
+        if (!channel) continue;
+        
+        // Get pending loot requests
+        const requests = await database.getLootRequests(guild.id);
+        
+        if (requests.length > 0) {
+          const embed = embedBuilder.createLootRequestsEmbed(requests);
+          
+          const rows = [];
+          for (let i = 0; i < Math.min(requests.length, 5); i++) {
+            const request = requests[i];
+            const row = new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`approve_loot_${request.id}`)
+                  .setLabel(`Approve #${i+1}`)
+                  .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                  .setCustomId(`deny_loot_${request.id}`)
+                  .setLabel(`Deny #${i+1}`)
+                  .setStyle(ButtonStyle.Danger)
+              );
+            rows.push(row);
+          }
+          
+          await channel.send({
+            content: `🔔 **Daily Reminder**\nThere are ${requests.length} pending loot requests.`,
+            embeds: [embed],
+            components: rows
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error in loot request reminder:', error);
+    }
+  });
+  
 };
