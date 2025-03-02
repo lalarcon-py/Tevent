@@ -21,6 +21,7 @@ const guildRouter = require('./routes/guildRoutes');
 const waitlistRouter = require('./routes/waitlist');
 const guildStorageRouter = require('./routes/guildStorage');
 const statsRoutes = require('./routes/statsRoutes');
+const guildSettingsRoutes = require('./routes/guildSettings');
 
 const waitlistRoutes = require('./routes/waitlist');
 const guildStorageRoutes = require('./routes/guildStorage');
@@ -105,6 +106,7 @@ app.use(schemaMiddleware);
 app.use('/api/stats', statsRoutes);
 app.use('/api/guild-storage', databaseMiddleware, guildStorageRouter);
 app.use('/api/guilds', guildRouter);
+app.use('/api/guilds', guildSettingsRoutes);
 app.use('/api/waitlist', databaseMiddleware, waitlistRouter);
 app.use('/api/items', databaseMiddleware, itemsRouter);
 app.use('/api/events', databaseMiddleware, eventsRouter);

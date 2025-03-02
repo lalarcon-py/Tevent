@@ -1,5 +1,5 @@
 // src/components/Navigation/Navigation.jsx
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { 
   Drawer, 
   List, 
@@ -8,14 +8,17 @@ import {
   useTheme,
   useMediaQuery,
   Box,
-  Divider
+  Divider,
+  ListItemIcon
 } from '@mui/material';
 import GuildHeader from './GuildHeader';
 import LogoutButton from '../Auth/LogoutButton';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 const Navigation = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { guildId } = useParams(); // Get the current guildId from URL params
 
   return (
     <Drawer
@@ -62,6 +65,19 @@ const Navigation = () => {
           sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
         >
           <ListItemText primary="Current Events" sx={{ color: 'white' }} />
+        </ListItem>
+        
+        {/* Add Guild Settings button */}
+        <ListItem 
+          button 
+          component={Link} 
+          to={`/guilds/${guildId}/settings`} 
+          sx={{ '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' } }}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: 'white' }}>
+            <SettingsIcon />
+          </ListItemIcon>
+          <ListItemText primary="Guild Settings" sx={{ color: 'white' }} />
         </ListItem>
         
         {/* Add a divider before logout */}

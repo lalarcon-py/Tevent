@@ -1,41 +1,29 @@
-// backend/models/Guild.js
+// backend/models/GuildSettings.js
 'use strict';
 const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
-  class Guild extends Model {
+  class GuildSettings extends Model {
     static associate(models) {
-      Guild.hasMany(models.GuildMember, { foreignKey: 'guild_id' });
-      Guild.hasOne(models.GuildSettings, { foreignKey: 'guild_id' });
+      GuildSettings.belongsTo(models.Guild, { foreignKey: 'guild_id' });
     }
   }
 
-  Guild.init({
+  GuildSettings.init({
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    name: {
-      type: DataTypes.STRING,
+    guild_id: {
+      type: DataTypes.UUID,
       allowNull: false,
-      validate: {
-        len: [3, 50]
-      }
+      references: {
+        model: 'guilds',
+        key: 'id'
+      },
+      onDelete: 'CASCADE'
     },
-    owner_id: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    status: {
-      type: DataTypes.STRING,
-      defaultValue: 'ACTIVE'
-    },
-    deletion_scheduled_at: {
-      type: DataTypes.DATE,
-      allowNull: true
-    },
-    // New guild settings fields
     last_name_change: {
       type: DataTypes.DATE,
       allowNull: true
@@ -72,11 +60,11 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     sequelize,
-    modelName: 'Guild',
-    tableName: 'guilds',
+    modelName: 'GuildSettings',
+    tableName: 'guild_settings',
     underscored: true,
     timestamps: true
   });
 
-  return Guild;
+  return GuildSettings;
 };
