@@ -22,7 +22,7 @@ const waitlistRouter = require('./routes/waitlist');
 const guildStorageRouter = require('./routes/guildStorage');
 const statsRoutes = require('./routes/statsRoutes');
 const guildSettingsRoutes = require('./routes/guildSettings');
-
+const wishlistRoutes = require('./routes/wishlist');
 const waitlistRoutes = require('./routes/waitlist');
 const guildStorageRoutes = require('./routes/guildStorage');
 
@@ -103,6 +103,7 @@ app.use(passport.session());
 app.use(express.json());
 app.use(schemaMiddleware);
 
+app.use('/api/wishlist', databaseMiddleware, wishlistRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/guild-storage', databaseMiddleware, guildStorageRouter);
 app.use('/api/guilds', guildRouter);
@@ -193,13 +194,20 @@ app.get('/auth/discord/callback',
     try {
       // Check if user is authenticated
       if (!req.isAuthenticated() || !req.user) {
-        // Get the redirect URL from query params or use default
-        const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+        // Use more robust fallbacks for production environment
+        const redirectUrl = req.query.redirectUrl || 
+          (process.env.NODE_ENV === 'production' ? 
+            (process.env.FRONTEND_URL || req.headers.origin || req.headers.referer || '/') : 
+            'http://localhost:3002');
+            
         return res.redirect(`${redirectUrl}/error`);
       }
 
-      // Get the redirect URL from query params or use default
-      const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+      // Get the redirect URL with better fallbacks
+      const redirectUrl = req.query.redirectUrl || 
+        (process.env.NODE_ENV === 'production' ? 
+          (process.env.FRONTEND_URL || req.headers.origin || req.headers.referer || '/') : 
+          'http://localhost:3002');
       
       // Check if user is in any guilds
       const guildMember = await db.GuildMember.findOne({
@@ -215,7 +223,10 @@ app.get('/auth/discord/callback',
       }
     } catch (error) {
       console.error('Auth callback error:', error);
-      const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+      const redirectUrl = req.query.redirectUrl || 
+        (process.env.NODE_ENV === 'production' ? 
+          (process.env.FRONTEND_URL || req.headers.origin || req.headers.referer || '/') : 
+          'http://localhost:3002');
       res.redirect(`${redirectUrl}/error`);
     }
   }

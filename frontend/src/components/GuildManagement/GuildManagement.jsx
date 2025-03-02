@@ -4,8 +4,9 @@ import { Box, TextField } from '@mui/material';
 import MembersList from './MembersList';
 import InviteLinkButton from '../InviteLinkButton';
 import GearCheckButton from './GearCheckButton';
-import LeaveGuildButton from './LeaveGuildButton'; // Import the new component
+import LeaveGuildButton from './LeaveGuildButton';
 import DiscordLogin from '../Auth/DiscordLogin';
+import { useAuth } from '../../contexts/AuthContext';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -14,10 +15,10 @@ const GuildManagement = () => {
   const [members, setMembers] = useState([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [guildId, setGuildId] = useState(null); // Add state for guildId
+  const [guildId, setGuildId] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Check authentication status
     const checkAuth = async () => {
       try {
         const response = await fetch(`${API_URL}/api/auth/status`, {
@@ -28,7 +29,7 @@ const GuildManagement = () => {
           setIsAuthenticated(true);
           setCurrentUser(userData);
           
-          // Get the current guild ID from URL or from user data
+
           const pathParts = window.location.pathname.split('/');
           const guildIdIndex = pathParts.indexOf('guilds') + 1;
           if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
@@ -119,7 +120,7 @@ const GuildManagement = () => {
               searchTerm={searchTerm} 
               members={members} 
               setMembers={setMembers}
-              currentUser={currentUser}
+              currentUser={user} // Pass the current user from auth context
             />
           </Box>
         </>

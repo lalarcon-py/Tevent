@@ -6,6 +6,7 @@ import WaitListTab from './WaitListTab';
 import AttendanceManagement from './AttendanceManagement';
 import LootRequestForm from './LootRequestForm';
 import LootWaitlist from './LootWaitlist';
+import WishlistTab from './WishlistTab';
 import { useAuth } from '../../contexts/AuthContext';
 import axiosInstance from '../../config/axios';
 
@@ -65,6 +66,7 @@ const LootManagement = () => {
       >
         <Tab label="Item Storage" />
         <Tab label="Requests" />
+        <Tab label="Wishlist" />
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
@@ -91,7 +93,10 @@ const LootManagement = () => {
         )}
       </Box>
 
-      
+      {/* Add this new Box for the Wishlist tab */}
+      <Box sx={{ display: currentTab !== 3 ? 'none' : 'block' }}>
+        <WishlistTab />
+      </Box>
     </Box>
   );
 };

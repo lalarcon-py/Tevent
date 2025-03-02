@@ -18,6 +18,7 @@ import {
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -33,6 +34,7 @@ const GuildSetupOverlay = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [joinGuildId, setJoinGuildId] = useState('');
+  const navigate = useNavigate();
 
   // Fetch available guilds when on "Join" tab
   useEffect(() => {
@@ -119,7 +121,7 @@ const GuildSetupOverlay = () => {
       
       // Redirect after a brief delay to show success message
       setTimeout(() => {
-        window.location.reload();
+        navigate('/dashboard');
       }, 1500);
     } catch (error) {
       console.error('Guild creation failed:', error);

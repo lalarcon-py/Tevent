@@ -7,6 +7,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
+import { useAuth } from '../../contexts/AuthContext';
 
 const API_URL = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:5000' 
@@ -231,7 +232,7 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
 
 // Edit button functions
 
-const EditMemberDialog = ({ member, onClose, onSave }) => {
+const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
   const [editedMember, setEditedMember] = useState(member ? {
     ...member,
     builds: member.builds || [{
@@ -247,8 +248,9 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
 
   useEffect(() => {
     if (member) {
-      const hasPermission = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(member.role);
-      setShowCombatPower(hasPermission);
+      const isCurrentUser = member.id === currentUser?.id;
+      const hasSpecialRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(member.role);
+      setShowCombatPower(isCurrentUser || hasSpecialRole);
       
       setEditedMember({
         ...member,
@@ -260,7 +262,7 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
         combat_power: member.combat_power || ''
       });
     }
-  }, [member]);
+  }, [member, currentUser]);
 
   const weapons = [
     'Greatsword', 'Sword and Shield', 'Staff', 'Crossbow',
@@ -443,10 +445,10 @@ const EditMemberDialog = ({ member, onClose, onSave }) => {
 };
 
 
-const MembersList = ({ searchTerm }) => {
+const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrentUser }) => {
+  const { user: authCurrentUser } = useAuth();
   const [roleManagementMember, setRoleManagementMember] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
-  const [members, setMembers] = useState([]);
   const [editMember, setEditMember] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -454,6 +456,8 @@ const MembersList = ({ searchTerm }) => {
     key: null,
     direction: 'asc'
   });
+
+  const effectiveCurrentUser = propCurrentUser || authCurrentUser;
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -887,14 +891,9 @@ const MembersList = ({ searchTerm }) => {
       {editMember && (
         <EditMemberDialog 
           member={editMember} 
-          onClose={() => {
-            console.log('Dialog closing');
-            setEditMember(null);
-          }} 
-          onSave={(updatedMember) => {
-            console.log('Saving member:', updatedMember);
-            handleSave(updatedMember);
-          }}
+          currentUser={effectiveCurrentUser}
+          onClose={() => setEditMember(null)} 
+          onSave={handleSave}
         />
       )}
 
