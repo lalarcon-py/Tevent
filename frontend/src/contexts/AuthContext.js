@@ -10,7 +10,17 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
+    // Add rate limiting to prevent rapid successive checks
+    const now = Date.now();
+    const lastCheck = sessionStorage.getItem('lastAuthCheck');
+    
+    // Only check if it's been at least 2 seconds since last check
+    if (lastCheck && now - parseInt(lastCheck) < 2000) {
+      return;
+    }
+    
     try {
+      sessionStorage.setItem('lastAuthCheck', now.toString());
       setLoading(true);
       console.log('Checking authentication status...');
       const response = await axiosInstance.get('/api/auth/status', {

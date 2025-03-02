@@ -2,7 +2,9 @@
 import { useState } from 'react';
 import { Button, Box } from '@mui/material';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NODE_ENV === 'production'
+  ? (process.env.REACT_APP_BACKEND_URL || window.location.origin)
+  : (process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000');
 
 const DiscordLogin = () => {
   const [loading, setLoading] = useState(false);

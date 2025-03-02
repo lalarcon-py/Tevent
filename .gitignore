@@ -11,6 +11,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 
 # Build directories
 dist/
@@ -66,3 +67,4 @@ docker-compose.override.yml
 *.bak
 *.patch
 *.diff
+backend/.env.production
