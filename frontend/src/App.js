@@ -112,10 +112,15 @@ function AppContent() {
             
             if (storedGuildId && guildsData.some(g => g.id === storedGuildId && g.status === 'ACTIVE')) {
               setCurrentGuildId(storedGuildId);
-            } else if (activeGuild) {
-              // If we have an active guild but no stored ID, use the first active guild
-              setCurrentGuildId(activeGuild.id);
-              safeSetLocalStorage('guildId', activeGuild.id);
+            } if (activeGuild) {
+              const activeGuildId = activeGuild.id;
+              setCurrentGuildId(activeGuildId);
+              safeSetLocalStorage('guildId', activeGuildId);
+              
+              // Also set in the GuildContext
+              if (typeof setGuildId === 'function') {  // If using GuildContext
+                setGuildId(activeGuildId);
+              }
             } else {
               // If no active guilds, clear storage
               try {

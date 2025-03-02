@@ -1,62 +1,48 @@
-import { useState } from 'react';
-import { Tabs, Tab, Box } from '@mui/material';
-import AdminLootPanel from './AdminLootPanel';
-import WaitListTab from './WaitListTab';
-import AttendanceManagement from './AttendanceManagement';
-import LootRequestForm from './LootRequestForm';
-import LootWaitlist from './LootWaitlist';
-import { useAuth } from '../../contexts/AuthContext';
+// frontend/src/components/LootManagement/LootManagement.jsx
+import { useState, useEffect } from 'react';
+import { Box, Typography, Tabs, Tab, CircularProgress } from '@mui/material';
+import { useGuild } from '../../contexts/GuildContext';
+import ItemsTab from './ItemsTab';
+import WaitlistTab from './WaitlistTab';
 
 const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
-  const { isAuthenticated } = useAuth();
+  const { guildSettings, loading } = useGuild();
   
-  // Check if user is admin - this would typically come from your auth context
-  // For now we'll default to true for demonstration
-  const isAdmin = true;
-
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
+  };
+  
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  
   return (
-    <Box sx={{ width: '100%' }}>
+    <Box sx={{ p: 4 }}>
+      <Typography variant="h4" sx={{ mb: 3, color: 'white' }}>
+        Guild Storage Management
+      </Typography>
+      
       <Tabs 
         value={currentTab} 
-        onChange={(_, newValue) => setCurrentTab(newValue)}
+        onChange={handleTabChange}
         sx={{
           mb: 3,
-          '& .MuiTab-root': {
-            color: 'rgba(255,255,255,0.7)',
-            '&.Mui-selected': {
-              color: '#90caf9'
-            }
-          }
+          '& .MuiTabs-indicator': { backgroundColor: '#90caf9' },
+          '& .MuiTab-root': { color: 'white' },
+          '& .Mui-selected': { color: '#90caf9' }
         }}
       >
-        <Tab label="Item Storage" />
-        <Tab label="Requests" />
+        <Tab label="Items" />
+        <Tab label="Waitlist" />
       </Tabs>
-
-      <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
-        {isAdmin ? (
-          <AdminLootPanel />
-        ) : (
-          <LootRequestForm />
-        )}
-      </Box>
       
-      <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
-        {isAdmin ? (
-          <WaitListTab />
-        ) : (
-          <LootRequestForm />
-        )}
-      </Box>
-      
-      <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
-        {isAdmin ? (
-          <AttendanceManagement />
-        ) : (
-          <LootWaitlist />
-        )}
-      </Box>
+      {currentTab === 0 && <ItemsTab dkpEnabled={guildSettings.dkpEnabled} />}
+      {currentTab === 1 && <WaitlistTab dkpEnabled={guildSettings.dkpEnabled} />}
     </Box>
   );
 };
