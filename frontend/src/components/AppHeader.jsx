@@ -1,4 +1,4 @@
-// updated AppHeader.jsx
+// components/AppHeader.jsx
 import { useState } from 'react';
 import { 
   AppBar, 
@@ -7,12 +7,15 @@ import {
   Typography, 
   useTheme, 
   useMediaQuery,
-  Box
+  Box,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import {
   SupportAgent as SupportIcon,
   AccountCircle as AccountIcon,
-  Receipt as BillingIcon
+  Receipt as BillingIcon,
+  MoreVert as MoreIcon
 } from '@mui/icons-material';
 import TeventLogo from '../images/Tevent Logo.png';
 import UserProfileMenu from './Header/UserProfileMenu';
@@ -27,6 +30,7 @@ const AppHeader = () => {
   const [profileAnchorEl, setProfileAnchorEl] = useState(null);
   const [billingAnchorEl, setBillingAnchorEl] = useState(null);
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
+  const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   
   // Menu handlers
   const handleProfileMenuOpen = (event) => {
@@ -47,10 +51,20 @@ const AppHeader = () => {
   
   const handleSupportDialogOpen = () => {
     setSupportDialogOpen(true);
+    handleMobileMenuClose();
   };
   
   const handleSupportDialogClose = () => {
     setSupportDialogOpen(false);
+  };
+
+  // Mobile menu handlers
+  const handleMobileMenuOpen = (event) => {
+    setMobileMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMobileMenuClose = () => {
+    setMobileMenuAnchorEl(null);
   };
 
   return (
@@ -70,12 +84,12 @@ const AppHeader = () => {
             src={TeventLogo} 
             alt="Tevent Logo" 
             style={{ 
-              height: '40px',
+              height: isMobile ? '32px' : '40px',
               marginRight: '16px'
             }} 
           />
           <Typography 
-            variant="h6" 
+            variant={isMobile ? "subtitle1" : "h6"} 
             component="div" 
             sx={{ 
               fontFamily: 'Arial',
@@ -88,44 +102,97 @@ const AppHeader = () => {
           </Typography>
         </Box>
         
-        <Box sx={{ display: 'flex' }}>
-          <IconButton 
-            color="inherit" 
-            size="large" 
-            onClick={handleSupportDialogOpen}
-            sx={{
-              transition: 'all 0.2s ease',
-              '&:hover': { transform: 'scale(1.1)', color: '#90caf9' }
-            }}
+        {/* Desktop view */}
+        {!isMobile && (
+          <Box sx={{ display: 'flex' }}>
+            <IconButton 
+              color="inherit" 
+              size="large" 
+              onClick={handleSupportDialogOpen}
+              sx={{
+                transition: 'all 0.2s ease',
+                '&:hover': { transform: 'scale(1.1)', color: '#90caf9' }
+              }}
+            >
+              <SupportIcon sx={{ fontSize: 28 }} />
+            </IconButton>
+            
+            <IconButton 
+              color="inherit" 
+              size="large"
+              onClick={handleBillingMenuOpen}
+              sx={{
+                transition: 'all 0.2s ease',
+                '&:hover': { transform: 'scale(1.1)', color: '#90caf9' }
+              }}
+            >
+              <BillingIcon sx={{ fontSize: 28 }} />
+            </IconButton>
+            
+            <IconButton 
+              color="inherit" 
+              size="large"
+              onClick={handleProfileMenuOpen}
+              sx={{
+                transition: 'all 0.2s ease',
+                '&:hover': { transform: 'scale(1.1)', color: '#90caf9' }
+              }}
+            >
+              <AccountIcon sx={{ fontSize: 28 }} />
+            </IconButton>
+          </Box>
+        )}
+        
+        {/* Mobile view - show more icon */}
+        {isMobile && (
+          <IconButton
+            color="inherit"
+            aria-label="more"
+            aria-controls="mobile-menu"
+            aria-haspopup="true"
+            onClick={handleMobileMenuOpen}
           >
-            <SupportIcon sx={{ fontSize: 28 }} />
+            <MoreIcon />
           </IconButton>
-          
-          <IconButton 
-            color="inherit" 
-            size="large"
-            onClick={handleBillingMenuOpen}
-            sx={{
-              transition: 'all 0.2s ease',
-              '&:hover': { transform: 'scale(1.1)', color: '#90caf9' }
-            }}
-          >
-            <BillingIcon sx={{ fontSize: 28 }} />
-          </IconButton>
-          
-          <IconButton 
-            color="inherit" 
-            size="large"
-            onClick={handleProfileMenuOpen}
-            sx={{
-              transition: 'all 0.2s ease',
-              '&:hover': { transform: 'scale(1.1)', color: '#90caf9' }
-            }}
-          >
-            <AccountIcon sx={{ fontSize: 28 }} />
-          </IconButton>
-        </Box>
+        )}
       </Toolbar>
+      
+      {/* Mobile menu */}
+      <Menu
+        id="mobile-menu"
+        anchorEl={mobileMenuAnchorEl}
+        keepMounted
+        open={Boolean(mobileMenuAnchorEl)}
+        onClose={handleMobileMenuClose}
+      >
+        <MenuItem onClick={() => {
+          handleSupportDialogOpen();
+          handleMobileMenuClose();
+        }}>
+          <IconButton color="inherit" size="small">
+            <SupportIcon />
+          </IconButton>
+          <Typography>Support</Typography>
+        </MenuItem>
+        <MenuItem onClick={() => {
+          handleBillingMenuOpen();
+          handleMobileMenuClose();
+        }}>
+          <IconButton color="inherit" size="small">
+            <BillingIcon />
+          </IconButton>
+          <Typography>Billing</Typography>
+        </MenuItem>
+        <MenuItem onClick={() => {
+          handleProfileMenuOpen();
+          handleMobileMenuClose();
+        }}>
+          <IconButton color="inherit" size="small">
+            <AccountIcon />
+          </IconButton>
+          <Typography>Profile</Typography>
+        </MenuItem>
+      </Menu>
       
       {/* User Profile Menu */}
       <UserProfileMenu 

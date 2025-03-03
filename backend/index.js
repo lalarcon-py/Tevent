@@ -25,7 +25,7 @@ const guildSettingsRoutes = require('./routes/guildSettings');
 const wishlistRoutes = require('./routes/wishlist');
 const waitlistRoutes = require('./routes/waitlist');
 const guildStorageRoutes = require('./routes/guildStorage');
-
+const userController = require('./controllers/userController');
 
 console.log('Environment Variables Check:', {
   DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
@@ -102,7 +102,7 @@ app.use(passport.session());
 
 app.use(express.json());
 app.use(schemaMiddleware);
-
+app.delete('/api/user/delete', userController.deleteUser);
 app.use('/api/wishlist', databaseMiddleware, wishlistRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/guild-storage', databaseMiddleware, guildStorageRouter);

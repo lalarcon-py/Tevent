@@ -9,6 +9,11 @@ router.get('/', async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
+
+    const isAdmin = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(req.user.role);
+    
+    // If admin, get all requests, otherwise only user's own requests
+    const whereClause = isAdmin ? {} : { user_id: req.user.id };
     
     const requests = await models.LootRequest.findAll({
       where: { 

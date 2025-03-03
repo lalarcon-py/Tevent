@@ -1,7 +1,7 @@
 // frontend/src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import AppHeader from './components/AppHeader';
 import Navigation from './components/Navigation/Navigation';
@@ -34,6 +34,8 @@ function AppContent() {
   const [hasGuild, setHasGuild] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentGuildId, setCurrentGuildId] = useState(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Add effect for mouse tracking (visual effect)
   useEffect(() => {
@@ -187,8 +189,6 @@ function AppContent() {
 
   return (
     <>
-      {/* Show overlay when not authenticated OR when authenticated but no guild */}
-      
       <Router>
         <AppHeader />
         {(!isAuthenticated || (isAuthenticated && !hasGuild)) && <GuildSetupOverlay />}
@@ -197,9 +197,10 @@ function AppContent() {
           component="main"
           sx={{
             flexGrow: 1,
-            p: 3,
-            ml: { sm: '240px' },
+            p: isMobile ? 2 : 3,
+            ml: isMobile ? 0 : '240px',
             mt: { xs: '56px', sm: '64px' },
+            mb: isMobile ? '64px' : 0,
             position: 'relative',
             '&::before': {
               content: '""',
@@ -208,12 +209,10 @@ function AppContent() {
               left: 0,
               right: 0,
               bottom: 0,
-              // Simpler gradient that doesn't rely on radial gradient or variable positions
               background: 'linear-gradient(135deg, rgba(144, 202, 249, 0.05) 0%, transparent 100%)',
               pointerEvents: 'none',
               zIndex: 0,
             },
-            // If not authenticated, blur the content - using a more performant approach
             filter: !isAuthenticated ? 'blur(5px)' : 'none',
             pointerEvents: !isAuthenticated ? 'none' : 'auto'
           }}

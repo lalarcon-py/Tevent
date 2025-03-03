@@ -87,11 +87,48 @@ class SchemaManager {
   async dropGuildSchema(guildId) {
     const schemaName = `guild_${guildId}`;
     try {
+      console.log(`Attempting to drop schema "${schemaName}"`);
+      
+      // First check if schema exists
+      const schemaExists = await this.sequelize.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
+        { type: this.sequelize.QueryTypes.SELECT }
+      );
+      
+      if (!schemaExists[0].exists) {
+        console.log(`Schema "${schemaName}" does not exist, skipping drop operation`);
+        return true; // Return true since there's nothing to delete
+      }
+      
+      // Count objects in the schema before dropping
+      const objects = await this.sequelize.query(
+        `SELECT count(*) FROM pg_catalog.pg_class c 
+         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace 
+         WHERE n.nspname = '${schemaName}'`,
+        { type: this.sequelize.QueryTypes.SELECT }
+      );
+      
+      console.log(`Schema "${schemaName}" has ${objects[0].count} objects before dropping`);
+      
+      // Drop the schema with CASCADE to ensure all objects are dropped
       await this.sequelize.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      
+      // Verify it was dropped
+      const schemaExistsAfter = await this.sequelize.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
+        { type: this.sequelize.QueryTypes.SELECT }
+      );
+      
+      if (schemaExistsAfter[0].exists) {
+        console.error(`Failed to drop schema "${schemaName}" - it still exists after DROP command`);
+        return false;
+      }
+      
+      console.log(`Successfully dropped schema "${schemaName}"`);
       return true;
     } catch (error) {
       console.error(`Failed to drop schema for guild ${guildId}:`, error);
-      throw error;
+      return false; // Return false instead of throwing to prevent transaction rollback
     }
   }
 }

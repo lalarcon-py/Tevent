@@ -1,3 +1,4 @@
+// components/GuildManagement/LeaveGuildButton.jsx
 import { useState } from 'react';
 import { 
   Button, 
@@ -6,10 +7,10 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Typography
+  Typography,
+  TextField // Add this import
 } from '@mui/material';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
-import { useNavigate } from 'react-router-dom';
 
 const API_URL = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:5000' 
@@ -19,14 +20,28 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
+  
+
+  const [confirmationText, setConfirmationText] = useState('');
+  const [confirmError, setConfirmError] = useState(false);
 
   const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  const handleClose = () => {
+    setOpen(false);
+    setConfirmationText('');
+    setConfirmError(false);
+  };
 
   const handleLeaveGuild = async () => {
     setLoading(true);
     setError(null);
+    
+    // Validate confirmation text
+    if (confirmationText !== "Leave guild") {
+      setConfirmError(true);
+      setLoading(false);
+      return;
+    }
     
     try {
       const response = await fetch(`${API_URL}/api/guilds/leave/${guildId}`, {
@@ -42,8 +57,15 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
         throw new Error(errorData.error || 'Failed to leave guild');
       }
       
+      // Clear guild ID from localStorage
+      try {
+        localStorage.removeItem('guildId');
+      } catch (e) {
+        console.warn('Failed to clear localStorage:', e);
+      }
+      
       // Redirect to guild selection page
-      navigate('/guilds/setup');
+      window.location.href = '/guilds/setup';
     } catch (error) {
       console.error('Failed to leave guild:', error);
       setError(error.message || 'Failed to leave guild');
@@ -89,6 +111,29 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
             )}
           </DialogContentText>
           
+          {/* Add confirmation text field */}
+          <TextField
+            fullWidth
+            label="Type 'Leave guild' to confirm"
+            variant="outlined"
+            value={confirmationText}
+            onChange={(e) => {
+              setConfirmationText(e.target.value);
+              setConfirmError(false);
+            }}
+            error={confirmError}
+            helperText={confirmError ? "You must type 'Leave guild' exactly" : ""}
+            margin="normal"
+            sx={{
+              mt: 2,
+              '& .MuiOutlinedInput-root': {
+                color: 'white',
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              },
+              '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' }
+            }}
+          />
+          
           {error && (
             <Typography color="error" sx={{ mt: 2 }}>
               {error}
@@ -107,7 +152,7 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
             onClick={handleLeaveGuild} 
             color="error" 
             variant="contained"
-            disabled={loading}
+            disabled={loading || confirmationText !== "Leave guild"}
           >
             {loading ? 'Leaving...' : 'Leave Guild'}
           </Button>

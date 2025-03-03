@@ -1,4 +1,4 @@
-// backend/jobs/cleanupEmptyGuilds.js
+// backend/jobs/cleanupEmptyGuilds.js - Update for better logging and error handling
 const cron = require('node-cron');
 const { Guild, GuildMember } = require('../models');
 const schemaManager = require('../utils/schemaManager');
@@ -20,6 +20,8 @@ cron.schedule('0 0 * * *', async () => {
       }
     });
     
+    console.log(`Found ${guildsToDelete.length} guilds marked for deletion`);
+    
     // Find completely empty guilds
     const allGuilds = await Guild.findAll();
     const emptyGuilds = [];
@@ -30,9 +32,12 @@ cron.schedule('0 0 * * *', async () => {
       });
       
       if (memberCount === 0) {
+        console.log(`Found empty guild: ${guild.id} (${guild.name})`);
         emptyGuilds.push(guild);
       }
     }
+    
+    console.log(`Found ${emptyGuilds.length} additional empty guilds that weren't marked for deletion`);
     
     // Combine lists of guilds to delete
     const guildsToProcess = [...new Set([...guildsToDelete, ...emptyGuilds])];
@@ -41,11 +46,19 @@ cron.schedule('0 0 * * *', async () => {
     for (const guild of guildsToProcess) {
       console.log(`Deleting empty guild: ${guild.id} (${guild.name})`);
       
-      // Delete guild record
-      await guild.destroy({ transaction: t });
-      
-      // Drop guild schema
-      await schemaManager.dropGuildSchema(guild.id);
+      try {
+        // Delete guild record
+        await guild.destroy({ transaction: t });
+        
+        // Drop guild schema
+        const dropResult = await schemaManager.dropGuildSchema(guild.id);
+        if (!dropResult) {
+          console.error(`Failed to drop schema for guild ${guild.id}, but record was deleted`);
+        }
+      } catch (guildError) {
+        console.error(`Error deleting guild ${guild.id}:`, guildError);
+        // Continue with other guilds
+      }
     }
     
     await t.commit();

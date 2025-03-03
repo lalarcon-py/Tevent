@@ -5,9 +5,6 @@ const crypto = require('crypto');
 const db = require('../models');
 const schemaManager = require('../utils/schemaManager');
 
-/**
- * Create a new guild
- */
 const createGuild = async (req, res) => {
   const t = await sequelize.transaction();
   
@@ -205,12 +202,7 @@ const leaveGuild = async (req, res) => {
           }, { transaction: t });
         }
       } else {
-        console.log(`No members to transfer ownership to. Marking guild for deletion.`);
-        // No other members, mark guild for deletion
-        await guild.update({ 
-          status: 'PENDING_DELETION',
-          deletion_scheduled_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days grace period
-        }, { transaction: t });
+        console.log(`No members to transfer ownership to. Guild will be deleted after the user leaves.`);
       }
     }
     
@@ -218,15 +210,19 @@ const leaveGuild = async (req, res) => {
     await membership.destroy({ transaction: t });
     console.log(`User ${req.user.id} has left guild ${guildId}`);
     
-    // Check if guild is now empty
+    // Check if guild is now empty - IMPORTANT: Include the transaction here
     const remainingMembers = await db.GuildMember.count({
-      where: { guild_id: guildId }
+      where: { guild_id: guildId },
+      transaction: t  // Use the same transaction to see the updated state
     });
     
+    console.log(`Guild ${guildId} has ${remainingMembers} remaining members`);
+    
     if (remainingMembers === 0) {
-      console.log(`Guild ${guildId} has no remaining members. Deleting...`);
+      console.log(`Guild ${guildId} has no remaining members. Deleting immediately...`);
       // Delete the guild and its data
       await deleteEmptyGuild(guildId, t);
+      console.log(`Guild ${guildId} and its database have been deleted successfully`);
     }
     
     await t.commit();
@@ -244,16 +240,45 @@ const leaveGuild = async (req, res) => {
  */
 const deleteEmptyGuild = async (guildId, transaction) => {
   try {
+    console.log(`Starting deletion process for empty guild ${guildId}...`);
+    
     // Delete guild record
-    await db.Guild.destroy({
+    const deleteResult = await db.Guild.destroy({
       where: { id: guildId },
       transaction
     });
     
-    // Drop the guild schema
-    await schemaManager.dropGuildSchema(guildId);
+    if (deleteResult === 0) {
+      throw new Error(`Guild record ${guildId} not found or could not be deleted`);
+    }
     
-    console.log(`Guild ${guildId} deleted due to zero members`);
+    console.log(`Guild record deleted from database. Now dropping schema...`);
+    
+    // Drop the guild schema - this is outside the transaction because
+    // schema operations can't be rolled back in most databases
+    const schemaResult = await schemaManager.dropGuildSchema(guildId);
+    
+    if (!schemaResult) {
+      // Log error but don't throw to prevent transaction rollback
+      console.error(`Failed to drop schema for guild ${guildId}, but guild record was deleted`);
+    } else {
+      console.log(`Schema for guild ${guildId} successfully dropped`);
+    }
+    
+    // Clean up any related data in other tables
+    try {
+      // These can be within the transaction
+      await db.GuildInvite.destroy({
+        where: { guild_id: guildId },
+        transaction
+      });
+      
+      console.log(`Guild ${guildId} related data cleanup completed`);
+    } catch (cleanupError) {
+      console.error(`Error during guild ${guildId} cleanup:`, cleanupError);
+      // Don't throw this error, just log it
+    }
+    
     return true;
   } catch (error) {
     console.error(`Failed to delete empty guild ${guildId}:`, error);
@@ -626,9 +651,6 @@ const getUserGuilds = async (req, res) => {
   }
 };
 
-/**
- * Get available guilds to join
- */
 const getAvailableGuilds = async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
@@ -641,13 +663,21 @@ const getAvailableGuilds = async (req, res) => {
       attributes: ['guild_id']
     }).then(memberships => memberships.map(m => m.guild_id));
     
+    console.log('User is member of guilds:', userGuildIds);
+    
+    // Ensure we handle the case of empty userGuildIds array
+    // Without this, if userGuildIds is empty, the query would exclude ALL guilds
     const availableGuilds = await db.Guild.findAll({
       where: {
-        id: { [Op.notIn]: userGuildIds.length > 0 ? userGuildIds : ['00000000-0000-0000-0000-000000000000'] },
+        ...(userGuildIds.length > 0 ? {
+          id: { [Op.notIn]: userGuildIds }
+        } : {}),
         status: 'ACTIVE'
       },
       attributes: ['id', 'name', 'created_at']
     });
+    
+    console.log('Found available guilds:', availableGuilds.length);
     
     // Get owner names and member counts
     const guildsWithDetails = await Promise.all(availableGuilds.map(async guild => {

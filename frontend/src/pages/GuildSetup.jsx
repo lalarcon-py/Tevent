@@ -34,8 +34,31 @@ const GuildSetup = () => {
         name: newGuildName
       });
       
-      // Redirect to the new guild's dashboard
-      window.location.href = `/guilds/${response.data.id}/dashboard`;
+      // Get the guild ID from the response
+      const newGuildId = response.data.id;
+      const newGuildName = response.data.name;
+      
+      console.log(`Created new guild: ${newGuildName} with ID: ${newGuildId}`);
+      
+      // Update localStorage with the new guild ID
+      try {
+        localStorage.setItem('guildId', newGuildId);
+        console.log('Updated localStorage with new guild ID:', newGuildId);
+      } catch (e) {
+        console.warn('Failed to update localStorage:', e);
+      }
+      
+      // Clear any cached data that might be related to previous guild
+      try {
+        // Clear specific guild data if you have any
+        localStorage.removeItem('guildData');
+        // You could also clear other guild-specific cache items here
+      } catch (e) {
+        console.warn('Failed to clear cache:', e);
+      }
+      
+      // Force a full page refresh when redirecting to ensure clean state
+      window.location.href = `/guilds/${newGuildId}/dashboard`;
     } catch (error) {
       console.error('Failed to create guild:', error);
       setError(error.response?.data?.error || 'Failed to create guild');

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, IconButton, Dialog, DialogTitle, DialogContent, Select, MenuItem, 
-  Button, Avatar, Typography, Box, TextField
+  Button, Avatar, Typography, Box, TextField, useMediaQuery, useTheme
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -478,6 +478,8 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
 
 
 const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrentUser }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { user: authCurrentUser } = useAuth();
   const [roleManagementMember, setRoleManagementMember] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
@@ -750,34 +752,45 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
 
   return (
     <>
-      <TableContainer component={Paper} sx={{ bgcolor: '#1e1e1e' }}>
-        <Table>
+      <TableContainer 
+        component={Paper} 
+        sx={{ 
+          bgcolor: '#1e1e1e',
+          overflowX: 'auto', // Ensure horizontal scrolling on mobile
+        }}
+      >
+        <Table size={isMobile ? "small" : "medium"}>
           <TableHead>
             <TableRow sx={{ bgcolor: '#1a1a1a' }}>
               {headers.map((header, index) => (
-                <TableCell 
-                  key={index}
-                  onClick={() => header.key && handleSort(header.key)}
-                  sx={{ 
-                    color: 'white', 
-                    fontWeight: 'bold',
-                    borderBottom: '2px solid #90caf9',
-                    cursor: header.key ? 'pointer' : 'default',
-                    userSelect: 'none',
-                    '&:hover': {
-                      backgroundColor: header.key ? 'rgba(144, 202, 249, 0.1)' : 'inherit',
-                    }
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {header.label}
-                    {sortConfig.key === header.key && (
-                      <span>
-                        {sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}
-                      </span>
-                    )}
-                  </Box>
-                </TableCell>
+                // On mobile, only show important columns
+                (!isMobile || (isMobile && ['Avatar', 'Name', 'Actions'].includes(header.label))) && (
+                  <TableCell 
+                    key={index}
+                    onClick={() => header.key && handleSort(header.key)}
+                    sx={{ 
+                      color: 'white', 
+                      fontWeight: 'bold',
+                      borderBottom: '2px solid #90caf9',
+                      cursor: header.key ? 'pointer' : 'default',
+                      padding: isMobile ? '8px 4px' : '16px',
+                      whiteSpace: isMobile ? 'nowrap' : 'normal',
+                      userSelect: 'none',
+                      '&:hover': {
+                        backgroundColor: header.key ? 'rgba(144, 202, 249, 0.1)' : 'inherit',
+                      }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {header.label}
+                      {sortConfig.key === header.key && (
+                        <span>
+                          {sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}
+                        </span>
+                      )}
+                    </Box>
+                  </TableCell>
+                )
               ))}
             </TableRow>
           </TableHead>
@@ -789,109 +802,133 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 sx={{ 
                   cursor: 'pointer',
                   '&:hover': { 
-                    // Simpler hover effect that's less dependent on hardware acceleration
                     backgroundColor: 'rgba(144, 202, 249, 0.1)',
                   },
-                  transition: 'background-color 0.2s ease' // Simpler transition
+                  transition: 'background-color 0.2s ease'
                 }}
               >
-                <TableCell sx={{ color: 'white', padding: '8px', width: '50px' }}>
+                <TableCell sx={{ 
+                  color: 'white', 
+                  padding: isMobile ? '8px 4px' : '16px', 
+                  width: '50px' 
+                }}>
                   <Avatar
                     src={member.avatar_url}
                     alt={member.username}
                     sx={{ 
-                      width: 40, 
-                      height: 40,
+                      width: isMobile ? 32 : 40, 
+                      height: isMobile ? 32 : 40,
                       border: '2px solid #90caf9'
                     }}
                   />
                 </TableCell>
-                <TableCell sx={{ color: 'white', paddingLeft: '8px' }}>
-                  {member.username}
+                
+                <TableCell sx={{ 
+                  color: 'white', 
+                  paddingLeft: isMobile ? '4px' : '16px',
+                  fontSize: isMobile ? '0.875rem' : 'inherit'
+                }}>
+                  <Box>
+                    <Typography variant={isMobile ? "body2" : "body1"} sx={{ fontWeight: 'bold' }}>
+                      {member.username}
+                    </Typography>
+                    {isMobile && (
+                      <Typography variant="caption" sx={{ color: '#90caf9' }}>
+                        {member.role}
+                      </Typography>
+                    )}
+                  </Box>
                 </TableCell>
-                <TableCell sx={{ color: 'white' }}>{member.role}</TableCell>
-                <TableCell sx={{ color: 'white' }}>{member.status}</TableCell>
-                <TableCell sx={{ color: 'white' }}>
-                  {member.builds?.map((build, index) => (
-                    <div 
-                      key={index} 
-                      style={{ 
-                        margin: '0.5rem 0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px'
-                      }}
-                    >
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '4px' 
-                      }}>
-                        {build.primary && (
-                          <img 
-                            src={getWeaponIcon(build.primary)} 
-                            alt={build.primary}
-                            style={{ 
-                              width: 24, 
-                              height: 24,
-                              objectFit: 'contain'
-                            }}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
-                        )}
-                        {build.secondary && (
-                          <img 
-                            src={getWeaponIcon(build.secondary)} 
-                            alt={build.secondary}
-                            style={{ 
-                              width: 24, 
-                              height: 24,
-                              objectFit: 'contain'
-                            }}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
-                        )}
-                      </div>
-                      <span style={{ color: '#90caf9' }}>
-                        {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
-                      </span>
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell sx={{ color: 'white' }}>
-                  {member.builds?.map((build, index) => (
-                    <div 
-                      key={index} 
-                      style={{ 
-                        margin: '0.5rem 0',
-                        color: build.spec === 'DPS' ? '#ff6666' : 
-                               build.spec === 'Tank' ? '#66b3ff' : 
-                               '#66ff66'
-                      }}
-                    >
-                      ⚔ {build.spec}
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell sx={{ color: 'white' }}>
-                  {member.builds?.map((build, index) => (
-                    <div 
-                      key={index} 
-                      style={{ 
-                        margin: '0.5rem 0',
-                        color: '#ffd700'
-                      }}
-                    >
-                      {member.combat_power || 'N/A'}
-                    </div>
-                  ))}
-                </TableCell>
+                
+                {/* Only show these cells on desktop */}
+                {!isMobile && (
+                  <>
+                    <TableCell sx={{ color: 'white' }}>{member.role}</TableCell>
+                    <TableCell sx={{ color: 'white' }}>{member.status}</TableCell>
+                    <TableCell sx={{ color: 'white' }}>
+                      {member.builds?.map((build, index) => (
+                        <div 
+                          key={index} 
+                          style={{ 
+                            margin: '0.5rem 0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px'
+                          }}
+                        >
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px' 
+                          }}>
+                            {build.primary && (
+                              <img 
+                                src={getWeaponIcon(build.primary)} 
+                                alt={build.primary}
+                                style={{ 
+                                  width: 24, 
+                                  height: 24,
+                                  objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            )}
+                            {build.secondary && (
+                              <img 
+                                src={getWeaponIcon(build.secondary)} 
+                                alt={build.secondary}
+                                style={{ 
+                                  width: 24, 
+                                  height: 24,
+                                  objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            )}
+                          </div>
+                          <span style={{ color: '#90caf9' }}>
+                            {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
+                          </span>
+                        </div>
+                      ))}
+                    </TableCell>
+                    <TableCell sx={{ color: 'white' }}>
+                      {member.builds?.map((build, index) => (
+                        <div 
+                          key={index} 
+                          style={{ 
+                            margin: '0.5rem 0',
+                            color: build.spec === 'DPS' ? '#ff6666' : 
+                                  build.spec === 'Tank' ? '#66b3ff' : 
+                                  '#66ff66'
+                          }}
+                        >
+                          ⚔ {build.spec}
+                        </div>
+                      ))}
+                    </TableCell>
+                    <TableCell sx={{ color: 'white' }}>
+                      {member.builds?.map((build, index) => (
+                        <div 
+                          key={index} 
+                          style={{ 
+                            margin: '0.5rem 0',
+                            color: '#ffd700'
+                          }}
+                        >
+                          {member.combat_power || 'N/A'}
+                        </div>
+                      ))}
+                    </TableCell>
+                  </>
+                )}
+                
                 <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
                     <IconButton 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -899,18 +936,20 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                       }}
                       sx={{ 
                         color: '#90caf9',
+                        padding: isMobile ? '4px' : '8px',
                         '&:hover': { 
                           bgcolor: 'rgba(144, 202, 249, 0.2)',
                           transform: 'scale(1.1)'
                         }
                       }}
                     >
-                      <EditIcon />
+                      <EditIcon fontSize={isMobile ? "small" : "medium"} />
                     </IconButton>
+                    
                     {(currentUserRole === 'Guild Master' || 
                       (currentUserRole === 'Guild Advisor' && 
-                       member.role !== 'Guild Master' && 
-                       member.role !== 'Guild Advisor')) && (
+                      member.role !== 'Guild Master' && 
+                      member.role !== 'Guild Advisor')) && (
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation();
@@ -918,13 +957,14 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                         }}
                         sx={{ 
                           color: '#ffd700',
+                          padding: isMobile ? '4px' : '8px',
                           '&:hover': { 
                             bgcolor: 'rgba(255, 215, 0, 0.2)',
                             transform: 'scale(1.1)'
                           }
                         }}
                       >
-                        <StarIcon />
+                        <StarIcon fontSize={isMobile ? "small" : "medium"} />
                       </IconButton>
                     )}
                   </Box>
@@ -943,7 +983,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           onSave={handleSave}
         />
       )}
-
+  
       {roleManagementMember && (
         <RoleManagementDialog
           member={roleManagementMember}
@@ -952,7 +992,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           onSave={handleRoleSave}
         />
       )}
-
+  
       {selectedMember && (
         <MemberProfileModal
           member={selectedMember}

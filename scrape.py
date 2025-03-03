@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import json
 import time
 
-BASE_URL = "https://tldb.info/db/items/page/{}"
+BASE_URL = "https://nc.tldb.info/db/items/page/{}"
 VALID_TYPES = {
     'head', 'cloak', 'chest', 'hands', 'legs', 'feet',
     'spear', 'daggers', 'sword', 'greatsword', 'staff',
@@ -21,14 +21,13 @@ def get_item_data(row):
             'name': row.select_one('td.ellipsis.svelte-d21jyt a').text.strip(),
             'type': item_type,
             'icon': row.select_one('td.item-icon-sticky img')['src'],
-            'dkp_value': calculate_dkp(item_type)  # Custom DKP calculation
+            'dkp_value': calculate_dkp(item_type)
         }
     except Exception as e:
         print(f"Error parsing row: {e}")
         return None
 
 def calculate_dkp(item_type):
-    # Customize DKP values based on your guild's needs
     dkp_map = {
         'weapon': 1000,
         'armor': 750,
@@ -61,21 +60,28 @@ def scrape_page(page):
 # Main scraping process
 all_items = []
 page = 1
-MAX_PAGES = 20  # Safety limit
+consecutive_empty = 0
+MAX_EMPTY_PAGES = 15  # Stop after 15 empty pages in a row
 
-while page <= MAX_PAGES:
-    print(f"Scraping page {page}...")
+print("Starting extended scraping with empty page tolerance...")
+while consecutive_empty < MAX_EMPTY_PAGES:
+    print(f"\nScraping page {page} (Consecutive empty pages: {consecutive_empty}/{MAX_EMPTY_PAGES})")
     items = scrape_page(page)
     
-    if not items:
-        break
+    if items:
+        all_items.extend(items)
+        print(f"✓ Found {len(items)} valid items (Total: {len(all_items)})")
+        consecutive_empty = 0  # Reset counter on successful find
+    else:
+        print("× No valid items found")
+        consecutive_empty += 1
         
-    all_items.extend(items)
     page += 1
-    time.sleep(2)  # Respectful delay
+    time.sleep(2)  # Always keep the delay
 
 # Save results
 with open('tnl_filtered_items.json', 'w') as f:
     json.dump(all_items, f, indent=2)
 
-print(f"Scraped {len(all_items)} valid items")
+print(f"\nScraping completed with {len(all_items)} valid items")
+print(f"Stopped after {consecutive_empty} consecutive empty pages")
