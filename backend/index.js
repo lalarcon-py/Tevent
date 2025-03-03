@@ -194,17 +194,22 @@ app.get('/auth/discord/callback',
     try {
       // Check if user is authenticated
       if (!req.isAuthenticated() || !req.user) {
-        // Use more robust fallbacks for production environment
-        const redirectUrl = req.query.redirectUrl || 
-          (process.env.NODE_ENV === 'production' ? 
-            (process.env.FRONTEND_URL || req.headers.origin || req.headers.referer || '/') : 
-            'http://localhost:3002');
-            
-        return res.redirect(`${redirectUrl}/error`);
+        return res.redirect('/error');
       }
-
-      // Get the redirect URL with better fallbacks
-      const redirectUrl = req.query.redirectUrl || 
+      
+      // Extract redirectUrl from state parameter
+      let redirectUrl = '';
+      if (req.query.state) {
+        try {
+          const stateData = JSON.parse(Buffer.from(req.query.state, 'base64').toString());
+          redirectUrl = stateData.redirectUrl || '';
+        } catch (e) {
+          console.error('Failed to parse state:', e);
+        }
+      }
+      
+      // Apply fallbacks if needed
+      redirectUrl = redirectUrl || 
         (process.env.NODE_ENV === 'production' ? 
           (process.env.FRONTEND_URL || req.headers.origin || req.headers.referer || '/') : 
           'http://localhost:3002');
@@ -223,11 +228,8 @@ app.get('/auth/discord/callback',
       }
     } catch (error) {
       console.error('Auth callback error:', error);
-      const redirectUrl = req.query.redirectUrl || 
-        (process.env.NODE_ENV === 'production' ? 
-          (process.env.FRONTEND_URL || req.headers.origin || req.headers.referer || '/') : 
-          'http://localhost:3002');
-      res.redirect(`${redirectUrl}/error`);
+      const fallbackRedirect = process.env.FRONTEND_URL || '/';
+      res.redirect(`${fallbackRedirect}/error`);
     }
   }
 );
