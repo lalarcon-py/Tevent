@@ -1,4 +1,4 @@
-// components/GuildSettings/GuildSettings.jsx (Fixed version)
+// components/GuildSettings/GuildSettings.jsx
 import { useState, useEffect } from 'react';
 import { 
   Box, Paper, Tabs, Tab, Typography, Divider, CircularProgress,
@@ -23,7 +23,7 @@ const GuildSettings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [guildData, setGuildData] = useState(null);
-  const { guildId } = useParams(); // Use the useParams hook to get the guildId
+  const { guildId } = useParams();
   const { isAuthenticated, user } = useAuth();
   const [isGuildMaster, setIsGuildMaster] = useState(false);
   const [actualGuildId, setActualGuildId] = useState(null);
@@ -50,7 +50,7 @@ const GuildSettings = () => {
       }
     }
     
-    // Method 3: From localStorage
+    // Method 3: From localStorage - only as a fallback, permissions enforced server-side
     try {
       const storedGuildId = localStorage.getItem('guildId');
       if (storedGuildId && storedGuildId !== 'undefined') {
@@ -80,21 +80,23 @@ const GuildSettings = () => {
       setLoading(true);
       setError(null);
       
-      console.log('Fetching guild data with ID:', actualGuildId);
-      
       if (!actualGuildId || actualGuildId === 'undefined') {
         throw new Error('Invalid guild ID');
       }
       
-      // Fetch guild details
+      // Fetch guild details - server validates permissions
       const guildResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}`);
+      console.log("Guild API response:", guildResponse.data);
+      
+      // Check if current user is guild master from response
+      const userRoleFromAPI = guildResponse.data.userRole;
+      console.log("Server-reported user role:", userRoleFromAPI);
+      
+      // Only trust the server response for permission checks
+      setIsGuildMaster(userRoleFromAPI === 'Guild Master');
       
       // Fetch guild settings
       const settingsResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}/settings`);
-      
-      // Check if current user is guild master
-      const isGM = guildResponse.data.userRole === 'Guild Master';
-      setIsGuildMaster(isGM);
       
       // Combine guild data with settings
       setGuildData({
@@ -111,7 +113,18 @@ const GuildSettings = () => {
       });
     } catch (error) {
       console.error('Failed to fetch guild data:', error);
-      setError('Failed to load guild settings. Please try again later.');
+      
+      // Handle different error types
+      if (error.response) {
+        if (error.response.status === 403) {
+          setIsGuildMaster(false);
+          setError('You do not have permission to access guild settings.');
+        } else {
+          setError(error.response.data?.error || 'Failed to load guild settings. Please try again later.');
+        }
+      } else {
+        setError('Failed to load guild settings. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }
@@ -129,8 +142,8 @@ const GuildSettings = () => {
         throw new Error('Invalid guild ID');
       }
       
-      // Update settings in backend
-      await axiosInstance.put(`/api/guilds/${actualGuildId}/settings`, {
+      // Update settings in backend - server will enforce permissions
+      const response = await axiosInstance.put(`/api/guilds/${actualGuildId}/settings`, {
         settingGroup,
         settings: updatedSettings
       });
@@ -144,10 +157,17 @@ const GuildSettings = () => {
         }
       }));
       
-      // Show success message or notification
     } catch (error) {
       console.error('Failed to update settings:', error);
-      // Show error message
+      
+      // Handle permission errors
+      if (error.response && error.response.status === 403) {
+        setError('You do not have permission to update guild settings.');
+        // Reload to get latest permissions
+        fetchGuildData();
+      } else {
+        setError(error.response?.data?.error || 'Failed to update settings. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -176,12 +196,28 @@ const GuildSettings = () => {
     );
   }
   
+  // This check is only for UI rendering - actual permission enforcement happens server-side
   if (!isGuildMaster) {
     return (
       <Box sx={{ p: 5 }}>
         <Alert severity="warning">
           Only Guild Masters can access guild settings.
+          Your current role is: {guildData?.userRole || user?.role || 'Unknown'}
         </Alert>
+        <Button 
+          variant="contained" 
+          onClick={fetchGuildData}
+          sx={{ mt: 2 }}
+        >
+          Refresh
+        </Button>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/')}
+          sx={{ mt: 2, ml: 2 }}
+        >
+          Return to Dashboard
+        </Button>
       </Box>
     );
   }
