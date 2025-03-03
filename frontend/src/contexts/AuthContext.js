@@ -1,88 +1,122 @@
-// frontend/src/contexts/AuthContext.js
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+// src/contexts/AuthContext.js
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import axiosInstance from '../config/axios';
 
-const AuthContext = createContext(null);
+// Create the auth context
+const AuthContext = createContext();
 
+// Auth provider component
 export const AuthProvider = ({ children }) => {
+  // State for authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Refs to prevent multiple simultaneous auth checks
+  const authCheckInProgress = useRef(false);
+  const lastAuthCheck = useRef(0);
+  const AUTH_CHECK_THROTTLE = 2000; // Min time between auth checks (2 seconds)
 
-  const checkAuth = useCallback(async () => {
-    // Add rate limiting to prevent rapid successive checks
+  const checkAuth = useCallback(async (force = false) => {
+    if (authCheckInProgress.current && !force) return;
+    
     const now = Date.now();
-    const lastCheck = sessionStorage.getItem('lastAuthCheck');
-    
-    // Only check if it's been at least 2 seconds since last check
-    if (lastCheck && now - parseInt(lastCheck) < 2000) {
-      return;
-    }
-    
+    if (!force && now - lastAuthCheck.current < AUTH_CHECK_THROTTLE) return;
+  
+    authCheckInProgress.current = true;
+    lastAuthCheck.current = now;
+  
     try {
-      sessionStorage.setItem('lastAuthCheck', now.toString());
-      setLoading(true);
-      console.log('Checking authentication status...');
-      const response = await axiosInstance.get('/api/auth/status', {
-        withCredentials: true
-      });
+      setIsLoading(true);
+      const response = await axiosInstance.get('/api/auth/status');
       
-      if (response.data && response.data.id) {
-        console.log('Authentication successful:', response.data);
+      // Only update if data changed
+      const userDataChanged = 
+        !isAuthenticated ||
+        user?.id !== response.data.id ||
+        user?.username !== response.data.username;
+  
+      if (userDataChanged) {
         setIsAuthenticated(true);
         setUser(response.data);
-      } else {
-        console.log('Not authenticated or invalid user data');
-        setIsAuthenticated(false);
-        setUser(null);
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
-      setIsAuthenticated(false);
-      setUser(null);
+      // Handle errors
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+      authCheckInProgress.current = false;
     }
+  }, [isAuthenticated, user]);
+
+  /**
+   * Redirect to Discord OAuth login
+   */
+  const login = useCallback(() => {
+    const baseUrl = process.env.NODE_ENV === 'development' 
+      ? 'http://localhost:5000'
+      : process.env.REACT_APP_API_URL || window.location.origin;
+    
+    const returnUrl = encodeURIComponent(window.location.href);
+    window.location.href = `${baseUrl}/auth/discord?redirectUrl=${returnUrl}`;
   }, []);
 
-  // Run once on mount
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
+  /**
+   * Log out the current user
+   */
   const logout = useCallback(async () => {
     try {
-      console.log('Logging out...');
+      // First, clear localStorage safely
+      try {
+        localStorage.removeItem('guildId');
+        localStorage.removeItem('userId');
+      } catch (storageError) {
+        console.warn('Failed to access localStorage:', storageError);
+      }
       
-      // Pre-emptively set auth state to false for immediate UI feedback
+      // Update state before API call to make UI responsive
       setIsAuthenticated(false);
       setUser(null);
       
-      // Then make the API call
-      await axiosInstance.get('/auth/logout', {
-        withCredentials: true
+      // Make the API call
+      const baseUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:5000'
+        : process.env.REACT_APP_API_URL || window.location.origin;
+      
+      await fetch(`${baseUrl}/auth/logout`, {
+        credentials: 'include'
       });
       
-      console.log('Logout successful');
       return true;
     } catch (error) {
-      console.error('Logout error:', error);
-      // We've already set auth state to false, so the UI should still update
+      console.error('Logout failed:', error);
       return false;
     }
   }, []);
 
+  // Context value
+  const contextValue = {
+    isAuthenticated,
+    user,
+    isLoading,
+    login,
+    logout,
+    checkAuth: () => checkAuth(true) // Force check when manually called
+  };
+
   return (
-    <AuthContext.Provider value={{ 
-      isAuthenticated, 
-      user, 
-      loading, 
-      checkAuth,
-      logout
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+// Custom hook for using the auth context
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+export default AuthContext;

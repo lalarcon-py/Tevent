@@ -1,5 +1,5 @@
 // src/components/Guild/GuildSetupOverlay.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -25,7 +25,10 @@ const API_URL = process.env.NODE_ENV === 'development'
   : process.env.REACT_APP_API_URL;
 
 const GuildSetupOverlay = () => {
-  const { isAuthenticated, user, checkAuth } = useAuth();
+  // Auth context
+  const { isAuthenticated, user, login } = useAuth();
+  
+  // Local state
   const [tab, setTab] = useState(0);
   const [guilds, setGuilds] = useState([]);
   const [newGuildName, setNewGuildName] = useState('');
@@ -35,39 +38,51 @@ const GuildSetupOverlay = () => {
   const [success, setSuccess] = useState(null);
   const [joinGuildId, setJoinGuildId] = useState('');
   const navigate = useNavigate();
-
-  // Fetch available guilds when on "Join" tab
+  
+  // Clear any errors when tab changes
   useEffect(() => {
-    if (tab === 1 && isAuthenticated) {
-      fetchAvailableGuilds();
-    }
-  }, [tab, isAuthenticated]);
+    setError(null);
+    setSuccess(null);
+  }, [tab]);
 
-
-  // Add effect to refresh auth on mount
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
-  const fetchAvailableGuilds = async () => {
+  /**
+   * Fetch available guilds for joining
+   */
+  const fetchAvailableGuilds = useCallback(async () => {
+    if (!isAuthenticated) return;
+  
     try {
       setLoading(true);
+      setError(null);
+      
       const response = await fetch(`${API_URL}/api/guilds/available`, {
         credentials: 'include'
       });
       
-      if (!response.ok) throw new Error('Failed to fetch available guilds');
+      if (!response.ok) {
+        throw new Error('Failed to fetch available guilds');
+      }
       
       const availableGuilds = await response.json();
       setGuilds(availableGuilds);
     } catch (error) {
       console.error('Failed to fetch available guilds:', error);
-      setError('Unable to load available guilds');
+      setError('Unable to load available guilds. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
+  // Fetch guilds when tab changes to join tab
+  useEffect(() => {
+    if (tab === 1 && isAuthenticated) {
+      fetchAvailableGuilds();
+    }
+  }, [tab, isAuthenticated, fetchAvailableGuilds]);
+
+  /**
+   * Validate guild name
+   */
   const validateGuildName = () => {
     if (!newGuildName.trim()) {
       setNameError('Guild name is required');
@@ -88,6 +103,9 @@ const GuildSetupOverlay = () => {
     return true;
   };
 
+  /**
+   * Handle guild creation
+   */
   const handleCreateGuild = async () => {
     if (!validateGuildName()) return;
     
@@ -113,25 +131,36 @@ const GuildSetupOverlay = () => {
       
       const data = await response.json();
       setSuccess(`Guild "${data.name}" created successfully!`);
-
-      await checkAuth(); // Re-check auth status
       
-      // Save guild ID to local storage
-      localStorage.setItem('guildId', data.id);
+      // Safely store guild ID
+      try {
+        localStorage.setItem('guildId', data.id);
+      } catch (storageError) {
+        console.warn('Failed to store guild ID in localStorage:', storageError);
+      }
       
-      // Redirect after a brief delay to show success message
+      // Reset form
+      setNewGuildName('');
+      
+      // Redirect after delay
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate('/dashboard');;
       }, 1500);
+      
     } catch (error) {
       console.error('Guild creation failed:', error);
-      setError(error.message || 'Failed to create guild');
+      setError(error.message || 'Failed to create guild. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * Handle joining an existing guild
+   */
   const handleJoinGuild = async (guildId) => {
+    if (!guildId) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -151,32 +180,45 @@ const GuildSetupOverlay = () => {
       
       const data = await response.json();
       setSuccess(`Successfully joined guild!`);
-
-      await checkAuth(); // Re-check auth status
       
-      // Save guild ID to local storage
-      localStorage.setItem('guildId', guildId);
+      // Safely store guild ID
+      try {
+        localStorage.setItem('guildId', guildId);
+      } catch (storageError) {
+        console.warn('Failed to store guild ID in localStorage:', storageError);
+      }
       
-      // Redirect after a brief delay
+      // Reset form
+      setJoinGuildId('');
+      
+      // Redirect after delay
       setTimeout(() => {
-        window.location.reload();
+        window.location.href = '/dashboard';
       }, 1500);
+      
     } catch (error) {
       console.error('Failed to join guild:', error);
-      setError(error.message || 'Failed to join guild');
+      setError(error.message || 'Failed to join guild. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // When tab changes to "Join Guild", fetch available guilds
+  /**
+   * Handle tab changes
+   */
   const handleTabChange = (_, newValue) => {
     setTab(newValue);
-    if (newValue === 1) {
-      fetchAvailableGuilds();
-    }
+    // fetchAvailableGuilds() will be called via useEffect
   };
 
+  /**
+   * Handle Discord login
+   */
+  const handleLogin = () => {
+    // Use login from AuthContext
+    login();
+  };
 
   return (
     <Box
@@ -216,8 +258,7 @@ const GuildSetupOverlay = () => {
             <Button
               variant="contained"
               color="primary"
-              // Add proper redirect parameter
-              onClick={() => window.location.href = `${API_URL}/auth/discord?redirectUrl=${encodeURIComponent(window.location.origin)}`}
+              onClick={handleLogin}
               size="large"
               sx={{
                 py: 1.5,
@@ -255,7 +296,7 @@ const GuildSetupOverlay = () => {
             
             <Tabs 
               value={tab} 
-              onChange={(_, newValue) => setTab(newValue)} 
+              onChange={handleTabChange}
               centered
               sx={{ 
                 mb: 4,

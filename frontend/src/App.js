@@ -101,14 +101,22 @@ function AppContent() {
         
         if (guildsResponse.ok) {
           const guildsData = await guildsResponse.json();
-          console.log('Guild data received:', guildsData); // Debug log
+          console.log('Guild data received:', guildsData);
           
           // If user has active guilds
           if (guildsData.length > 0) {
             setHasGuild(true);
             
             // Get guild ID from local storage or use first guild
-            const storedGuildId = safeGetLocalStorage('guildId');
+            let storedGuildId = null;
+            
+            // Safely access localStorage
+            try {
+              storedGuildId = localStorage.getItem('guildId');
+            } catch (e) {
+              console.warn('Failed to access localStorage:', e);
+            }
+            
             const activeGuild = guildsData.find(g => g.status === 'ACTIVE');
             
             if (storedGuildId && guildsData.some(g => g.id === storedGuildId && g.status === 'ACTIVE')) {
@@ -116,7 +124,13 @@ function AppContent() {
             } else if (activeGuild) {
               // If we have an active guild but no stored ID, use the first active guild
               setCurrentGuildId(activeGuild.id);
-              safeSetLocalStorage('guildId', activeGuild.id);
+              
+              // Safely set localStorage
+              try {
+                localStorage.setItem('guildId', activeGuild.id);
+              } catch (e) {
+                console.warn('Failed to store in localStorage:', e);
+              }
             } else {
               // If no active guilds, clear storage
               try {
@@ -153,7 +167,7 @@ function AppContent() {
     };
 
     checkGuildMembership();
-  }, [isAuthenticated, user]); // Add user as a dependency
+  }, [isAuthenticated, user]);
 
   if (loading) {
     return (
@@ -174,10 +188,10 @@ function AppContent() {
   return (
     <>
       {/* Show overlay when not authenticated OR when authenticated but no guild */}
-      {(!isAuthenticated || (isAuthenticated && !hasGuild)) && <GuildSetupOverlay />}
       
       <Router>
         <AppHeader />
+        {(!isAuthenticated || (isAuthenticated && !hasGuild)) && <GuildSetupOverlay />}
         <Navigation guildId={currentGuildId} />
         <Box
           component="main"

@@ -3,37 +3,40 @@ import React, { useState } from 'react';
 import { Button, CircularProgress } from '@mui/material';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const LogoutButton = ({ variant = 'text', color = 'inherit', ...props }) => {
   const { logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const navigate = useNavigate();
   
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
       
-      // Clear localStorage first (in case logout API fails)
+      // First, clear localStorage safely
       try {
         localStorage.removeItem('guildId');
         console.log('Successfully cleared localStorage');
       } catch (storageError) {
         console.warn('Failed to access localStorage:', storageError);
-        // Continue with logout even if localStorage fails
       }
       
-      // Call the logout function from context
+      // Navigate to a public page BEFORE making the API call
+      // This prevents protected route navigation errors
+      navigate('/');
+      
+      // Then call the logout function from context
       await logout();
       console.log('Logout API call completed');
       
-      // Force a complete reload - this is the most reliable way to reset all state
-      console.log('Reloading page to reset state...');
-      window.location.reload();
+      // Full page reload to reset all application state
+      window.location.href = '/';
     } catch (error) {
       console.error('Logout process failed:', error);
       
-      // Even if the API call fails, reload to reset UI state
-      console.log('Reloading page despite error...');
-      window.location.reload();
+      // Even if the API call fails, ensure user is redirected to home
+      window.location.href = '/';
     }
   };
   
