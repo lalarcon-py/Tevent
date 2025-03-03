@@ -1,9 +1,8 @@
-// components/LootManagement/LootManagement.jsx - Complete component
+// components/LootManagement/LootManagement.jsx - Fixed version
 import { useState, useEffect } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
 import AdminLootPanel from './AdminLootPanel';
 import WaitListTab from './WaitListTab';
-import AttendanceManagement from './AttendanceManagement';
 import LootRequestForm from './LootRequestForm';
 import LootWaitlist from './LootWaitlist';
 import WishlistTab from './WishlistTab';
@@ -70,32 +69,23 @@ const LootManagement = () => {
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
-          {isAdmin ? (
-            <AdminLootPanel key={`admin-panel-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)}  />
-          ) : (
-            <LootRequestForm key={`request-form-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
-          )}
-        </Box>
-
-        <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
-          {isAdmin ? (
-            <WaitListTab key={`waitlist-tab-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)} />
-          ) : (
-            <LootRequestForm key={`request-form-tab-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
-          )}
-        </Box>
-      
-      <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
         {isAdmin ? (
-          <AttendanceManagement dkpEnabled={effectiveDkpEnabled} />
+          <AdminLootPanel key={`admin-panel-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)} />
         ) : (
-          <LootWaitlist dkpEnabled={effectiveDkpEnabled} />
+          <LootRequestForm key={`request-form-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
         )}
       </Box>
 
-      {/* Add this new Box for the Wishlist tab */}
-      <Box sx={{ display: currentTab !== 3 ? 'none' : 'block' }}>
-        <WishlistTab />
+      <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
+        {isAdmin ? (
+          <WaitListTab key={`waitlist-tab-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)} />
+        ) : (
+          <LootWaitlist key={`loot-waitlist-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
+        )}
+      </Box>
+      
+      <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
+        <WishlistTab key={`wishlist-tab-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
       </Box>
     </Box>
   );

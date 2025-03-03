@@ -176,13 +176,27 @@ passport.use(new DiscordStrategy({
 }));
 
 passport.serializeUser((user, done) => done(null, user.id));
+
+const userCache = new Map();
+const USER_CACHE_TTL = 60000;
 passport.deserializeUser(async (id, done) => {
- try {
-   const user = await db.User.findByPk(id);
-   done(null, user);
- } catch (error) {
-   done(error, null);
- }
+  try {
+    const cachedUser = userCache.get(id);
+    if (cachedUser && (Date.now() - cachedUser.timestamp) < USER_CACHE_TTL) {
+      return done(null, cachedUser.user);
+    }
+    
+    const user = await db.User.findByPk(id);
+    
+    userCache.set(id, {
+      user,
+      timestamp: Date.now()
+    });
+    
+    done(null, user);
+  } catch (error) {
+    done(error, null);
+  }
 });
 
 app.get('/auth/discord/callback',

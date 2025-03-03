@@ -150,4 +150,40 @@ router.post('/', isAuthenticated, async (req, res) => {
   }
 });
 
+router.get('/attendance/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const attendanceData = await Event.findAll({
+      include: [{
+        model: EventParticipant,
+        as: 'participants',
+        where: { user_id: userId }
+      }],
+      order: [['event_time', 'DESC']]
+    });
+    
+    // Format the data for the frontend
+    const formattedAttendance = attendanceData.map(event => {
+      const participant = event.participants.find(p => p.user_id === userId);
+      return {
+        id: `${event.id}-${userId}`,
+        event: {
+          id: event.id,
+          title: event.title,
+          event_time: event.event_time
+        },
+        attended: true, // Since we're only getting events they participated in
+        date: event.event_time,
+        dkp_earned: 0 // We can add this if you implement DKP
+      };
+    });
+    
+    res.json(formattedAttendance);
+  } catch (error) {
+    console.error('Error fetching attendance:', error);
+    res.status(500).json({ error: 'Failed to fetch attendance', details: error.message });
+  }
+});
+
 module.exports = router;

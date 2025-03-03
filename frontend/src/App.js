@@ -208,11 +208,12 @@ function AppContent() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(144, 202, 249, 0.1), transparent 50%)',
+              // Simpler gradient that doesn't rely on radial gradient or variable positions
+              background: 'linear-gradient(135deg, rgba(144, 202, 249, 0.05) 0%, transparent 100%)',
               pointerEvents: 'none',
               zIndex: 0,
             },
-            // If not authenticated, blur the content - and only check authentication now
+            // If not authenticated, blur the content - using a more performant approach
             filter: !isAuthenticated ? 'blur(5px)' : 'none',
             pointerEvents: !isAuthenticated ? 'none' : 'auto'
           }}

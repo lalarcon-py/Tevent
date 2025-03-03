@@ -8,6 +8,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
 import { useAuth } from '../../contexts/AuthContext';
+import MemberProfileModal from './MemberProfileModal';
+
 
 const API_URL = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:5000' 
@@ -70,6 +72,14 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
   const [username, setUsername] = useState(member.username);
   const [error, setError] = useState(null);
 
+  // Update state when member changes
+  useEffect(() => {
+    if (member) {
+      setSelectedRole(member.role);
+      setUsername(member.username);
+    }
+  }, [member]);
+
   const handleRoleChange = async (newRole) => {
     setError(null);
 
@@ -79,29 +89,51 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
     }
 
     if (newRole === 'Guild Guardian') {
-      const guardianCount = await fetch(`${API_URL}/api/members/count-guardians`, {
-        credentials: 'include'
-      }).then(res => res.json());
-      
-      if (guardianCount >= 5 && member.role !== 'Guild Guardian') {
-        setError('Maximum of 5 Guild Guardians allowed');
-        return;
+      try {
+        const guardianCount = await fetch(`${API_URL}/api/members/count-guardians`, {
+          credentials: 'include'
+        }).then(res => res.json());
+        
+        if (guardianCount >= 5 && member.role !== 'Guild Guardian') {
+          setError('Maximum of 5 Guild Guardians allowed');
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to check guardian count:', error);
       }
     }
 
     setSelectedRole(newRole);
   };
 
+  // Make sure all possible role options are included
+  const GUILD_ROLES = {
+    'Guild Master': 4,
+    'Guild Advisor': 3,
+    'Guild Guardian': 2,
+    'Member': 1,  // Added this to fix missing role
+    'Guild Member': 1  // Some systems use this name
+  };
+
   const getAvailableRoles = () => {
-    const currentUserRoleLevel = GUILD_ROLES[currentUserRole];
+    const currentUserRoleLevel = GUILD_ROLES[currentUserRole] || 1;
     return Object.keys(GUILD_ROLES).filter(role => {
       const roleLevel = GUILD_ROLES[role];
+      
+      // Filter out duplicate "Member" if "Guild Member" exists
+      if ((role === 'Member' && GUILD_ROLES['Guild Member']) || 
+          (role === 'Guild Member' && GUILD_ROLES['Member'] && role !== member.role)) {
+        return false;
+      }
+      
       if (currentUserRole === 'Guild Master') {
         return role !== 'Guild Master' || member.role === 'Guild Master';
       }
+      
       if (currentUserRole === 'Guild Advisor') {
         return roleLevel < GUILD_ROLES['Guild Advisor'];
       }
+      
       return false;
     });
   };
@@ -457,6 +489,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
     direction: 'asc'
   });
 
+  const [selectedMember, setSelectedMember] = useState(null);
   const effectiveCurrentUser = propCurrentUser || authCurrentUser;
 
   const handleSort = (key) => {
@@ -485,7 +518,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   const handleRoleSave = async (updatedMember) => {
     try {
       const endpoint = updatedMember.role === 'Guild Master' 
-        ? `${API_URL}/api/members/transfer-guildmaster`
+        ? `${API_URL}/api/guilds/transfer-master`  // Corrected endpoint for Guild Master transfer
         : `${API_URL}/api/members/${updatedMember.id}`;
   
       console.log('Sending update:', {
@@ -494,22 +527,30 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         username: updatedMember.username
       });
   
+      // For Guild Master transfer, use specific payload
+      const payload = updatedMember.role === 'Guild Master' 
+        ? { 
+            guildId: localStorage.getItem('guildId'), 
+            newMasterId: updatedMember.id 
+          }
+        : {
+            id: updatedMember.id,
+            role: updatedMember.role,
+            username: updatedMember.username,
+            discord_id: updatedMember.discord_id,
+            status: updatedMember.status,
+            avatar_url: updatedMember.avatar_url,
+            builds: updatedMember.builds,
+            combat_power: updatedMember.combat_power
+          };
+  
       const response = await fetch(endpoint, {
         method: updatedMember.role === 'Guild Master' ? 'POST' : 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({
-          id: updatedMember.id,
-          role: updatedMember.role,
-          username: updatedMember.username,
-          discord_id: updatedMember.discord_id,
-          status: updatedMember.status,
-          avatar_url: updatedMember.avatar_url,
-          builds: updatedMember.builds,
-          combat_power: updatedMember.combat_power
-        })
+        body: JSON.stringify(payload)
       });
   
       if (!response.ok) {
@@ -517,9 +558,13 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         throw new Error(errorData.error || 'Failed to update member');
       }
   
+      // Wait for the members list to refresh
       await fetchMembers();
+      
+      // Close the dialog after refresh is complete
       setRoleManagementMember(null);
   
+      // If the user is being promoted to Guild Master, reload the page
       if (updatedMember.role === 'Guild Master') {
         window.location.reload();
       }
@@ -740,12 +785,14 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
             {sortedMembers.map((member) => (
               <TableRow 
                 key={member.id}
+                onClick={() => setSelectedMember(member)}
                 sx={{ 
+                  cursor: 'pointer',
                   '&:hover': { 
-                    bgcolor: 'rgba(144, 202, 249, 0.1)',
-                    transform: 'scale(1.02)',
+                    // Simpler hover effect that's less dependent on hardware acceleration
+                    backgroundColor: 'rgba(144, 202, 249, 0.1)',
                   },
-                  transition: 'all 0.3s ease'
+                  transition: 'background-color 0.2s ease' // Simpler transition
                 }}
               >
                 <TableCell sx={{ color: 'white', padding: '8px', width: '50px' }}>
@@ -903,6 +950,14 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           currentUserRole={currentUserRole}
           onClose={() => setRoleManagementMember(null)}
           onSave={handleRoleSave}
+        />
+      )}
+
+      {selectedMember && (
+        <MemberProfileModal
+          member={selectedMember}
+          open={!!selectedMember}
+          onClose={() => setSelectedMember(null)}
         />
       )}
     </>

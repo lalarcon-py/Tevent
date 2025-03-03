@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js
+// src/contexts/AuthContext.js - Fixed version
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import axiosInstance from '../config/axios';
 
@@ -15,9 +15,14 @@ export const AuthProvider = ({ children }) => {
   // Refs to prevent multiple simultaneous auth checks
   const authCheckInProgress = useRef(false);
   const lastAuthCheck = useRef(0);
-  const AUTH_CHECK_THROTTLE = 2000; // Min time between auth checks (2 seconds)
+  const intervalRef = useRef(null);
+  const AUTH_CHECK_THROTTLE = 5000; // Min time between auth checks (5 seconds)
+
+  // Store user data in ref to avoid dependency issues
+  const userRef = useRef(null);
 
   const checkAuth = useCallback(async (force = false) => {
+    // If a check is already in progress and not forced, skip
     if (authCheckInProgress.current && !force) return;
     
     const now = Date.now();
@@ -27,30 +32,75 @@ export const AuthProvider = ({ children }) => {
     lastAuthCheck.current = now;
   
     try {
-      setIsLoading(true);
-      const response = await axiosInstance.get('/api/auth/status');
+      // Only set loading true on initial check
+      if (!userRef.current) {
+        setIsLoading(true);
+      }
       
-      // Only update if data changed
+      const response = await axiosInstance.get('/api/auth/status', {
+        // Add cache busting only for forced checks
+        params: force ? { _t: Date.now() } : undefined
+      });
+      
+      // Only update if data changed by comparing with ref
+      const currentUser = userRef.current;
+      const newUser = response.data;
+      
       const userDataChanged = 
-        !isAuthenticated ||
-        user?.id !== response.data.id ||
-        user?.username !== response.data.username;
+        !currentUser ||
+        currentUser.id !== newUser.id ||
+        currentUser.username !== newUser.username ||
+        currentUser.role !== newUser.role;
   
       if (userDataChanged) {
+        console.log('User data changed, updating state');
+        userRef.current = newUser;
         setIsAuthenticated(true);
-        setUser(response.data);
+        setUser(newUser);
       }
     } catch (error) {
-      // Handle errors
+      console.error('Auth check failed:', error);
+      if (error.response && error.response.status === 401) {
+        userRef.current = null;
+        setIsAuthenticated(false);
+        setUser(null);
+      }
     } finally {
       setIsLoading(false);
       authCheckInProgress.current = false;
     }
-  }, [isAuthenticated, user]);
+  }, []); // No dependencies to prevent recreation
 
-  /**
-   * Redirect to Discord OAuth login
-   */
+  // Initial auth check on mount 
+  useEffect(() => {
+    // Check auth on mount
+    checkAuth(true);
+    
+    // Clean up any existing interval
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [checkAuth]);
+  
+  // Set up interval with ref
+  useEffect(() => {
+    // If we already have an interval, don't create another
+    if (intervalRef.current) return;
+    
+    // Set up interval for periodic checks - much less frequently
+    intervalRef.current = setInterval(() => {
+      checkAuth();
+    }, 300000); // Check every 5 minutes
+    
+    return () => {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [checkAuth]);
+
   const login = useCallback(() => {
     const baseUrl = process.env.NODE_ENV === 'development' 
       ? 'http://localhost:5000'
@@ -60,9 +110,6 @@ export const AuthProvider = ({ children }) => {
     window.location.href = `${baseUrl}/auth/discord?redirectUrl=${returnUrl}`;
   }, []);
 
-  /**
-   * Log out the current user
-   */
   const logout = useCallback(async () => {
     try {
       // First, clear localStorage safely
@@ -74,6 +121,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Update state before API call to make UI responsive
+      userRef.current = null;
       setIsAuthenticated(false);
       setUser(null);
       

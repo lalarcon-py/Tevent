@@ -135,4 +135,29 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.get('/user/:userId', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { userId } = req.params;
+    
+    const wishes = await db.WishList.findAll({
+      where: { user_id: userId },
+      include: [{
+        model: db.Item,
+        attributes: ['name', 'type', 'icon'],
+        required: false
+      }],
+      order: [['priority', 'DESC'], ['created_at', 'DESC']]
+    });
+    
+    res.json(wishes);
+  } catch (error) {
+    console.error('Error fetching user wishlist:', error);
+    res.status(500).json({ error: 'Failed to fetch wishlist', details: error.message });
+  }
+});
+
 module.exports = router;
