@@ -615,47 +615,45 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
 
   const fetchMembers = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/members`, {
-        credentials: 'include'
+      // Get current guild ID
+      const guildId = localStorage.getItem('guildId');
+      
+      if (!guildId) {
+        console.error('No guild ID found');
+        setLoading(false);
+        return;
+      }
+  
+      console.log('Fetching members for guild:', guildId);
+      
+      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members`, {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch members');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to fetch members');
       }
-  
+      
       const data = await response.json();
-      console.log('Raw data from API:', data);
-  
-      const processedData = data.map(member => {
-        try {
-          const builds = Array.isArray(member.builds[0]) ? 
-            member.builds[0] : member.builds;
-  
-          return {
-            ...member,
-            builds: builds,
-            weapon_spec: member.weapon_spec || (builds[0]?.weapon_spec || '')
-          };
-        } catch (error) {
-          console.error('Error processing member:', error);
-          const defaultBuild = {
-            primary: 'Greatsword',
-            secondary: 'Crossbow',
-            spec: 'DPS'
-          };
-          return {
-            ...member,
-            builds: [defaultBuild],
-            weapon_spec: getWeaponSpec(defaultBuild.primary, defaultBuild.secondary)
-          };
-        }
-      });
-  
-      console.log('Processed data:', processedData);
+      console.log('Members data received:', data);
+      
+      // Process member data to ensure builds are in the right format
+      const processedData = data.map(member => ({
+        ...member,
+        builds: Array.isArray(member.builds) ? member.builds : 
+                typeof member.builds === 'string' ? JSON.parse(member.builds) : []
+      }));
+      
       setMembers(processedData);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching members:', error);
+      console.error('Failed to fetch members:', error);
       setLoading(false);
     }
   };

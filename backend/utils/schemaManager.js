@@ -76,10 +76,19 @@ class SchemaManager {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      
+      // Always reset search_path to public after operation
+      await this.sequelize.query(`SET search_path TO public`);
 
       return true;
     } catch (error) {
       console.error(`Failed to create schema for guild ${guildId}:`, error);
+      // Try to reset search path in case of error
+      try {
+        await this.sequelize.query(`SET search_path TO public`);
+      } catch (resetError) {
+        console.error('Failed to reset search path:', resetError);
+      }
       throw error;
     }
   }
@@ -129,6 +138,55 @@ class SchemaManager {
     } catch (error) {
       console.error(`Failed to drop schema for guild ${guildId}:`, error);
       return false; // Return false instead of throwing to prevent transaction rollback
+    }
+  }
+  
+  async clearGuildUsers(guildId) {
+    const schemaName = `guild_${guildId}`;
+    try {
+      console.log(`Attempting to clear user data for guild ${guildId}`);
+      
+      // First check if schema exists
+      const schemaExists = await this.sequelize.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
+        { type: this.sequelize.QueryTypes.SELECT }
+      );
+      
+      if (!schemaExists[0].exists) {
+        console.log(`Schema "${schemaName}" does not exist, cannot clear users`);
+        return false;
+      }
+      
+      // Delete all users in the guild schema
+      await this.sequelize.query(`DELETE FROM "${schemaName}".users`);
+      
+      console.log(`Successfully cleared all users from schema "${schemaName}"`);
+      return true;
+    } catch (error) {
+      console.error(`Failed to clear users in guild ${guildId}:`, error);
+      return false;
+    }
+  }
+  
+  async copyUserToGuildSchema(userId, guildId) {
+    const schemaName = `guild_${guildId}`;
+    try {
+      console.log(`Copying user ${userId} to guild schema ${schemaName}`);
+      
+      // Copy user data from public to guild schema
+      await this.sequelize.query(`
+        INSERT INTO "${schemaName}".users
+        SELECT * FROM public.users
+        WHERE id = :userId
+      `, {
+        replacements: { userId }
+      });
+      
+      console.log(`Successfully copied user ${userId} to guild schema ${schemaName}`);
+      return true;
+    } catch (error) {
+      console.error(`Failed to copy user to guild schema:`, error);
+      return false;
     }
   }
 }

@@ -1,5 +1,5 @@
 const { Sequelize } = require('sequelize');
-const { createDatabaseConnection, getDbName } = require('../config/database');
+const { createDatabaseConnection } = require('../config/database');
 
 class DatabaseManager {
   constructor() {
@@ -17,12 +17,21 @@ class DatabaseManager {
       });
 
       // Create new database for guild
-      const dbName = getDbName(guildId);
+      const dbName = `guild_manager_${guildId}`;
       await adminSequelize.query(`CREATE DATABASE "${dbName}"`);
       await adminSequelize.close();
 
       // Create and store connection to new database
       const guildSequelize = await createDatabaseConnection(guildId);
+      
+      // Force schema to be set correctly for this connection
+      await guildSequelize.query(`SET search_path TO "guild_${guildId}"`);
+      
+      // Add hooks to force all queries to use correct schema
+      guildSequelize.addHook('beforeQuery', (options) => {
+        options.schema = `guild_${guildId}`;
+      });
+      
       await guildSequelize.sync();
       this.connections.set(guildId, guildSequelize);
 
@@ -36,9 +45,28 @@ class DatabaseManager {
   async getGuildConnection(guildId) {
     if (!this.connections.has(guildId)) {
       const connection = await createDatabaseConnection(guildId);
+      
+      // Explicitly set schema immediately after connection
+      await connection.query(`SET search_path TO "guild_${guildId}"`);
+      
+      // Add query hook to enforce schema for all queries
+      connection.addHook('beforeQuery', (options) => {
+        options.schema = `guild_${guildId}`;
+      });
+      
       this.connections.set(guildId, connection);
     }
-    return this.connections.get(guildId);
+    
+    const connection = this.connections.get(guildId);
+    
+    // Always ensure schema is set correctly when retrieving connection
+    try {
+      await connection.query(`SET search_path TO "guild_${guildId}"`);
+    } catch (error) {
+      console.error(`Failed to set schema for guild ${guildId}:`, error);
+    }
+    
+    return connection;
   }
 
   async closeConnection(guildId) {

@@ -26,6 +26,7 @@ const wishlistRoutes = require('./routes/wishlist');
 const waitlistRoutes = require('./routes/waitlist');
 const guildStorageRoutes = require('./routes/guildStorage');
 const userController = require('./controllers/userController');
+const SchemaEnforcer = require('./utils/schemaEnforcer');
 
 console.log('Environment Variables Check:', {
   DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
@@ -70,6 +71,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+
+
 app.use(session({
   store: new pgSession({
     conObject: {
@@ -88,6 +91,8 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
+
+
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
