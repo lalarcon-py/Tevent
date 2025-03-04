@@ -678,9 +678,9 @@ const getGuildMembers = async (req, res) => {
       }],
       order: [
         [sequelize.literal(`CASE 
-          WHEN role = 'Guild Master' THEN 1
-          WHEN role = 'Guild Advisor' THEN 2
-          WHEN role = 'Guild Guardian' THEN 3
+          WHEN "GuildMember"."role" = 'Guild Master' THEN 1
+          WHEN "GuildMember"."role" = 'Guild Advisor' THEN 2
+          WHEN "GuildMember"."role" = 'Guild Guardian' THEN 3
           ELSE 4
         END`), 'ASC'],
         ['created_at', 'ASC']

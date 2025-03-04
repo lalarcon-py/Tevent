@@ -1,93 +1,106 @@
+// backend/utils/databaseManager.js
 const { Sequelize } = require('sequelize');
-const { createDatabaseConnection } = require('../config/database');
+require('dotenv').config();
 
 class DatabaseManager {
   constructor() {
     this.connections = new Map();
+    this.mainConnection = null;
   }
 
-  async createGuildDatabase(guildId) {
+  async getMainConnection() {
+    if (!this.mainConnection) {
+      // Get database URL from environment
+      let dbUrl = process.env.DATABASE_URL;
+      
+      // For development
+      if (!dbUrl && process.env.NODE_ENV !== 'production') {
+        dbUrl = `postgres://postgres:6384@localhost:5432/guilddb`;
+      }
+      
+      if (!dbUrl) {
+        throw new Error("Database URL not configured");
+      }
+      
+      this.mainConnection = new Sequelize(dbUrl, {
+        dialect: 'postgres',
+        dialectOptions: process.env.NODE_ENV === 'production' ? {
+          ssl: {
+            require: true,
+            rejectUnauthorized: false
+          }
+        } : {},
+        logging: process.env.NODE_ENV === 'development' ? console.log : false
+      });
+      
+      await this.mainConnection.authenticate();
+      console.log('Connected to main database');
+    }
+    
+    return this.mainConnection;
+  }
+
+  async getGuildConnection(guildId) {
+    if (!guildId) {
+      throw new Error("Guild ID is required");
+    }
+    
+    // Always use the same connection with schema scoping
+    const connection = await this.getMainConnection();
+    
+    // Create schema if it doesn't exist
+    const schemaName = `guild_${guildId}`;
     try {
-      // Create admin connection to create new database
-      const adminSequelize = new Sequelize(process.env.DATABASE_URL || {
-        host: process.env.DB_HOST,
-        username: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        dialect: 'postgres'
-      });
-
-      // Create new database for guild
-      const dbName = `guild_manager_${guildId}`;
-      await adminSequelize.query(`CREATE DATABASE "${dbName}"`);
-      await adminSequelize.close();
-
-      // Create and store connection to new database
-      const guildSequelize = await createDatabaseConnection(guildId);
+      // Check if schema exists
+      const [result] = await connection.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
+        { type: Sequelize.QueryTypes.SELECT }
+      );
       
-      // Force schema to be set correctly for this connection
-      await guildSequelize.query(`SET search_path TO "guild_${guildId}"`);
+      if (!result.exists) {
+        console.log(`Creating schema ${schemaName}...`);
+        await connection.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+        
+        // Create basic tables
+        await connection.query(`
+          SET search_path TO "${schemaName}";
+          
+          CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY,
+            discord_id VARCHAR(255),
+            username VARCHAR(255),
+            role VARCHAR(50) DEFAULT 'Member',
+            status VARCHAR(50) DEFAULT 'Active',
+            avatar_url TEXT,
+            builds JSONB DEFAULT '[]'::jsonb,
+            combat_power INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          
+          -- Reset search path
+          SET search_path TO public;
+        `);
+      }
       
-      // Add hooks to force all queries to use correct schema
-      guildSequelize.addHook('beforeQuery', (options) => {
-        options.schema = `guild_${guildId}`;
-      });
+      // Set schema path for current query
+      await connection.query(`SET search_path TO "${schemaName}"`);
       
-      await guildSequelize.sync();
-      this.connections.set(guildId, guildSequelize);
-
-      return guildSequelize;
+      return connection;
     } catch (error) {
-      console.error(`Failed to create database for guild ${guildId}:`, error);
+      console.error(`Error in getGuildConnection:`, error);
+      await connection.query(`SET search_path TO public`);
       throw error;
     }
   }
 
-  async getGuildConnection(guildId) {
-    if (!this.connections.has(guildId)) {
-      console.log(`Creating new database connection for guild ${guildId}`);
-      const connection = await createDatabaseConnection(guildId);
-      
-      // Explicitly set schema immediately after connection
-      await connection.query(`SET search_path TO "guild_${guildId}"`);
-      
-      // Add query hook to enforce schema for all queries
-      connection.addHook('beforeQuery', (options) => {
-        // Force schema for every query
-        options.schema = `guild_${guildId}`;
-        
-        // Add schema prefix to table names in raw queries
-        if (options.sql && !options.sql.includes('information_schema')) {
-          options.sql = options.sql.replace(
-            /(FROM|JOIN|UPDATE|INSERT INTO|DELETE FROM)\s+(["`']?)(\w+)(["`']?)/gi,
-            (match, verb, quote1, table, quote2) => {
-              // Skip if already has schema
-              if (table.includes('.')) return match;
-              return `${verb} ${quote1}guild_${guildId}.${table}${quote2}`;
-            }
-          );
-        }
-      });
-      
-      this.connections.set(guildId, connection);
-    }
-    
-    const connection = this.connections.get(guildId);
-    
-    // Always ensure schema is set correctly when retrieving connection
-    try {
-      await connection.query(`SET search_path TO "guild_${guildId}"`);
-    } catch (error) {
-      console.error(`Failed to set schema for guild ${guildId}:`, error);
-    }
-    
-    return connection;
-  }
-
   async closeConnection(guildId) {
-    const connection = this.connections.get(guildId);
-    if (connection) {
-      await connection.close();
-      this.connections.delete(guildId);
+    // No need to close connections per guild - just reset schema
+    try {
+      const connection = await this.getMainConnection();
+      await connection.query(`SET search_path TO public`);
+    } catch (error) {
+      console.error('Error closing connection:', error);
     }
   }
 }

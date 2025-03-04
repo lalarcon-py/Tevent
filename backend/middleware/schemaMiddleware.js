@@ -5,14 +5,11 @@ const { sequelize } = require('../config/database');
 const requestSchemaCache = new WeakMap();
 const DEFAULT_SCHEMA = 'public';
 
-/**
- * Middleware to ensure proper schema isolation between guilds
- */
 const schemaMiddleware = async (req, res, next) => {
-  const guildId = req.params.guildId || req.query.guildId;
+  const guildId = req.params.guildId || req.query.guildId || req.body?.guildId;
   
   try {
-    // Reset any existing schema setting from the connection
+    // Reset any existing schema setting
     if (requestSchemaCache.has(req)) {
       const previousSchema = requestSchemaCache.get(req);
       console.log(`[Schema] Clearing previous schema setting: ${previousSchema}`);
@@ -23,55 +20,58 @@ const schemaMiddleware = async (req, res, next) => {
       const schemaName = `guild_${guildId}`;
       console.log(`[Schema] Setting schema path to ${schemaName} for request ${req.method} ${req.path}`);
       
-      // Verify schema exists before attempting to use it
-      const [schemaCheck] = await sequelize.query(
-        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = $1)`,
-        { 
-          bind: [schemaName],
-          type: sequelize.QueryTypes.SELECT
+      try {
+        // Check if schema exists
+        const [schemaCheck] = await sequelize.query(
+          `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = $1)`,
+          { 
+            bind: [schemaName],
+            type: sequelize.QueryTypes.SELECT
+          }
+        );
+        
+        if (!schemaCheck.exists) {
+          console.log(`[Schema] Creating new schema: ${schemaName}`);
+          await sequelize.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
         }
-      );
-      
-      if (!schemaCheck.exists) {
-        console.error(`[Schema] Attempted to use non-existent schema: ${schemaName}`);
-        return res.status(404).json({ error: 'Guild not found' });
+        
+        // Set schema for this request
+        await sequelize.query(`SET search_path TO "${schemaName}"`);
+        requestSchemaCache.set(req, schemaName);
+      } catch (error) {
+        console.error(`[Schema] Error setting schema ${schemaName}:`, error);
+        throw error;
       }
-      
-      // Set schema path for guild-specific routes - NO FALLBACK to public
-      await sequelize.query(`SET search_path TO "${schemaName}"`);
-      
-      // Store the schema we're using for this request
-      requestSchemaCache.set(req, schemaName);
     } else {
-      // Public routes should use only the public schema
-      console.log(`[Schema] Setting schema path to ${DEFAULT_SCHEMA} for request ${req.method} ${req.path}`);
+      // Public routes use public schema
       await sequelize.query(`SET search_path TO ${DEFAULT_SCHEMA}`);
       requestSchemaCache.set(req, DEFAULT_SCHEMA);
     }
     
-    // Make sure to reset schema path after the response is complete
+    // Reset schema after response
     res.on('finish', async () => {
       try {
         if (requestSchemaCache.has(req)) {
-          // Clean up schema setting and restore to default
           await sequelize.query(`SET search_path TO ${DEFAULT_SCHEMA}`);
-          console.log(`[Schema] Reset schema path to ${DEFAULT_SCHEMA} after completing request ${req.method} ${req.path}`);
+          console.log(`[Schema] Reset schema path to ${DEFAULT_SCHEMA} after request ${req.method} ${req.path}`);
           requestSchemaCache.delete(req);
         }
-      } catch (cleanupError) {
-        console.error('[Schema] Error resetting schema path after request:', cleanupError);
+      } catch (error) {
+        console.error('[Schema] Error resetting schema:', error);
       }
     });
     
     next();
   } catch (error) {
-    console.error('[Schema] Schema selection error:', error);
-    // Try to reset schema to public in case of error
+    console.error('[Schema] Middleware error:', error);
+    
+    // Try to reset schema
     try {
       await sequelize.query(`SET search_path TO ${DEFAULT_SCHEMA}`);
     } catch (resetError) {
       console.error('[Schema] Failed to reset schema after error:', resetError);
     }
+    
     res.status(500).json({ error: 'Database error' });
   }
 };

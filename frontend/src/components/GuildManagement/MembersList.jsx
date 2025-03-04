@@ -519,24 +519,32 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
   const handleRoleSave = async (updatedMember) => {
     try {
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
       const endpoint = updatedMember.role === 'Guild Master' 
         ? `${API_URL}/api/guilds/transfer-master`  // Corrected endpoint for Guild Master transfer
-        : `${API_URL}/api/members/${updatedMember.id}`;
+        : `${API_URL}/api/members/${updatedMember.id}?guildId=${guildId}`;
   
       console.log('Sending update:', {
         id: updatedMember.id,
         role: updatedMember.role,
-        username: updatedMember.username
+        username: updatedMember.username,
+        guildId
       });
   
       // For Guild Master transfer, use specific payload
       const payload = updatedMember.role === 'Guild Master' 
         ? { 
-            guildId: localStorage.getItem('guildId'), 
+            guildId, 
             newMasterId: updatedMember.id 
           }
         : {
             id: updatedMember.id,
+            guildId,
             role: updatedMember.role,
             username: updatedMember.username,
             discord_id: updatedMember.discord_id,
@@ -627,11 +635,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       console.log('Fetching members for guild:', guildId);
       
       const response = await fetch(`${API_URL}/api/guilds/${guildId}/members`, {
-        credentials: 'include',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -664,6 +668,12 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
 
   const handleSave = async (updatedMember) => {
     try {
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
       const weaponSpec = getWeaponSpec(
         updatedMember.builds[0].primary, 
         updatedMember.builds[0].secondary
@@ -671,6 +681,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
       const memberToUpdate = {
         ...updatedMember,
+        guildId, // Add guild ID to request body
         weapon_spec: weaponSpec,
         combat_power: updatedMember.combat_power,
         builds: updatedMember.builds.map(build => ({
@@ -683,7 +694,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
       console.log('Sending update data:', JSON.stringify(memberToUpdate, null, 2));
     
-      const response = await fetch(`${API_URL}/api/members/${memberToUpdate.id}`, {
+      const response = await fetch(`${API_URL}/api/members/${memberToUpdate.id}?guildId=${guildId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
