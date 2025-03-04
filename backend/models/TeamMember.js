@@ -15,6 +15,14 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true 
     },
+    guild_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'guilds',
+        key: 'id'
+      }
+    },
     team_id: {
       type: DataTypes.UUID,
       allowNull: false,
@@ -44,8 +52,15 @@ module.exports = (sequelize, DataTypes) => {
     modelName: 'TeamMember',
     tableName: 'team_members',
     underscored: true,
-    timestamps: true
+    timestamps: true,
+    scopes: {
+      forGuild(guildId) {
+        return {
+          where: { guild_id: guildId }
+        };
+      }
+    }
   });
 
   return TeamMember;
-};
+}

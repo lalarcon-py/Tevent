@@ -1,3 +1,4 @@
+// config/database.js
 require('dotenv').config();
 const { Sequelize } = require('sequelize');
 
@@ -19,6 +20,11 @@ const createBaseConnection = () => {
           require: true,
           rejectUnauthorized: false
         }
+      },
+      pool: {
+        max: 20,  // Increase pool size for production
+        min: 5,
+        idle: 10000
       }
     });
   } else {
@@ -33,9 +39,6 @@ const createBaseConnection = () => {
 
 const sequelize = createBaseConnection();
 
-const getSchemaName = (guildId) => `guild_${guildId}`;
-
 module.exports = { 
-  sequelize,
-  getSchemaName
+  sequelize
 };

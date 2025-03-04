@@ -15,6 +15,14 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true 
     },
+    guild_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'guilds',
+        key: 'id'
+      }
+    },
     storage_item_id: {
       type: DataTypes.UUID,
       allowNull: true
@@ -38,8 +46,15 @@ module.exports = (sequelize, DataTypes) => {
     modelName: 'LootRequest',
     tableName: 'loot_requests',
     underscored: true,
-    timestamps: true
+    timestamps: true,
+    scopes: {
+      forGuild(guildId) {
+        return {
+          where: { guild_id: guildId }
+        };
+      }
+    }
   });
 
   return LootRequest;
-};
+}

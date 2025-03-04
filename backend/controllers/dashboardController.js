@@ -9,7 +9,14 @@ const dashboardController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
 
-      const users = await User.findAll();
+      const guildId = req.guildId; // Get from middleware
+      if (!guildId) {
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
+      
+      // Use the scope helper to filter by guild
+      const users = await User.scope({ method: ['forGuild', guildId] }).findAll();
+      
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 

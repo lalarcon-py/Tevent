@@ -15,7 +15,8 @@ const crypto = require('crypto');
 // Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
 const schemaMiddleware = require('./middleware/schemaMiddleware');
-const validateGuildMembership = require('./middleware/guildMembershipMiddleware'); // New middleware
+const validateGuildMembership = require('./middleware/guildMembershipMiddleware');
+const guildScopeMiddleware = require('./middleware/guildScopeMiddleware');
 
 // Route imports
 const itemsRouter = require('./routes/items');
@@ -157,102 +158,71 @@ app.delete('/api/user/delete', userController.deleteUser);
 // 3. Database connection
 // 4. Route handlers
 
-// Wishlist routes
-app.use('/api/wishlist', validateGuildMembership, schemaMiddleware, databaseMiddleware, wishlistRoutes);
+app.use('/api/wishlist', guildScopeMiddleware, validateGuildMembership, wishlistRoutes);
+app.use('/api/stats', guildScopeMiddleware, validateGuildMembership, statsRoutes);
+app.use('/api/guild-storage', guildScopeMiddleware, validateGuildMembership, guildStorageRouter);
+app.use('/api/waitlist', guildScopeMiddleware, validateGuildMembership, waitlistRouter);
+app.use('/api/items', guildScopeMiddleware, validateGuildMembership, itemsRouter);
+app.use('/api/events', guildScopeMiddleware, validateGuildMembership, eventsRouter);
+app.use('/api/teams', guildScopeMiddleware, validateGuildMembership, teamsRouter);
+app.use('/api/team-presets', guildScopeMiddleware, validateGuildMembership, teamPresetsRouter);
+app.use('/api/dashboard', guildScopeMiddleware, validateGuildMembership, dashboardRouter);
 
-// Stats routes
-app.use('/api/stats', validateGuildMembership, schemaMiddleware, databaseMiddleware, statsRoutes);
-
-// Guild storage routes
-app.use('/api/guild-storage', validateGuildMembership, schemaMiddleware, databaseMiddleware, guildStorageRouter);
-
-// Waitlist routes
-app.use('/api/waitlist', validateGuildMembership, schemaMiddleware, databaseMiddleware, waitlistRouter);
-
-// Items routes
-app.use('/api/items', validateGuildMembership, schemaMiddleware, databaseMiddleware, itemsRouter);
-
-// Events routes
-app.use('/api/events', validateGuildMembership, schemaMiddleware, databaseMiddleware, eventsRouter);
-
-// Teams routes
-app.use('/api/teams', validateGuildMembership, schemaMiddleware, databaseMiddleware, teamsRouter);
-
-// Team presets routes
-app.use('/api/team-presets', validateGuildMembership, schemaMiddleware, databaseMiddleware, teamPresetsRouter);
-
-// Dashboard routes (dashboard shows current guild data)
-app.use('/api/dashboard', validateGuildMembership, schemaMiddleware, databaseMiddleware, dashboardRouter);
-
-// Guild routes have public and private endpoints
-// Public guild endpoints don't need membership validation (create, join, available)
-// Private guild endpoints do need membership validation (details, members, settings)
 const guildSettingsController = require('./controllers/guildSettingsController');
 
 app.get('/api/guilds/:guildId/settings', 
+  guildScopeMiddleware,
   validateGuildMembership, 
-  schemaMiddleware, 
-  databaseMiddleware, 
   guildSettingsController.getGuildSettings
 );
 
 app.put('/api/guilds/:guildId/settings', 
+  guildScopeMiddleware,
   validateGuildMembership, 
-  schemaMiddleware, 
-  databaseMiddleware, 
   guildSettingsController.updateGuildSettings
 );
 
-app.use('/api/guilds/:guildId/members', validateGuildMembership, (req, res, next) => {
+app.use('/api/guilds/:guildId/members', guildScopeMiddleware, validateGuildMembership, (req, res, next) => {
   const { guildId } = req.params;
   
-  // Ensure we're in the public schema
-  sequelize.query(`SET search_path TO public`)
-    .then(() => {
-      return db.GuildMember.findAll({
-        where: { guild_id: guildId },
-        include: [{
-          model: db.User,
-          attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
-        }],
-        order: [
-          // Fix ambiguous column reference
-          [sequelize.literal(`CASE 
-            WHEN "GuildMember"."role" = 'Guild Master' THEN 1
-            WHEN "GuildMember"."role" = 'Guild Advisor' THEN 2
-            WHEN "GuildMember"."role" = 'Guild Guardian' THEN 3
-            ELSE 4
-          END`), 'ASC'],
-          ['created_at', 'ASC']
-        ]
-      });
-    })
-    .then(members => {
-      const formattedMembers = members.map(member => ({
-        id: member.User.id,
-        username: member.User.username,
-        avatarUrl: member.User.avatar_url,
-        discordId: member.User.discord_id,
-        role: member.role,
-        builds: member.User.builds,
-        combat_power: member.User.combat_power,
-        joinedAt: member.created_at,
-        joinedViaInvite: member.joined_via_invite || false
-      }));
-      
-      res.json(formattedMembers);
-    })
-    .catch(error => {
-      // Reset schema on error
-      sequelize.query(`SET search_path TO public`)
-        .catch(e => console.error('Failed to reset schema:', e));
-        
-      console.error('Get guild members error:', error);
-      res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
-    });
+  db.GuildMember.findAll({
+    where: { guild_id: guildId },
+    include: [{
+      model: db.User,
+      attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
+    }],
+    order: [
+      [sequelize.literal(`CASE 
+        WHEN "GuildMember"."role" = 'Guild Master' THEN 1
+        WHEN "GuildMember"."role" = 'Guild Advisor' THEN 2
+        WHEN "GuildMember"."role" = 'Guild Guardian' THEN 3
+        ELSE 4
+      END`), 'ASC'],
+      ['created_at', 'ASC']
+    ]
+  })
+  .then(members => {
+    const formattedMembers = members.map(member => ({
+      id: member.User.id,
+      username: member.User.username,
+      avatarUrl: member.User.avatar_url,
+      discordId: member.User.discord_id,
+      role: member.role,
+      builds: member.User.builds,
+      combat_power: member.User.combat_power,
+      joinedAt: member.created_at,
+      joinedViaInvite: member.joined_via_invite || false
+    }));
+    
+    res.json(formattedMembers);
+  })
+  .catch(error => {
+    console.error('Get guild members error:', error);
+    res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
+  });
 });
 
-app.use('/api/guilds', schemaMiddleware, guildRouter);
+app.use('/api/guilds', guildScopeMiddleware, guildRouter);
 
 // Debug routes
 app.use((req, res, next) => {

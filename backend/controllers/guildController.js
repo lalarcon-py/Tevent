@@ -38,15 +38,6 @@ const createGuild = async (req, res) => {
     
     console.log(`Guild created with ID: ${guild.id}`);
     
-    // Create schema for the guild
-    try {
-      await schemaManager.createGuildSchema(guild.id);
-      console.log(`Schema created for guild ${guild.id}`);
-    } catch (schemaError) {
-      console.error(`Schema creation failed for guild ${guild.id}:`, schemaError);
-      throw new Error(`Failed to create guild schema: ${schemaError.message}`);
-    }
-    
     // Add creator as guild master
     await db.GuildMember.create({
       guild_id: guild.id,

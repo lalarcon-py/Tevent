@@ -11,10 +11,17 @@ const isAuthenticated = (req, res, next) => {
   next();
 };
 
-// Get all events (fixed include syntax)
+// Get all events
 router.get('/', async (req, res) => {
   try {
+    const guildId = req.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     const events = await Event.findAll({
+      where: { guild_id: guildId },
       include: [{
         model: EventParticipant,
         as: 'participants',
@@ -32,14 +39,21 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Event signup (fixed model reference)
+// Event signup
 router.post('/:id/signup', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { role } = req.body;
     const eventId = req.params.id;
+    const guildId = req.guildId;
+    
+    if (!guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
 
     const [participant] = await EventParticipant.upsert({
+      guild_id: guildId,
       event_id: eventId,
       user_id: req.user.id,
       role
@@ -54,67 +68,24 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
   }
 });
 
-// Get event teams (fixed model references)
-router.get('/:eventId/teams', async (req, res) => {
-  try {
-    const teams = await Team.findAll({
-      where: { event_id: req.params.eventId },
-      include: [{
-        model: TeamMember,
-        as: 'members',
-        include: [User],
-        order: [['position', 'ASC']]
-      }],
-      order: [['created_at', 'ASC']]
-    });
-    res.json(teams);
-  } catch (error) {
-    console.error('Error fetching teams:', error);
-    res.status(500).json({ error: 'Failed to fetch teams' });
-  }
-});
-
-router.delete('/:id/signup', isAuthenticated, async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const { userId } = req.body;
-    const eventId = req.params.id;
-    
-    // Determine whose signup to remove - the current user or a specified user
-    const userIdToRemove = userId || req.user.id;
-    
-    // Find and delete the participant
-    const deleted = await EventParticipant.destroy({
-      where: {
-        event_id: eventId,
-        user_id: userIdToRemove
-      },
-      transaction: t
-    });
-    
-    if (deleted === 0) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Participant not found' });
-    }
-    
-    await t.commit();
-    res.status(200).json({ message: 'Successfully removed from event' });
-  } catch (error) {
-    await t.rollback();
-    console.error('Error removing participant:', error);
-    res.status(500).json({ error: 'Failed to remove from event' });
-  }
-});
-
+// Create event
 router.post('/', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     console.log('Creating event with data:', req.body);
 
+    const guildId = req.guildId;
+    
+    if (!guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+
     const event = await Event.create({
+      guild_id: guildId,
       title: req.body.title,
       description: req.body.description,
-      event_time: req.body.eventTime,
+      event_time: req.body.eventTime || req.body.event_time,
       location: req.body.location,
       tanks: req.body.tanks,
       healers: req.body.healers,
@@ -147,42 +118,6 @@ router.post('/', isAuthenticated, async (req, res) => {
       error: 'Failed to create event',
       details: error.message 
     });
-  }
-});
-
-router.get('/attendance/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    const attendanceData = await Event.findAll({
-      include: [{
-        model: EventParticipant,
-        as: 'participants',
-        where: { user_id: userId }
-      }],
-      order: [['event_time', 'DESC']]
-    });
-    
-    // Format the data for the frontend
-    const formattedAttendance = attendanceData.map(event => {
-      const participant = event.participants.find(p => p.user_id === userId);
-      return {
-        id: `${event.id}-${userId}`,
-        event: {
-          id: event.id,
-          title: event.title,
-          event_time: event.event_time
-        },
-        attended: true, // Since we're only getting events they participated in
-        date: event.event_time,
-        dkp_earned: 0 // We can add this if you implement DKP
-      };
-    });
-    
-    res.json(formattedAttendance);
-  } catch (error) {
-    console.error('Error fetching attendance:', error);
-    res.status(500).json({ error: 'Failed to fetch attendance', details: error.message });
   }
 });
 

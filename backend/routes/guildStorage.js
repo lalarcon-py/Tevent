@@ -1,7 +1,8 @@
 // backend/routes/guildStorage.js
 const express = require('express');
 const router = express.Router();
-const models = require('../models'); // Ensure this points to your models index.js
+const models = require('../models');
+const db = require('../models');
 
 // Get all items in guild storage
 router.get('/items', async (req, res) => {
@@ -10,15 +11,18 @@ router.get('/items', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    // Require guild ID
-    const guildId = req.query.guildId || req.params.guildId;
+    // Get guild ID from request
+    const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
     if (!guildId) {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
     
-    const storageItems = await models.GuildStorageItem.findAll({
+    // Include guild_id in the query
+    const storageItems = await db.GuildStorageItem.findAll({
+      where: { guild_id: guildId },
       include: [{
-        model: models.Item,
+        model: db.Item,
         attributes: ['name', 'type', 'icon']
       }]
     });
@@ -37,47 +41,34 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { item_id, quantity, dkp_cost, guildId } = req.body;
+    const { item_id, quantity, dkp_cost, trait } = req.body;
     
-    // Require guild ID
-    if (!guildId && !req.query.guildId) {
+    // Get guild ID from request using the middleware
+    const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    if (!guildId) {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
-    
-    console.log('Adding item to storage:', { item_id, quantity, dkp_cost });
     
     if (!item_id) {
       return res.status(400).json({ error: 'Item ID is required' });
     }
-    
-    // Check if item exists
-    const item = await models.Item.findByPk(item_id);
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
 
-    // Create or update storage item
-    const [storageItem, created] = await models.GuildStorageItem.findOrCreate({
-      where: { item_id },
-      defaults: {
-        quantity: quantity || 1,
-        dkp_cost: dkp_cost || 0,
-        trait: null
-      }
+    // Create storage item with guild_id included
+    const storageItem = await db.GuildStorageItem.create({
+      guild_id: guildId,
+      item_id,
+      quantity: quantity || 1,
+      dkp_cost: dkp_cost || 0,
+      trait: trait || null
     });
-
-    if (!created) {
-      // If item already exists, update its quantity
-      storageItem.quantity = (storageItem.quantity || 0) + (quantity || 1);
-      await storageItem.save();
-    }
 
     // Get the full item with its associations
-    const fullItem = await models.GuildStorageItem.findByPk(storageItem.id, {
-      include: [models.Item]
+    const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
+      include: [db.Item]
     });
 
-    res.status(created ? 201 : 200).json(fullItem);
+    res.status(201).json(fullItem);
   } catch (error) {
     console.error('Error adding item to storage:', error);
     res.status(500).json({ error: 'Failed to add item to storage', details: error.message });
