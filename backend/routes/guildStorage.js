@@ -10,6 +10,12 @@ router.get('/items', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
+    // Require guild ID
+    const guildId = req.query.guildId || req.params.guildId;
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     const storageItems = await models.GuildStorageItem.findAll({
       include: [{
         model: models.Item,
@@ -31,7 +37,12 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { item_id, quantity, dkp_cost } = req.body;
+    const { item_id, quantity, dkp_cost, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     console.log('Adding item to storage:', { item_id, quantity, dkp_cost });
     
@@ -81,7 +92,12 @@ router.put('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
-    const { quantity, dkp_cost, trait } = req.body;
+    const { quantity, dkp_cost, trait, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     const storageItem = await models.GuildStorageItem.findByPk(id);
     if (!storageItem) {
@@ -106,7 +122,6 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to update storage item', details: error.message });
   }
 });
-
 // Delete guild storage item
 router.delete('/:id', async (req, res) => {
   try {
@@ -115,6 +130,12 @@ router.delete('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     // First, delete any associated loot requests
     await models.LootRequest.destroy({

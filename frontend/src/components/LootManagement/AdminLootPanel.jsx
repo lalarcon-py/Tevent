@@ -35,7 +35,14 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const fetchAddedItems = async () => {
     try {
-      const response = await axiosInstance.get(`/api/guild-storage/items`);
+      // Get current guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      const response = await axiosInstance.get(`/api/guild-storage/items?guildId=${guildId}`);
       console.log('Fetched storage items:', response.data);
       setAddedItems(response.data);
     } catch (error) {
@@ -46,7 +53,16 @@ const AdminLootPanel = ({ dkpEnabled }) => {
   const fetchTemplateItems = async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get('/api/items/autocomplete');
+      
+      // Get current guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        setLoading(false);
+        return;
+      }
+      
+      const response = await axiosInstance.get(`/api/items/autocomplete?guildId=${guildId}`);
       setTemplateItems(response.data);
     } catch (error) {
       console.error('Failed to fetch template items:', error);
@@ -57,7 +73,17 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const handleUpdate = async (id, field, value) => {
     try {
-      const response = await axiosInstance.put(`/api/guild-storage/${id}`, { [field]: value });
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      const response = await axiosInstance.put(`/api/guild-storage/${id}?guildId=${guildId}`, { 
+        [field]: value,
+        guildId
+      });
+      
       if (response.status === 200) fetchAddedItems();
     } catch (error) {
       console.error('Update error:', error);
@@ -66,9 +92,14 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const handleDelete = async (id) => {
     try {
-      await axiosInstance.delete(`/api/guild-storage/${id}`);
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      await axiosInstance.delete(`/api/guild-storage/${id}?guildId=${guildId}`);
       fetchAddedItems();
-      // You could add a success notification here
     } catch (error) {
       console.error('Delete failed:', error);
       
@@ -78,7 +109,6 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         const errorMsg = error.response.data?.error || 'Unknown error';
         
         if (statusCode === 500) {
-          // You could use a notification system to show this message
           console.error(`Server error: ${errorMsg}. This may be because there are pending requests for this item.`);
         } else {
           console.error(`Error (${statusCode}): ${errorMsg}`);
@@ -96,17 +126,26 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         return;
       }
       
+      // Get current guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
       // Log what we're sending to help debug
       console.log('Adding item to storage:', {
         item_id: newItem.id,
         quantity: newItem.quantity,
-        dkp_cost: newItem.dkpCost
+        dkp_cost: newItem.dkpCost,
+        guildId
       });
       
-      const response = await axiosInstance.post(`/api/guild-storage`, {
+      const response = await axiosInstance.post(`/api/guild-storage?guildId=${guildId}`, {
         item_id: newItem.id,
         quantity: newItem.quantity,
-        dkp_cost: newItem.dkpCost
+        dkp_cost: newItem.dkpCost,
+        guildId
       });
       
       console.log('Add item response:', response.data);
@@ -133,11 +172,18 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const handleRequestItem = async (storageItem) => {
     try {
-      const response = await axiosInstance.post('/api/waitlist', {
-        storageItemId: storageItem.id
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      const response = await axiosInstance.post(`/api/waitlist?guildId=${guildId}`, {
+        storageItemId: storageItem.id,
+        guildId
       });
+      
       console.log('Item requested successfully');
-      // You might want to show a success message
     } catch (error) {
       console.error('Failed to request item:', error);
     }

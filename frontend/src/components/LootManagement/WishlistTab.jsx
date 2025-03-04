@@ -35,7 +35,15 @@ const WishlistTab = ({ dkpEnabled = false }) => {
       setItemsLoading(true);
       console.log('Fetching items for autocomplete...');
       
-      const response = await axiosInstance.get('/api/items/autocomplete');
+      // Get current guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        setItemsLoading(false);
+        return;
+      }
+      
+      const response = await axiosInstance.get(`/api/items/autocomplete?guildId=${guildId}`);
       console.log('Items fetched:', response.data);
       
       if (response.data && Array.isArray(response.data)) {
@@ -58,7 +66,15 @@ const WishlistTab = ({ dkpEnabled = false }) => {
     try {
       setLoading(true);
       
-      const response = await axiosInstance.get('/api/wishlist');
+      // Get current guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        setLoading(false);
+        return;
+      }
+      
+      const response = await axiosInstance.get(`/api/wishlist?guildId=${guildId}`);
       setWishlistItems(response.data || []);
       setSchemaError(false);
       
@@ -86,7 +102,13 @@ const WishlistTab = ({ dkpEnabled = false }) => {
         setError('Please select an item');
         return;
       }
-
+  
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+  
       setError(null);
       
       // Create payload with only valid fields
@@ -95,11 +117,12 @@ const WishlistTab = ({ dkpEnabled = false }) => {
         itemName: selectedItem.name,
         itemType: selectedItem.type || 'Unknown',
         notes,
-        priority: dkpEnabled ? priority : 0
+        priority: dkpEnabled ? priority : 0,
+        guildId
       };
       
       console.log('Sending wishlist request:', payload);
-      const response = await axiosInstance.post('/api/wishlist', payload);
+      const response = await axiosInstance.post(`/api/wishlist?guildId=${guildId}`, payload);
       
       setWishlistItems([response.data, ...wishlistItems]);
       setSelectedItem(null);
@@ -126,7 +149,13 @@ const WishlistTab = ({ dkpEnabled = false }) => {
   // Handle removing an item from the wishlist
   const handleDeleteWishItem = async (id) => {
     try {
-      await axiosInstance.delete(`/api/wishlist/${id}`);
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      await axiosInstance.delete(`/api/wishlist/${id}?guildId=${guildId}`);
       setWishlistItems(wishlistItems.filter(item => item.id !== id));
     } catch (error) {
       console.error('Failed to delete wishlist item:', error);
@@ -134,7 +163,6 @@ const WishlistTab = ({ dkpEnabled = false }) => {
     }
   };
 
-  // If there's a schema error, show a maintenance message
   if (schemaError) {
     return (
       <Box sx={{ p: 4 }}>
