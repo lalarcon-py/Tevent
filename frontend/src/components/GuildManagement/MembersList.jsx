@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-  Paper, IconButton, Dialog, DialogTitle, DialogContent, Select, MenuItem, 
+  Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, 
   Button, Avatar, Typography, Box, TextField, useMediaQuery, useTheme
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
@@ -71,6 +71,9 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
   const [confirmTransfer, setConfirmTransfer] = useState(false);
   const [username, setUsername] = useState(member.username);
   const [error, setError] = useState(null);
+  
+  // Add a flag to check if this is a guild master transfer
+  const isGuildMasterTransfer = selectedRole === 'Guild Master';
 
   // Update state when member changes
   useEffect(() => {
@@ -155,7 +158,9 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
               {error}
             </Typography>
           )}
-          {(currentUserRole === 'Guild Master' || currentUserRole === 'Guild Advisor') && (
+          {/* Only show username field if not transferring guild master role */}
+          {(currentUserRole === 'Guild Master' || currentUserRole === 'Guild Advisor') && 
+           !isGuildMasterTransfer && (
             <Box sx={{ mb: 2 }}>
               <Typography color="white" sx={{ mb: 1 }}>Username</Typography>
               <TextField
@@ -196,7 +201,8 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
             onClick={() => onSave({ 
               ...member, 
               role: selectedRole,
-              username: username 
+              // Only include username if not transferring guild master role
+              ...(isGuildMasterTransfer ? {} : { username })
             })}
             sx={{ 
               bgcolor: '#90caf9',
@@ -476,6 +482,67 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
   );
 };
 
+const NameEditDialog = ({ open, onClose, member, onSave }) => {
+  const [newName, setNewName] = useState(member?.username || '');
+  
+  const handleSave = () => {
+    if (newName.trim() && newName !== member.username) {
+      onSave(newName);
+    } else {
+      onClose();
+    }
+  };
+  
+  return (
+    <Dialog 
+      open={open} 
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+    >
+      <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+        Edit Your Username
+      </DialogTitle>
+      <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2, pb: 2 }}>
+        <TextField
+          fullWidth
+          label="New Username"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          autoFocus
+          margin="dense"
+          sx={{ 
+            bgcolor: '#2d2d2d',
+            input: { color: 'white' },
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+            },
+            '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' }
+          }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ bgcolor: '#1e1e1e', p: 2 }}>
+        <Button onClick={onClose} sx={{ color: 'white' }}>
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSave} 
+          variant="contained"
+          disabled={!newName.trim() || newName === member.username}
+          sx={{ 
+            bgcolor: '#90caf9',
+            '&:hover': { bgcolor: '#64b5f6' }
+          }}
+        >
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 
 const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrentUser }) => {
   const theme = useTheme();
@@ -486,6 +553,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   const [editMember, setEditMember] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [nameEditMember, setNameEditMember] = useState(null);
   const [sortConfig, setSortConfig] = useState({
     key: null,
     direction: 'asc'
@@ -525,19 +593,20 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         return;
       }
       
-      const endpoint = updatedMember.role === 'Guild Master' 
-        ? `${API_URL}/api/guilds/transfer-master`  // Corrected endpoint for Guild Master transfer
+      const isGuildMasterTransfer = updatedMember.role === 'Guild Master';
+      const endpoint = isGuildMasterTransfer 
+        ? `${API_URL}/api/guilds/transfer-master`
         : `${API_URL}/api/members/${updatedMember.id}?guildId=${guildId}`;
   
       console.log('Sending update:', {
         id: updatedMember.id,
         role: updatedMember.role,
-        username: updatedMember.username,
+        username: !isGuildMasterTransfer ? updatedMember.username : undefined,
         guildId
       });
   
       // For Guild Master transfer, use specific payload
-      const payload = updatedMember.role === 'Guild Master' 
+      const payload = isGuildMasterTransfer 
         ? { 
             guildId, 
             newMasterId: updatedMember.id 
@@ -555,7 +624,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           };
   
       const response = await fetch(endpoint, {
-        method: updatedMember.role === 'Guild Master' ? 'POST' : 'PUT',
+        method: isGuildMasterTransfer ? 'POST' : 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -568,19 +637,63 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         throw new Error(errorData.error || 'Failed to update member');
       }
   
-      // Wait for the members list to refresh
       await fetchMembers();
-      
-      // Close the dialog after refresh is complete
+
       setRoleManagementMember(null);
-  
-      // If the user is being promoted to Guild Master, reload the page
-      if (updatedMember.role === 'Guild Master') {
+
+      if (isGuildMasterTransfer) {
         window.location.reload();
       }
     } catch (error) {
       console.error('Error updating member:', error);
       setError(error.message || 'Failed to update member');
+    }
+  };
+
+  const handleNameChange = async (newName) => {
+    try {
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      const response = await fetch(`${API_URL}/api/guilds/members/${nameEditMember.id}/update-name`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          username: newName,
+          guildId
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update username');
+      }
+      
+      // Update the local state
+      setMembers(prevMembers => 
+        prevMembers.map(member => {
+          if (member.id === nameEditMember.id) {
+            return {
+              ...member,
+              username: newName
+            };
+          }
+          return member;
+        })
+      );
+      
+      // Close the dialog
+      setNameEditMember(null);
+      
+    } catch (error) {
+      console.error('Error updating username:', error);
+      // You could add error handling here
     }
   };
   
@@ -822,7 +935,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                   width: '50px' 
                 }}>
                   <Avatar
-                    src={member.avatar_url}
+                    src={member.avatarUrl || member.avatar_url}
                     alt={member.username}
                     sx={{ 
                       width: isMobile ? 32 : 40, 
@@ -837,10 +950,43 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                   paddingLeft: isMobile ? '4px' : '16px',
                   fontSize: isMobile ? '0.875rem' : 'inherit'
                 }}>
-                  <Box>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    position: 'relative',
+                    '&:hover .name-edit-icon': {
+                      opacity: 1
+                    } 
+                  }}>
                     <Typography variant={isMobile ? "body2" : "body1"} sx={{ fontWeight: 'bold' }}>
                       {member.username}
                     </Typography>
+                    
+                    {/* Only show edit icon for current user */}
+                    {member.id === effectiveCurrentUser?.id && (
+                      <IconButton 
+                        size="small"
+                        className="name-edit-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNameEditMember(member);
+                        }}
+                        sx={{ 
+                          opacity: 0,
+                          ml: 1, 
+                          p: 0.5,
+                          color: 'rgba(255, 255, 255, 0.7)',
+                          '&:hover': { 
+                            color: '#90caf9',
+                            bgcolor: 'rgba(144, 202, 249, 0.1)'
+                          },
+                          transition: 'opacity 0.2s ease-in-out'
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                    
                     {isMobile && (
                       <Typography variant="caption" sx={{ color: '#90caf9' }}>
                         {member.role}
@@ -999,6 +1145,15 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           currentUserRole={currentUserRole}
           onClose={() => setRoleManagementMember(null)}
           onSave={handleRoleSave}
+        />
+      )}
+
+      {nameEditMember && (
+        <NameEditDialog
+          open={Boolean(nameEditMember)}
+          onClose={() => setNameEditMember(null)}
+          member={nameEditMember}
+          onSave={handleNameChange}
         />
       )}
   

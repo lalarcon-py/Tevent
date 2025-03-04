@@ -394,11 +394,11 @@ app.put('/api/members/:id', async (req, res) => {
       {
         replacements: { 
           id,
-          discord_id: updateData.discord_id,
+          discord_id: updateData.discordId || updateData.discord_id, // Handle both naming formats
           username: updateData.username,
           role: updateData.role,
-          status: updateData.status,
-          avatar_url: updateData.avatar_url,
+          status: updateData.status || 'Active',
+          avatar_url: updateData.avatarUrl || updateData.avatar_url, // Handle both naming formats
           builds: JSON.stringify(updateData.builds),
           combat_power: updateData.combat_power || null
         },

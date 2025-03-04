@@ -355,6 +355,9 @@ router.post('/transfer-master', async (req, res) => {
       return res.status(404).json({ error: 'New master not found in guild' });
     }
     
+    // *** ADD THIS LINE: Ensure we're in the public schema before updating guild members ***
+    await sequelize.query(`SET search_path TO public`, { transaction: t });
+    
     // Update roles
     await currentMaster.update({ role: 'Guild Advisor' }, { transaction: t });
     await newMaster.update({ role: 'Guild Master' }, { transaction: t });
@@ -679,6 +682,61 @@ router.delete('/:guildId', async (req, res) => {
     await t.rollback();
     console.error('Delete guild error:', error);
     res.status(500).json({ error: 'Failed to delete guild' });
+  }
+});
+
+router.put('/members/:userId/update-name', async (req, res) => {
+  const t = await sequelize.transaction();
+  
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { userId } = req.params;
+    const { username, guildId } = req.body;
+    
+    // Only allow users to change their own name
+    if (userId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only change your own name' });
+    }
+    
+    // Ensure we're in the public schema
+    await sequelize.query(`SET search_path TO public`, { transaction: t });
+    
+    // Update the user record
+    await db.User.update({ 
+      username 
+    }, { 
+      where: { id: userId },
+      transaction: t 
+    });
+    
+    // Also update in the guild-specific schema if needed
+    if (guildId) {
+      const guildSchema = `guild_${guildId}`;
+      await sequelize.query(
+        `SET search_path TO "${guildSchema}";
+         UPDATE users SET username = :username WHERE id = :userId;
+         SET search_path TO public;`,
+        { 
+          replacements: { username, userId },
+          transaction: t 
+        }
+      );
+    }
+    
+    await t.commit();
+    
+    res.json({ 
+      success: true, 
+      message: 'Username updated successfully',
+      username 
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Update username error:', error);
+    res.status(500).json({ error: 'Failed to update username' });
   }
 });
 

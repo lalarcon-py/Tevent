@@ -253,7 +253,7 @@ const MemberProfileModal = ({ member, open, onClose }) => {
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Avatar 
-            src={member.avatar_url}
+            src={member.avatarUrl || member.avatar_url}
             sx={{ 
               width: 48, 
               height: 48,
