@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, 
-  Button, Avatar, Typography, Box, TextField, useMediaQuery, useTheme
+  Button, Avatar, Typography, Box, TextField, useMediaQuery, useTheme, Chip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -119,25 +119,19 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
   };
 
   const getAvailableRoles = () => {
-    const currentUserRoleLevel = GUILD_ROLES[currentUserRole] || 1;
+    // If not Guild Master, don't allow changing roles at all
+    if (currentUserRole !== 'Guild Master') {
+      return [];
+    }
+    
     return Object.keys(GUILD_ROLES).filter(role => {
-      const roleLevel = GUILD_ROLES[role];
-      
       // Filter out duplicate "Member" if "Guild Member" exists
       if ((role === 'Member' && GUILD_ROLES['Guild Member']) || 
           (role === 'Guild Member' && GUILD_ROLES['Member'] && role !== member.role)) {
         return false;
       }
       
-      if (currentUserRole === 'Guild Master') {
-        return role !== 'Guild Master' || member.role === 'Guild Master';
-      }
-      
-      if (currentUserRole === 'Guild Advisor') {
-        return roleLevel < GUILD_ROLES['Guild Advisor'];
-      }
-      
-      return false;
+      return role !== 'Guild Master' || member.role === 'Guild Master';
     });
   };
 
@@ -302,6 +296,14 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
     }
   }, [member, currentUser]);
 
+  // Add the new permission check
+  useEffect(() => {
+    // If trying to edit someone else's profile and not Guild Master, close the dialog
+    if (member && currentUser && member.id !== currentUser.id && currentUser.role !== 'Guild Master') {
+      onClose();
+    }
+  }, [member, currentUser, onClose]);
+
   const weapons = [
     'Greatsword', 'Sword and Shield', 'Staff', 'Crossbow',
     'Dagger', 'Wand', 'Bow', 'Spear'
@@ -342,7 +344,6 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
     updatedBuilds[buildIndex].spec = value;
     setEditedMember({ ...editedMember, builds: updatedBuilds });
   };
-// End of edit button functions
 
   return (
     <Dialog 
@@ -999,7 +1000,16 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 {!isMobile && (
                   <>
                     <TableCell sx={{ color: 'white' }}>{member.role}</TableCell>
-                    <TableCell sx={{ color: 'white' }}>{member.status}</TableCell>
+                    <TableCell sx={{ color: 'white' }}>
+                      <Chip 
+                        label={member.status || 'Active'} 
+                        sx={{ 
+                          bgcolor: 'rgba(102, 255, 102, 0.2)',
+                          color: '#66ff66',
+                          fontWeight: 'medium'
+                        }}
+                      />
+                    </TableCell>
                     <TableCell sx={{ color: 'white' }}>
                       {member.builds?.map((build, index) => (
                         <div 
@@ -1084,27 +1094,28 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
-                    <IconButton 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditMember(member);
-                      }}
-                      sx={{ 
-                        color: '#90caf9',
-                        padding: isMobile ? '4px' : '8px',
-                        '&:hover': { 
-                          bgcolor: 'rgba(144, 202, 249, 0.2)',
-                          transform: 'scale(1.1)'
-                        }
-                      }}
-                    >
-                      <EditIcon fontSize={isMobile ? "small" : "medium"} />
-                    </IconButton>
+                    {/* Only show edit icon if it's the current user's own profile OR if the current user is Guild Master */}
+                    {(member.id === effectiveCurrentUser?.id || currentUserRole === 'Guild Master') && (
+                      <IconButton 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditMember(member);
+                        }}
+                        sx={{ 
+                          color: '#90caf9',
+                          padding: isMobile ? '4px' : '8px',
+                          '&:hover': { 
+                            bgcolor: 'rgba(144, 202, 249, 0.2)',
+                            transform: 'scale(1.1)'
+                          }
+                        }}
+                      >
+                        <EditIcon fontSize={isMobile ? "small" : "medium"} />
+                      </IconButton>
+                    )}
                     
-                    {(currentUserRole === 'Guild Master' || 
-                      (currentUserRole === 'Guild Advisor' && 
-                      member.role !== 'Guild Master' && 
-                      member.role !== 'Guild Advisor')) && (
+                    {/* ONLY show role management icon for Guild Masters */}
+                    {currentUserRole === 'Guild Master' && (
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1147,7 +1158,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           onSave={handleRoleSave}
         />
       )}
-
+  
       {nameEditMember && (
         <NameEditDialog
           open={Boolean(nameEditMember)}
