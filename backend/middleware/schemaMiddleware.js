@@ -8,6 +8,23 @@ const DEFAULT_SCHEMA = 'public';
 const schemaMiddleware = async (req, res, next) => {
   const guildId = req.params.guildId || req.query.guildId || req.body?.guildId;
   
+  // Define guild-specific routes that should always have a guild ID
+  const guildSpecificPaths = [
+    '/api/guild-storage',
+    '/api/waitlist',
+    '/api/items',
+    '/api/wishlist'
+  ];
+  
+  const isGuildSpecificRoute = guildSpecificPaths.some(path => req.path.startsWith(path));
+  
+  if (isGuildSpecificRoute && !guildId) {
+    return res.status(400).json({ 
+      error: 'Guild ID is required',
+      details: 'This endpoint requires a guild ID to be specified as a parameter, query parameter, or in the request body'
+    });
+  }
+  
   try {
     // Reset any existing schema setting
     if (requestSchemaCache.has(req)) {

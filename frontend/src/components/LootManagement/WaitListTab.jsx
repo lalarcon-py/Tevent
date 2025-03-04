@@ -54,7 +54,15 @@ const WaitListTab = ({ dkpEnabled }) => {
   const loadRequests = async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get('/api/waitlist');
+      
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        setLoading(false);
+        return;
+      }
+      
+      const response = await axiosInstance.get(`/api/waitlist?guildId=${guildId}`);
       
       if (response.data && Array.isArray(response.data)) {
         setRequests(response.data);
@@ -78,7 +86,13 @@ const WaitListTab = ({ dkpEnabled }) => {
       message: `Are you sure you want to approve ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
-          await axiosInstance.put(`/api/waitlist/${request.id}/approve`);
+          const guildId = localStorage.getItem('guildId');
+          if (!guildId) {
+            console.error('No guild ID found');
+            return;
+          }
+          
+          await axiosInstance.put(`/api/waitlist/${request.id}/approve?guildId=${guildId}`, { guildId });
           await loadRequests();
         } catch (error) {
           console.error('Failed to approve request:', error);
@@ -95,7 +109,13 @@ const WaitListTab = ({ dkpEnabled }) => {
       message: `Are you sure you want to deny ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
-          await axiosInstance.put(`/api/waitlist/${request.id}/deny`);
+          const guildId = localStorage.getItem('guildId');
+          if (!guildId) {
+            console.error('No guild ID found');
+            return;
+          }
+          
+          await axiosInstance.put(`/api/waitlist/${request.id}/deny?guildId=${guildId}`, { guildId });
           await loadRequests();
         } catch (error) {
           console.error('Failed to deny request:', error);
@@ -112,7 +132,13 @@ const WaitListTab = ({ dkpEnabled }) => {
       message: `Are you sure you want to delete ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
-          await axiosInstance.delete(`/api/waitlist/${request.id}`);
+          const guildId = localStorage.getItem('guildId');
+          if (!guildId) {
+            console.error('No guild ID found');
+            return;
+          }
+          
+          await axiosInstance.delete(`/api/waitlist/${request.id}?guildId=${guildId}`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to delete request:', error);

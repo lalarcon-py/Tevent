@@ -9,6 +9,13 @@ const { getAutocompleteItems } = require('../controllers/itemsController');
 // Fetch all items
 router.get('/', async (req, res) => {
   try {
+    const guildId = req.query.guildId || req.params.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     const items = await Item.findAll();
     res.json(items);
   } catch (error) {
@@ -21,8 +28,13 @@ router.get('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { dkpCost, inStorage, quantity, icon } = req.body;
+    const { dkpCost, inStorage, quantity, icon, guildId } = req.body;
 
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     // Basic validation
     if (dkpCost !== undefined && typeof dkpCost !== 'number') {
       return res.status(400).json({ error: 'Invalid dkpCost value' });
@@ -45,18 +57,24 @@ router.put('/:id', async (req, res) => {
 // Search items
 router.get('/search', async (req, res) => {
   try {
-    const hardcodedQuery = 'Ebon Roar Greaves'; // Replace with a known value in your database
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    const searchQuery = req.query.q || 'Ebon Roar Greaves'; // Use query parameter with fallback
 
     const items = await Item.findAll({
       where: {
         name: {
-          [Op.iLike]: `%${hardcodedQuery}%`
+          [Op.iLike]: `%${searchQuery}%`
         }
       },
       limit: 10
     });
 
-    console.log('Search results:', JSON.stringify(items, null, 2));
     res.json(items);
   } catch (error) {
     console.error('Search error:', error);
@@ -67,7 +85,12 @@ router.get('/search', async (req, res) => {
 // Add new item
 router.post('/', async (req, res) => {
   try {
-    const { name, dkpCost, quantity, inStorage, icon } = req.body;
+    const { name, dkpCost, quantity, inStorage, icon, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     // First, find the complete item information from the template/autocomplete items
     const templateItem = await Item.findOne({
@@ -121,6 +144,13 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     const item = await Item.findByPk(id);
     
     if (!item) {
@@ -136,8 +166,15 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Autocomplete items
-router.get('/autocomplete', getAutocompleteItems, async (req, res) => {
+router.get('/autocomplete', async (req, res) => {
   try {
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     const items = await Item.findAll({
       attributes: ['id', 'name', 'icon', 'type'],  // Add type to attributes
       order: [['name', 'ASC']]

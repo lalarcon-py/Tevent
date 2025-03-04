@@ -10,6 +10,12 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
+    // Require guild ID
+    const guildId = req.query.guildId || req.params.guildId;
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
     const wishes = await db.WishList.findAll({
       where: { user_id: req.user.id },
       include: [{
@@ -34,7 +40,12 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    const { itemId, itemName, itemType, priority, notes } = req.body;
+    const { itemId, itemName, itemType, priority, notes, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     if (!itemName) {
       return res.status(400).json({ error: 'Item name is required' });
@@ -80,7 +91,12 @@ router.put('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
-    const { priority, notes } = req.body;
+    const { priority, notes, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     // Verify ownership
     const wishItem = await db.WishList.findOne({
@@ -115,6 +131,12 @@ router.delete('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     // Verify ownership
     const result = await db.WishList.destroy({
@@ -142,6 +164,12 @@ router.get('/user/:userId', async (req, res) => {
     }
     
     const { userId } = req.params;
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     const wishes = await db.WishList.findAll({
       where: { user_id: userId },

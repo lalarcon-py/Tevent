@@ -9,6 +9,12 @@ router.get('/', async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
+    
+    // Require guild ID
+    const guildId = req.query.guildId || req.params.guildId;
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
 
     const isAdmin = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(req.user.role);
     
@@ -55,7 +61,12 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { storageItemId } = req.body;
+    const { storageItemId, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     if (!storageItemId) {
       return res.status(400).json({ error: 'Storage item ID is required' });
@@ -120,15 +131,28 @@ router.post('/', async (req, res) => {
 // Update request status
 router.put('/:id', async (req, res) => {
   try {
-    const { status } = req.body;
-    const request = await db.LootRequest.findByPk(req.params.id, {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { id } = req.params;
+    const { status, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    const request = await db.LootRequest.findByPk(id, {
       include: [
         {
-          model: GuildStorageItem,
-          include: [Item]
+          model: db.GuildStorageItem,
+          as: 'storageItem',
+          include: [db.Item]
         },
         {
-          model: User
+          model: db.User,
+          as: 'user'
         }
       ]
     });
@@ -139,8 +163,8 @@ router.put('/:id', async (req, res) => {
 
     if (status === 'Approved') {
       // Decrease quantity in storage
-      if (request.db.GuildStorageItem.quantity > 0) {
-        await request.db.GuildStorageItem.decrement('quantity');
+      if (request.storageItem && request.storageItem.quantity > 0) {
+        await request.storageItem.decrement('quantity');
       }
     }
 
@@ -160,6 +184,12 @@ router.put('/:id/approve', async (req, res) => {
     }
     
     const { id } = req.params;
+    const guildId = req.query.guildId || req.body.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     const request = await db.LootRequest.findByPk(id, {
       include: [
@@ -207,6 +237,12 @@ router.put('/:id/deny', async (req, res) => {
     }
     
     const { id } = req.params;
+    const guildId = req.query.guildId || req.body.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     const request = await db.LootRequest.findByPk(id);
     if (!request) {
@@ -231,6 +267,12 @@ router.delete('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
+    const guildId = req.query.guildId;
+    
+    // Require guild ID
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
     
     const result = await db.LootRequest.destroy({
       where: { id }
