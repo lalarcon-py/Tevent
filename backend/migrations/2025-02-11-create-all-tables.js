@@ -22,7 +22,7 @@ module.exports = {
         role: {
           type: Sequelize.STRING(255),
           allowNull: false,
-          defaultValue: 'Member'
+          defaultValue: 'Guild Member'
         },
         status: {
           type: Sequelize.STRING(255),

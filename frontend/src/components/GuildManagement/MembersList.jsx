@@ -598,14 +598,10 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       const endpoint = isGuildMasterTransfer 
         ? `${API_URL}/api/guilds/transfer-master`
         : `${API_URL}/api/members/${updatedMember.id}?guildId=${guildId}`;
-  
-      console.log('Sending update:', {
-        id: updatedMember.id,
-        role: updatedMember.role,
-        username: !isGuildMasterTransfer ? updatedMember.username : undefined,
-        guildId
-      });
-  
+      
+      // Get the member's full data to ensure we have all needed fields
+      let memberData = members.find(m => m.id === updatedMember.id) || updatedMember;
+      
       // For Guild Master transfer, use specific payload
       const payload = isGuildMasterTransfer 
         ? { 
@@ -617,12 +613,14 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
             guildId,
             role: updatedMember.role,
             username: updatedMember.username,
-            discord_id: updatedMember.discord_id,
-            status: updatedMember.status,
-            avatar_url: updatedMember.avatar_url,
-            builds: updatedMember.builds,
-            combat_power: updatedMember.combat_power
+            // Include required fields with fallbacks
+            discord_id: memberData.discord_id || '',  // Add empty string as fallback
+            status: 'Active',  // Always set to Active
+            avatar_url: memberData.avatar_url || '',
+            builds: memberData.builds || []
           };
+      
+      console.log('Sending role update payload:', payload);
   
       const response = await fetch(endpoint, {
         method: isGuildMasterTransfer ? 'POST' : 'PUT',
@@ -639,9 +637,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       }
   
       await fetchMembers();
-
       setRoleManagementMember(null);
-
+  
       if (isGuildMasterTransfer) {
         window.location.reload();
       }

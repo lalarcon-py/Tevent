@@ -35,7 +35,7 @@ module.exports = (sequelize, DataTypes) => {
     role: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'Member'
+      defaultValue: 'Guild Member'
     },
     joined_via_invite: {
       type: DataTypes.BOOLEAN,

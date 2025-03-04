@@ -23,7 +23,7 @@ client.on('guildMemberAdd', async (member) => {
     await axios.post(`${API_URL}/api/users`, {
       discordId: member.id,
       username: member.user.username,
-      role: 'Member',
+      role: 'Guild Member',
     });
     console.log(`User ${member.user.username} added to the database!`);
   });

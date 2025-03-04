@@ -335,31 +335,6 @@ const deleteEmptyGuild = async (guildId, transaction) => {
     
     console.log(`Guild record deleted from database. Now dropping schema...`);
     
-    // Drop the guild schema - this is outside the transaction because
-    // schema operations can't be rolled back in most databases
-    const schemaResult = await schemaManager.dropGuildSchema(guildId);
-    
-    if (!schemaResult) {
-      // Log error but don't throw to prevent transaction rollback
-      console.error(`Failed to drop schema for guild ${guildId}, but guild record was deleted`);
-    } else {
-      console.log(`Schema for guild ${guildId} successfully dropped`);
-    }
-    
-    // Clean up any related data in other tables
-    try {
-      // These can be within the transaction
-      await db.GuildInvite.destroy({
-        where: { guild_id: guildId },
-        transaction
-      });
-      
-      console.log(`Guild ${guildId} related data cleanup completed`);
-    } catch (cleanupError) {
-      console.error(`Error during guild ${guildId} cleanup:`, cleanupError);
-      // Don't throw this error, just log it
-    }
-    
     return true;
   } catch (error) {
     console.error(`Failed to delete empty guild ${guildId}:`, error);

@@ -108,7 +108,7 @@ async function joinGuild(req, res) {
       await db.GuildMember.create({
         guild_id: guildId,
         user_id: req.user.id,
-        role: 'Member'
+        role: 'Guild Member'
       }, { transaction: t });
     }
 
@@ -480,7 +480,7 @@ router.post('/join/invite/:inviteCode', async (req, res) => {
     await db.GuildMember.create({
       guild_id: guildId,
       user_id: req.user.id,
-      role: 'Member',
+      role: 'Guild Member',
       joined_via_invite: true,
       invited_by: invite?.created_by
     }, { transaction: t });

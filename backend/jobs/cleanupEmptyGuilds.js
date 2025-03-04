@@ -1,13 +1,13 @@
-// backend/jobs/cleanupEmptyGuilds.js - Update for better logging and error handling
+// backend/jobs/cleanupEmptyGuilds.js
 const cron = require('node-cron');
 const { Guild, GuildMember } = require('../models');
+const { Op } = require('sequelize'); // Add this import
 const schemaManager = require('../utils/schemaManager');
 const { sequelize } = require('../config/database');
 
 // Run once a day at midnight
 cron.schedule('0 0 * * *', async () => {
   console.log('Running empty guild cleanup job');
-  const t = await sequelize.transaction();
   
   try {
     // Find guilds marked for deletion
@@ -39,32 +39,38 @@ cron.schedule('0 0 * * *', async () => {
     
     console.log(`Found ${emptyGuilds.length} additional empty guilds that weren't marked for deletion`);
     
-    // Combine lists of guilds to delete
-    const guildsToProcess = [...new Set([...guildsToDelete, ...emptyGuilds])];
+    // Process each guild separately
+    const allGuildsToProcess = [...guildsToDelete, ...emptyGuilds];
     
-    // Delete each guild
-    for (const guild of guildsToProcess) {
-      console.log(`Deleting empty guild: ${guild.id} (${guild.name})`);
+    for (const guild of allGuildsToProcess) {
+      console.log(`Processing guild: ${guild.id} (${guild.name})`);
+      const t = await sequelize.transaction();
       
       try {
-        // Delete guild record
-        await guild.destroy({ transaction: t });
+        // Delete guild record within transaction
+        await Guild.destroy({
+          where: { id: guild.id },
+          transaction: t
+        });
         
-        // Drop guild schema
+        // Commit transaction
+        await t.commit();
+        
+        // Drop schema OUTSIDE of transaction
         const dropResult = await schemaManager.dropGuildSchema(guild.id);
         if (!dropResult) {
           console.error(`Failed to drop schema for guild ${guild.id}, but record was deleted`);
+        } else {
+          console.log(`Successfully deleted guild ${guild.id} and its schema`);
         }
-      } catch (guildError) {
-        console.error(`Error deleting guild ${guild.id}:`, guildError);
-        // Continue with other guilds
+      } catch (error) {
+        await t.rollback();
+        console.error(`Error processing guild ${guild.id}:`, error);
       }
     }
     
-    await t.commit();
-    console.log(`Deleted ${guildsToProcess.length} empty guilds`);
+    console.log(`Processed ${allGuildsToProcess.length} guilds in cleanup job`);
   } catch (error) {
-    await t.rollback();
     console.error('Guild cleanup job error:', error);
   }
 });
