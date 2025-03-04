@@ -44,6 +44,7 @@ class DatabaseManager {
 
   async getGuildConnection(guildId) {
     if (!this.connections.has(guildId)) {
+      console.log(`Creating new database connection for guild ${guildId}`);
       const connection = await createDatabaseConnection(guildId);
       
       // Explicitly set schema immediately after connection
@@ -51,7 +52,20 @@ class DatabaseManager {
       
       // Add query hook to enforce schema for all queries
       connection.addHook('beforeQuery', (options) => {
+        // Force schema for every query
         options.schema = `guild_${guildId}`;
+        
+        // Add schema prefix to table names in raw queries
+        if (options.sql && !options.sql.includes('information_schema')) {
+          options.sql = options.sql.replace(
+            /(FROM|JOIN|UPDATE|INSERT INTO|DELETE FROM)\s+(["`']?)(\w+)(["`']?)/gi,
+            (match, verb, quote1, table, quote2) => {
+              // Skip if already has schema
+              if (table.includes('.')) return match;
+              return `${verb} ${quote1}guild_${guildId}.${table}${quote2}`;
+            }
+          );
+        }
       });
       
       this.connections.set(guildId, connection);

@@ -1,6 +1,6 @@
 // components/GuildManagement/GuildManagement.jsx
 import { useState, useEffect } from 'react';
-import { Box, TextField } from '@mui/material';
+import { Box, TextField, CircularProgress } from '@mui/material';
 import MembersList from './MembersList';
 import InviteLinkButton from '../InviteLinkButton';
 import GearCheckButton from './GearCheckButton';
@@ -16,6 +16,7 @@ const GuildManagement = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [guildId, setGuildId] = useState(null);
+  const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -50,21 +51,47 @@ const GuildManagement = () => {
 
   const fetchMembers = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/members`, {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        // Sort members to ensure Guild Master is first
-        const sortedMembers = data.sort((a, b) => {
-          if (a.role === 'Guild Master') return -1;
-          if (b.role === 'Guild Master') return 1;
-          return 0;
-        });
-        setMembers(sortedMembers);
+      // Get current guild ID from storage
+      const guildId = localStorage.getItem('guildId');
+      
+      if (!guildId) {
+        console.error('No guild ID found');
+        setLoading(false);
+        return;
       }
+      
+      console.log('Fetching members for guild:', guildId);
+      
+      // Use the guild-specific endpoint
+      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members`, {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to fetch members');
+      }
+      
+      const data = await response.json();
+      console.log('Members data received:', data);
+      
+      // Process member data to ensure builds are properly structured
+      const processedData = data.map(member => ({
+        ...member,
+        builds: Array.isArray(member.builds) ? member.builds : 
+                typeof member.builds === 'string' ? JSON.parse(member.builds) : []
+      }));
+      
+      setMembers(processedData);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to fetch members:', error);
+      setLoading(false);
     }
   };
 

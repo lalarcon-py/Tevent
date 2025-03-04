@@ -4,27 +4,31 @@ const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
 const { sequelize } = require('./config/database');
-const itemsRouter = require('./routes/items');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const db = require('./models');
 const Joi = require('joi');
 const format = require('pg-format');
+const pgSession = require('connect-pg-simple')(session);
+const crypto = require('crypto');
+
+// Middleware imports
+const databaseMiddleware = require('./middleware/databaseMiddleware');
+const schemaMiddleware = require('./middleware/schemaMiddleware');
+const validateGuildMembership = require('./middleware/guildMembershipMiddleware'); // New middleware
+
+// Route imports
+const itemsRouter = require('./routes/items');
 const eventsRouter = require('./routes/events');
 const teamsRouter = require('./routes/teams');
 const teamPresetsRouter = require('./routes/teamPresets');
 const dashboardRouter = require('./routes/dashboardRoutes');
-const pgSession = require('connect-pg-simple')(session);
-const databaseMiddleware = require('./middleware/databaseMiddleware');
-const schemaMiddleware = require('./middleware/schemaMiddleware');
 const guildRouter = require('./routes/guildRoutes');
 const waitlistRouter = require('./routes/waitlist');
 const guildStorageRouter = require('./routes/guildStorage');
 const statsRoutes = require('./routes/statsRoutes');
 const guildSettingsRoutes = require('./routes/guildSettings');
 const wishlistRoutes = require('./routes/wishlist');
-const waitlistRoutes = require('./routes/waitlist');
-const guildStorageRoutes = require('./routes/guildStorage');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
 
@@ -63,16 +67,15 @@ sequelize.authenticate()
    console.error('Database connection failed:', error);
  });
 
-// Middleware
+// CORS Middleware
 app.use(cors({
-  origin: frontendURL, // Make sure this matches exactly (http://localhost:3002)
-  credentials: true,   // This is critical
+  origin: frontendURL,
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-
-
+// Session Middleware
 app.use(session({
   store: new pgSession({
     conObject: {
@@ -92,8 +95,7 @@ app.use(session({
   }
 }));
 
-
-
+// Error handler middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({ 
@@ -102,23 +104,132 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Authentication middlewares
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Parse JSON bodies
 app.use(express.json());
-app.use(schemaMiddleware);
-app.delete('/api/user/delete', userController.deleteUser);
-app.use('/api/wishlist', databaseMiddleware, wishlistRoutes);
-app.use('/api/stats', statsRoutes);
-app.use('/api/guild-storage', databaseMiddleware, guildStorageRouter);
-app.use('/api/guilds', guildRouter);
-app.use('/api/guilds', guildSettingsRoutes);
-app.use('/api/waitlist', databaseMiddleware, waitlistRouter);
-app.use('/api/items', databaseMiddleware, itemsRouter);
-app.use('/api/events', databaseMiddleware, eventsRouter);
-app.use('/api/teams', databaseMiddleware, teamsRouter);
-app.use('/api/team-presets', databaseMiddleware, teamPresetsRouter);
 
+// Create guildMembershipMiddleware if it doesn't exist yet
+if (!validateGuildMembership) {
+  const validateGuildMembership = async (req, res, next) => {
+    // Extract guild ID from various possible sources
+    const guildId = req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // Skip validation if no guild ID or not authenticated
+    if (!guildId || !req.isAuthenticated()) {
+      return next();
+    }
+    
+    try {
+      // Check if user is a member of this guild
+      const membership = await db.GuildMember.findOne({
+        where: {
+          guild_id: guildId,
+          user_id: req.user.id
+        }
+      });
+      
+      if (!membership) {
+        return res.status(403).json({ 
+          error: 'Not a member of this guild',
+          details: 'You must be a member of this guild to access this resource'
+        });
+      }
+      
+      // Add membership info to request for potential role-based checks later
+      req.guildMembership = membership;
+      next();
+    } catch (error) {
+      console.error('Guild membership check error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}
+
+// Non-guild specific routes
+app.delete('/api/user/delete', userController.deleteUser);
+
+// Guild-specific API routes with proper middleware order:
+// 1. Membership validation
+// 2. Schema selection
+// 3. Database connection
+// 4. Route handlers
+
+// Wishlist routes
+app.use('/api/wishlist', validateGuildMembership, schemaMiddleware, databaseMiddleware, wishlistRoutes);
+
+// Stats routes
+app.use('/api/stats', validateGuildMembership, schemaMiddleware, databaseMiddleware, statsRoutes);
+
+// Guild storage routes
+app.use('/api/guild-storage', validateGuildMembership, schemaMiddleware, databaseMiddleware, guildStorageRouter);
+
+// Waitlist routes
+app.use('/api/waitlist', validateGuildMembership, schemaMiddleware, databaseMiddleware, waitlistRouter);
+
+// Items routes
+app.use('/api/items', validateGuildMembership, schemaMiddleware, databaseMiddleware, itemsRouter);
+
+// Events routes
+app.use('/api/events', validateGuildMembership, schemaMiddleware, databaseMiddleware, eventsRouter);
+
+// Teams routes
+app.use('/api/teams', validateGuildMembership, schemaMiddleware, databaseMiddleware, teamsRouter);
+
+// Team presets routes
+app.use('/api/team-presets', validateGuildMembership, schemaMiddleware, databaseMiddleware, teamPresetsRouter);
+
+// Dashboard routes (dashboard shows current guild data)
+app.use('/api/dashboard', validateGuildMembership, schemaMiddleware, databaseMiddleware, dashboardRouter);
+
+// Guild routes have public and private endpoints
+// Public guild endpoints don't need membership validation (create, join, available)
+// Private guild endpoints do need membership validation (details, members, settings)
+app.use('/api/guilds/:guildId/settings', validateGuildMembership, schemaMiddleware, databaseMiddleware, guildSettingsRoutes);
+app.use('/api/guilds/:guildId/members', validateGuildMembership, schemaMiddleware, databaseMiddleware, (req, res, next) => {
+  const { guildId } = req.params;
+  
+  db.GuildMember.findAll({
+    where: { guild_id: guildId },
+    include: [{
+      model: db.User,
+      attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
+    }],
+    order: [
+      [sequelize.literal(`CASE 
+        WHEN role = 'Guild Master' THEN 1
+        WHEN role = 'Guild Advisor' THEN 2
+        WHEN role = 'Guild Guardian' THEN 3
+        ELSE 4
+      END`), 'ASC'],
+      ['created_at', 'ASC']
+    ]
+  })
+  .then(members => {
+    const formattedMembers = members.map(member => ({
+      id: member.User.id,
+      username: member.User.username,
+      avatarUrl: member.User.avatar_url,
+      discordId: member.User.discord_id,
+      role: member.role,
+      builds: member.User.builds,
+      combat_power: member.User.combat_power,
+      joinedAt: member.created_at,
+      joinedViaInvite: member.joined_via_invite || false
+    }));
+    
+    res.json(formattedMembers);
+  })
+  .catch(error => {
+    console.error('Get guild members error:', error);
+    res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
+  });
+});
+app.use('/api/guilds', schemaMiddleware, guildRouter);
+
+// Debug routes
 app.use((req, res, next) => {
  if (req.method === 'PUT') {
    console.log('Incoming PUT request:', {
@@ -132,15 +243,167 @@ app.use((req, res, next) => {
 
 app.enable('trust proxy');
 
-app.use((req, res, next) => {
- if (req.method === 'PUT') {
-   console.log('Incoming PUT request:', {
-     url: req.url,
-     body: req.body,
-     params: req.params
-   });
- }
- next();
+// FIXED - Replace the problematic endpoint with a guild-specific version
+app.get('/api/members', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    // Require a guild ID parameter
+    const { guildId } = req.query;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // First check if user is a member of this guild
+    const membership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!membership) {
+      return res.status(403).json({ error: 'Not authorized to view members of this guild' });
+    }
+    
+    // Forward to the guild-specific members endpoint
+    const guildMembers = await db.GuildMember.findAll({
+      where: { guild_id: guildId },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'discord_id', 'username', 'status', 'avatar_url', 'builds', 'combat_power']
+      }],
+      order: [
+        [sequelize.literal(`CASE 
+          WHEN role = 'Guild Master' THEN 1
+          WHEN role = 'Guild Advisor' THEN 2
+          WHEN role = 'Guild Guardian' THEN 3
+          ELSE 4
+        END`), 'ASC']
+      ]
+    });
+
+    // Format response to match expected format
+    const members = guildMembers.map(member => ({
+      id: member.User.id,
+      discord_id: member.User.discord_id,
+      username: member.User.username,
+      role: member.role,
+      status: member.User.status,
+      avatar_url: member.User.avatar_url,
+      builds: Array.isArray(member.User.builds) ? member.User.builds : [],
+      combat_power: member.User.combat_power
+    }));
+
+    res.json(members);
+  } catch (error) {
+    console.error('Fetch members error:', error);
+    res.status(500).json({ error: 'Failed to fetch members' });
+  }
+});
+
+// PUT endpoint for updating members with proper validation
+app.put('/api/members/:id', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
+
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { id: _, guildId, ...updateData } = req.body;
+
+    // Require a guild ID parameter
+    if (!guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+
+    // Check if user has permission in this guild
+    const userMembership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id
+      }
+    });
+
+    if (!userMembership) {
+      await t.rollback();
+      return res.status(403).json({ error: 'Not authorized in this guild' });
+    }
+
+    // Find the member's record to update
+    const memberRecord = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: id
+      }
+    });
+
+    if (!memberRecord) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Member not found in this guild' });
+    }
+
+    // Find the user
+    const user = await db.User.findByPk(id);
+    if (!user) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    // Format the builds for PostgreSQL
+    const buildsJson = JSON.stringify(updateData.builds);
+
+    // Use raw query to ensure proper array handling
+    await sequelize.query(
+      `UPDATE users SET 
+        discord_id = :discord_id,
+        username = :username,
+        role = :role,
+        status = :status,
+        avatar_url = :avatar_url,
+        builds = :builds::jsonb,
+        combat_power = :combat_power,
+        updated_at = NOW()
+       WHERE id = :id`,
+      {
+        replacements: { 
+          id,
+          discord_id: updateData.discord_id,
+          username: updateData.username,
+          role: updateData.role,
+          status: updateData.status,
+          avatar_url: updateData.avatar_url,
+          builds: JSON.stringify(updateData.builds),
+          combat_power: updateData.combat_power || null
+        },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: t
+      }
+    );
+
+    await t.commit();
+
+    // Fetch and return the updated record
+    const updatedUser = await db.User.findByPk(id, {
+      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds', 'combat_power']
+    });
+
+    console.log('Updated user:', JSON.stringify(updatedUser.toJSON(), null, 2));
+    res.json(updatedUser);
+   
+  } catch (error) {
+    console.error('Update error:', {
+      message: error.message,
+      stack: error.stack,
+      sql: error.sql
+    });
+    if (!t.finished) await t.rollback();
+    res.status(500).json({ 
+      error: 'Update failed',
+      details: error.original?.message || error.message 
+    });
+  }
 });
 
 // Passport Discord Strategy
@@ -204,6 +467,7 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
+// Authentication routes
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { 
     failureRedirect: '/error', 
@@ -284,96 +548,6 @@ app.get('/api/auth/status', (req, res) => {
  req.isAuthenticated() ? res.json(req.user) : res.status(401).json({ error: 'Not authenticated' });
 });
 
-app.get('/api/members', async (req, res) => {
- if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
-
- try {
-   const members = await db.User.findAll({
-     raw: true,
-     attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds', 'combat_power'], // Added combat_power here
-     order: [['role', 'DESC'], ['username', 'ASC']]
-   });
-
-   res.json(members.map(m => ({
-     ...m,
-     builds: Array.isArray(m.builds) ? m.builds : []
-   })));
- } catch (error) {
-   console.error('Fetch members error:', error);
-   res.status(500).json({ error: 'Failed to fetch members' });
- }
-});
-
-app.put('/api/members/:id', async (req, res) => {
- if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
-
- const t = await sequelize.transaction();
- try {
-   const { id } = req.params;
-   const { id: _, ...updateData } = req.body;
-
-   // Find the user
-   const user = await db.User.findByPk(id);
-   if (!user) {
-     await t.rollback();
-     return res.status(404).json({ error: 'Member not found' });
-   }
-
-   // Format the builds for PostgreSQL
-   const buildsJson = JSON.stringify(updateData.builds);
-
-   // Use raw query to ensure proper array handling
-   await sequelize.query(
-     `UPDATE users SET 
-       discord_id = :discord_id,
-       username = :username,
-       role = :role,
-       status = :status,
-       avatar_url = :avatar_url,
-       builds = :builds::jsonb,
-       combat_power = :combat_power,
-       updated_at = NOW()
-      WHERE id = :id`,
-     {
-       replacements: { 
-         id,
-         discord_id: updateData.discord_id,
-         username: updateData.username,
-         role: updateData.role,
-         status: updateData.status,
-         avatar_url: updateData.avatar_url,
-         builds: JSON.stringify(updateData.builds),
-         combat_power: updateData.combat_power || null // Added this line
-       },
-       type: sequelize.QueryTypes.UPDATE,
-       transaction: t
-     }
-   );
-
-   await t.commit();
-
-   // Fetch and return the updated record
-   const updatedUser = await db.User.findByPk(id, {
-     attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds', 'combat_power'] // Added combat_power
-   });
-
-   console.log('Updated user:', JSON.stringify(updatedUser.toJSON(), null, 2));
-   res.json(updatedUser);
-   
- } catch (error) {
-   console.error('Update error:', {
-     message: error.message,
-     stack: error.stack,
-     sql: error.sql
-   });
-   if (!t.finished) await t.rollback();
-   res.status(500).json({ 
-     error: 'Update failed',
-     details: error.original?.message || error.message 
-   });
- }
-});
-
 // Error route
 app.get('/error', (req, res) => {
   // If this is a JSON API request
@@ -383,7 +557,6 @@ app.get('/error', (req, res) => {
   
   // If production with static frontend
   if (process.env.NODE_ENV === 'production') {
-    const path = require('path');
     return res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
   }
   
@@ -391,9 +564,8 @@ app.get('/error', (req, res) => {
   res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/auth-error`);
 });
 
-// Static file serving in production - moved to end of file before catch-all
+// Static file serving in production
 if (process.env.NODE_ENV === 'production') {
- const path = require('path');
  app.use(express.static(path.join(__dirname, '../frontend/build')));
 
  app.get('*', function(req, res) {
@@ -405,3 +577,5 @@ if (process.env.NODE_ENV === 'production') {
 function validateUUID(uuid) {
  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
 }
+
+module.exports = app;
