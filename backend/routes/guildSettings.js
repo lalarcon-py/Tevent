@@ -1,17 +1,11 @@
 // backend/routes/guildSettings.js
 const express = require('express');
-const router = express.Router();
+const router = express.Router({ mergeParams: true }); // Important: mergeParams: true
 const guildSettingsController = require('../controllers/guildSettingsController');
-const { deleteGuild } = require('../controllers/guildController');
-router.get('/:guildId/direct-dkp-check', guildSettingsController.directDkpCheck);
 
-// Get guild settings
-router.get('/:guildId/settings', guildSettingsController.getGuildSettings);
-
-// Update guild settings
-router.put('/:guildId/settings', guildSettingsController.updateGuildSettings);
-
-// Note: deleteGuild route is likely already defined in guildRoutes,
-// so you may not need to add it here
+// Routes should be relative to the mount point
+router.get('/', guildSettingsController.getGuildSettings);
+router.put('/', guildSettingsController.updateGuildSettings);
+router.get('/direct-dkp-check', guildSettingsController.directDkpCheck);
 
 module.exports = router;

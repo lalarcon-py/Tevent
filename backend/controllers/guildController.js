@@ -653,7 +653,7 @@ const getGuildMembers = async (req, res) => {
     
     const { guildId } = req.params;
     
-    // Temporarily switch to public schema for guild membership operations
+    // Explicitly set search path to public schema for guild membership operations
     await sequelize.query(`SET search_path TO public`);
     
     // Check if user is a member
@@ -665,7 +665,7 @@ const getGuildMembers = async (req, res) => {
     });
     
     if (!membership) {
-      await sequelize.query(`SET search_path TO "guild_${guildId}"`); // Reset before error
+      await sequelize.query(`SET search_path TO public`); // Reset schema
       return res.status(403).json({ error: 'Not a member of this guild' });
     }
     
@@ -677,6 +677,7 @@ const getGuildMembers = async (req, res) => {
         attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
       }],
       order: [
+        // Fix ambiguous column reference by fully qualifying the column
         [sequelize.literal(`CASE 
           WHEN "GuildMember"."role" = 'Guild Master' THEN 1
           WHEN "GuildMember"."role" = 'Guild Advisor' THEN 2
@@ -701,12 +702,12 @@ const getGuildMembers = async (req, res) => {
       joinedViaInvite: member.joined_via_invite || false
     }));
     
-    // Switch back to guild schema
-    await sequelize.query(`SET search_path TO "guild_${guildId}"`);
+    // Switch to guild schema if needed for the response
+    await sequelize.query(`SET search_path TO public`);
     
     res.json(formattedMembers);
   } catch (error) {
-    // Make sure we reset the schema path on error
+    // Always reset schema path on error
     try {
       await sequelize.query(`SET search_path TO public`);
     } catch (e) {

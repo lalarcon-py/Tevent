@@ -187,46 +187,71 @@ app.use('/api/dashboard', validateGuildMembership, schemaMiddleware, databaseMid
 // Guild routes have public and private endpoints
 // Public guild endpoints don't need membership validation (create, join, available)
 // Private guild endpoints do need membership validation (details, members, settings)
-app.use('/api/guilds/:guildId/settings', validateGuildMembership, schemaMiddleware, databaseMiddleware, guildSettingsRoutes);
-app.use('/api/guilds/:guildId/members', validateGuildMembership, schemaMiddleware, databaseMiddleware, (req, res, next) => {
+const guildSettingsController = require('./controllers/guildSettingsController');
+
+app.get('/api/guilds/:guildId/settings', 
+  validateGuildMembership, 
+  schemaMiddleware, 
+  databaseMiddleware, 
+  guildSettingsController.getGuildSettings
+);
+
+app.put('/api/guilds/:guildId/settings', 
+  validateGuildMembership, 
+  schemaMiddleware, 
+  databaseMiddleware, 
+  guildSettingsController.updateGuildSettings
+);
+
+app.use('/api/guilds/:guildId/members', validateGuildMembership, (req, res, next) => {
   const { guildId } = req.params;
   
-  db.GuildMember.findAll({
-    where: { guild_id: guildId },
-    include: [{
-      model: db.User,
-      attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
-    }],
-    order: [
-      [sequelize.literal(`CASE 
-        WHEN role = 'Guild Master' THEN 1
-        WHEN role = 'Guild Advisor' THEN 2
-        WHEN role = 'Guild Guardian' THEN 3
-        ELSE 4
-      END`), 'ASC'],
-      ['created_at', 'ASC']
-    ]
-  })
-  .then(members => {
-    const formattedMembers = members.map(member => ({
-      id: member.User.id,
-      username: member.User.username,
-      avatarUrl: member.User.avatar_url,
-      discordId: member.User.discord_id,
-      role: member.role,
-      builds: member.User.builds,
-      combat_power: member.User.combat_power,
-      joinedAt: member.created_at,
-      joinedViaInvite: member.joined_via_invite || false
-    }));
-    
-    res.json(formattedMembers);
-  })
-  .catch(error => {
-    console.error('Get guild members error:', error);
-    res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
-  });
+  // Ensure we're in the public schema
+  sequelize.query(`SET search_path TO public`)
+    .then(() => {
+      return db.GuildMember.findAll({
+        where: { guild_id: guildId },
+        include: [{
+          model: db.User,
+          attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
+        }],
+        order: [
+          // Fix ambiguous column reference
+          [sequelize.literal(`CASE 
+            WHEN "GuildMember"."role" = 'Guild Master' THEN 1
+            WHEN "GuildMember"."role" = 'Guild Advisor' THEN 2
+            WHEN "GuildMember"."role" = 'Guild Guardian' THEN 3
+            ELSE 4
+          END`), 'ASC'],
+          ['created_at', 'ASC']
+        ]
+      });
+    })
+    .then(members => {
+      const formattedMembers = members.map(member => ({
+        id: member.User.id,
+        username: member.User.username,
+        avatarUrl: member.User.avatar_url,
+        discordId: member.User.discord_id,
+        role: member.role,
+        builds: member.User.builds,
+        combat_power: member.User.combat_power,
+        joinedAt: member.created_at,
+        joinedViaInvite: member.joined_via_invite || false
+      }));
+      
+      res.json(formattedMembers);
+    })
+    .catch(error => {
+      // Reset schema on error
+      sequelize.query(`SET search_path TO public`)
+        .catch(e => console.error('Failed to reset schema:', e));
+        
+      console.error('Get guild members error:', error);
+      res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
+    });
 });
+
 app.use('/api/guilds', schemaMiddleware, guildRouter);
 
 // Debug routes

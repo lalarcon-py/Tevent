@@ -10,7 +10,21 @@ const guildSettingsController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
   
+      // Log the request parameters for debugging
+      console.log("Request params:", req.params);
+      console.log("Request query:", req.query);
+      console.log("Request path:", req.path);
+  
+      // Try to get guildId from multiple places
       const { guildId } = req.params;
+      
+      if (!guildId) {
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
+  
+      // Ensure we're using the public schema for guild operations
+      await sequelize.query(`SET search_path TO public`);
+      
       const guild = await db.Guild.findByPk(guildId);
       
       if (!guild) {
@@ -85,9 +99,12 @@ const guildSettingsController = {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
-
+  
       const { guildId } = req.params;
       const { settingGroup, settings } = req.body;
+      
+      // Ensure we're using the public schema for guild operations
+      await sequelize.query(`SET search_path TO public`);
       
       // Verify the user is a guild master
       const membership = await db.GuildMember.findOne({
@@ -106,7 +123,7 @@ const guildSettingsController = {
       if (!guild) {
         return res.status(404).json({ error: 'Guild not found' });
       }
-
+  
       // Update different settings based on the group
       let updateData = {};
       
@@ -131,13 +148,13 @@ const guildSettingsController = {
           }
           break;
           
-          case 'dkp':
-            if (settings.dkpEnabled !== undefined) {
-              // Ensure we're storing a boolean
-              updateData.dkp_enabled = settings.dkpEnabled === true;
-              console.log('Updating dkp_enabled to:', updateData.dkp_enabled, 'from input:', settings.dkpEnabled);
-            }
-            break;
+        case 'dkp':
+          if (settings.dkpEnabled !== undefined) {
+            // Ensure we're storing a boolean
+            updateData.dkp_enabled = settings.dkpEnabled === true;
+            console.log('Updating dkp_enabled to:', updateData.dkp_enabled, 'from input:', settings.dkpEnabled);
+          }
+          break;
           
         case 'roles':
           if (settings.maxTanks !== undefined) updateData.max_tanks = settings.maxTanks;
