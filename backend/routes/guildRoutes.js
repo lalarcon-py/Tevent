@@ -34,7 +34,7 @@ router.post('/create', async (req, res) => {
     const guildId = uuidv4();
     
     // Create new schema for the guild
-    await schemaManager.createGuildSchema(guildId);
+    await schemaManager.initializeGuildData(guildId);
     
     // Create guild record
     const guild = await db.Guild.create({
@@ -223,7 +223,7 @@ async function deleteEmptyGuild(guildId, transaction) {
     });
     
     // Drop the guild schema
-    await schemaManager.dropGuildSchema(guildId);
+    await schemaManager.deleteGuildData(guildId);
     
     console.log(`Guild ${guildId} deleted due to zero members`);
     return true;

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Item, LootRequest, DKPTransaction } = require('../models');
+const { Item, LootRequest, DKPTransaction, GuildStorageItem, User } = require('../models');
 const discordWebhook = require('../utils/discord');
 
 // Submit Loot Request
@@ -23,7 +23,8 @@ router.post('/request', async (req, res) => {
       where: {
         storage_item_id: storageItemId,
         user_id: userId,
-        status: 'Pending'
+        status: 'Pending',
+        guild_id: req.guildId
       }
     });
 
@@ -35,7 +36,8 @@ router.post('/request', async (req, res) => {
       storage_item_id: storageItemId,
       user_id: userId,
       priority: req.user.dkpBalance || 0,
-      status: 'Pending'
+      status: 'Pending',
+      guild_id: req.guildId 
     });
 
     // Send Discord notification

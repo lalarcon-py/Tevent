@@ -57,7 +57,7 @@ cron.schedule('0 0 * * *', async () => {
         await t.commit();
         
         // Drop schema OUTSIDE of transaction
-        const dropResult = await schemaManager.dropGuildSchema(guild.id);
+        const dropResult = await schemaManager.deleteGuildData(guild.id);
         if (!dropResult) {
           console.error(`Failed to drop schema for guild ${guild.id}, but record was deleted`);
         } else {

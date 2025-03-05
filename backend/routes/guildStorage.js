@@ -1,7 +1,6 @@
 // backend/routes/guildStorage.js
 const express = require('express');
 const router = express.Router();
-const models = require('../models');
 const db = require('../models');
 
 // Get all items in guild storage

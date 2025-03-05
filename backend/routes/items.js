@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { Item } = require('../models');
-const { isOfficer } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { updateItem } = require('../controllers/itemsController');
 const { getAutocompleteItems } = require('../controllers/itemsController');

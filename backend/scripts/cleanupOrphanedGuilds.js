@@ -36,7 +36,7 @@ async function cleanupOrphanedGuilds() {
         });
         
         // Drop schema outside of any transaction
-        const dropResult = await schemaManager.dropGuildSchema(guildId);
+        const dropResult = await schemaManager.deleteGuildData(guildId);
         console.log(`Schema drop result: ${dropResult ? 'success' : 'failed'}`);
       }
     }
