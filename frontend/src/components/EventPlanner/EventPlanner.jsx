@@ -1,6 +1,6 @@
 // EventPlanner/EventPlanner.jsx
 import { useState, useEffect } from 'react';
-import { Box, Button, Dialog, Snackbar, Alert, Typography } from '@mui/material';
+import { Box, Button, Dialog, Snackbar, Alert, Typography, DialogActions } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CalendarView from './CalendarView';
 import EventForm from './EventForm';
@@ -16,6 +16,7 @@ const EventPlanner = () => {
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [guildId, setGuildId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -129,13 +130,45 @@ const EventPlanner = () => {
         title: '',
         description: '',
         location: '',
-        tanks: 2,
-        healers: 4,
-        dps: 24,
+        tanks: 15,
+        healers: 20,
+        dps: 35,
         requirements: ''
       });
     }
   };
+
+  const handleDeleteEvent = async () => {
+    if (!selectedEvent) return;
+  
+    if (!window.confirm('Are you sure you want to delete this event?')) return;
+    setIsDeleting(true);
+  
+    try {
+      const response = await fetch(
+        `${API_URL}/api/events/${selectedEvent.id}?guildId=${guildId}`,
+        {
+          method: 'DELETE',
+          credentials: 'include'
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete event');
+      }
+
+      setEvents(prev => prev.filter(event => event.id !== selectedEvent.id));
+      setIsDetailsDialogOpen(false);
+      setSelectedEvent(null);
+    } catch (error) {
+      console.error('Delete error:', error);
+      setError(error.message || 'Failed to delete event');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   return (
     <Box>
@@ -211,29 +244,42 @@ const EventPlanner = () => {
           </Dialog>
 
           <Dialog
-            open={isDetailsDialogOpen}
-            onClose={() => {
-              setIsDetailsDialogOpen(false);
-              setSelectedEvent(null);
-            }}
-            maxWidth="md"
-            fullWidth
-          >
-            {selectedEvent && (
-              <EventDetails 
-                event={selectedEvent}
-                onEventUpdate={async () => {
-                  await fetchEvents();
-                  setIsDetailsDialogOpen(false);
-                  setSelectedEvent(null);
-                }}
-                onClose={() => {
-                  setIsDetailsDialogOpen(false);
-                  setSelectedEvent(null);
-                }}
-              />
-            )}
-          </Dialog>
+              open={isDetailsDialogOpen}
+              onClose={() => {
+                setIsDetailsDialogOpen(false);
+                setSelectedEvent(null);
+              }}
+              maxWidth="md"
+              fullWidth
+            >
+              {selectedEvent && (
+                <>
+                  <EventDetails 
+                    event={selectedEvent}
+                    onEventUpdate={async () => {
+                      await fetchEvents();
+                      setIsDetailsDialogOpen(false);
+                      setSelectedEvent(null);
+                    }}
+                    onClose={() => {
+                      setIsDetailsDialogOpen(false);
+                      setSelectedEvent(null);
+                    }}
+                  />
+                  {/* Add Delete Button */}
+                  <DialogActions>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      onClick={handleDeleteEvent}
+                      sx={{ ml: 2 }}
+                    >
+                      Delete Event
+                    </Button>
+                  </DialogActions>
+                </>
+              )}
+            </Dialog>
         </>
       )}
 

@@ -56,78 +56,79 @@ router.post('/request', async (req, res) => {
 router.put('/request/:id', async (req, res) => {
   try {
     const { status } = req.body;
-    
-    // Find request with all related data
+
+    // Find request with related data
     const request = await LootRequest.findByPk(req.params.id, {
       include: [
-        { 
-          model: GuildStorageItem, 
-          include: [Item]  // Include Item data from storage item
-        },
-        { 
-          model: User 
-        }
-      ]
+        { model: GuildStorageItem, include: [Item] },
+        { model: User },
+      ],
     });
 
     if (!request) {
       return res.status(404).json({ error: 'Request not found' });
     }
 
+    // Authorization checks
+    const user = req.user; // Authenticated user
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (user.role !== 'Guild Master' && user.role !== 'Guild Advisor') {
+      return res.status(403).json({ error: 'Unauthorized: Only Guild Masters or Advisors can approve/deny requests' });
+    }
+
+    if (user.id === request.user_id && status === 'Approved') {
+      return res.status(403).json({ error: 'Cannot approve your own request' });
+    }
+
+    // Process the request
     if (status === 'Approved') {
-      // Check if item is still available
       if (request.GuildStorageItem.quantity < 1) {
         return res.status(400).json({ error: 'Item no longer available in storage' });
       }
 
-      // Decrement quantity
       await request.GuildStorageItem.decrement('quantity');
       
-      // Create DKP transaction using storage item's cost
       await DKPTransaction.create({
         user_id: request.user_id,
         amount: -request.GuildStorageItem.dkp_cost,
         reason: `Purchased ${request.GuildStorageItem.Item.name}${
           request.GuildStorageItem.trait ? ` with ${request.GuildStorageItem.trait}` : ''
-        }`
+        }`,
       });
 
-      // Send Discord notification
       await discordWebhook.send({
         content: `🎉 **Item Distributed**\n${request.GuildStorageItem.Item.name}${
           request.GuildStorageItem.trait ? ` with ${request.GuildStorageItem.trait}` : ''
-        } to ${request.User.username}`
+        } to ${request.User.username}`,
       });
     } else if (status === 'Denied') {
-      // Send Discord notification for denial
       await discordWebhook.send({
-        content: `❌ **Request Denied**\n${request.GuildStorageItem.Item.name} request from ${request.User.username} has been denied`
+        content: `❌ **Request Denied**\n${request.GuildStorageItem.Item.name} request from ${request.User.username} has been denied`,
       });
+    } else {
+      return res.status(400).json({ error: 'Invalid status. Use "Approved" or "Denied"' });
     }
 
     // Update request status
     await request.update({ status });
 
-    // Return updated request with all related data
+    // Return updated request
     const updatedRequest = await LootRequest.findByPk(req.params.id, {
       include: [
-        { 
-          model: GuildStorageItem, 
-          include: [Item] 
-        },
-        { 
-          model: User 
-        }
-      ]
+        { model: GuildStorageItem, include: [Item] },
+        { model: User },
+      ],
     });
 
     res.json(updatedRequest);
-    
   } catch (error) {
     console.error('Request update error:', error);
     res.status(500).json({ 
       error: 'Request update failed',
-      details: error.message 
+      details: error.message,
     });
   }
 });
