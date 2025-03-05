@@ -1,4 +1,3 @@
-// frontend/src/components/TeamPlanner/TeamPlanner.jsx
 import React, { useState, useEffect } from 'react';
 import { 
   Box, 
@@ -28,8 +27,6 @@ const DraggableMember = ({ member, onRemove }) => {
     
     const handleDragStart = (e) => {
       console.log('Drag started!');
-      
-      // Get the most reliable ID from various possible locations
       const memberId = member.user_id || member.id || (member.User?.id);
       
       if (!memberId) {
@@ -39,8 +36,7 @@ const DraggableMember = ({ member, onRemove }) => {
       }
       
       console.log('Setting drag data with ID:', memberId);
-      
-      // Try multiple ways to set the data
+
       try {
         e.dataTransfer.setData('text/plain', memberId);
         e.dataTransfer.setData('memberId', memberId);
@@ -48,7 +44,6 @@ const DraggableMember = ({ member, onRemove }) => {
         console.error('Error setting drag data:', err);
       }
       
-      // Add a class for visual feedback
       currentEl.classList.add('dragging');
     };
     
@@ -85,8 +80,8 @@ const DraggableMember = ({ member, onRemove }) => {
       sx={{
         border: '1px solid rgba(255,255,255,0.2)',
         borderRadius: 1,
-        p: 0.5, // Reduced padding
-        mb: 0.5, // Reduced margin
+        p: 0.5,
+        mb: 0.5,
         bgcolor: getRoleColor(member.role),
         cursor: 'grab',
         transition: 'transform 0.15s',
@@ -96,15 +91,15 @@ const DraggableMember = ({ member, onRemove }) => {
         '&.dragging': {
           opacity: 0.5
         },
-        minWidth: 120, // Added minimum width
-        maxWidth: 200 // Added maximum width
+        minWidth: 120,
+        maxWidth: 200
       }}
     >
       {/* Character name */}
       <Typography 
-        variant="body2" // Smaller text variant
+        variant="body2"
         sx={{
-          fontSize: '0.85rem', // Custom font size
+          fontSize: '0.85rem',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis'
@@ -118,7 +113,7 @@ const DraggableMember = ({ member, onRemove }) => {
         variant="caption"
         sx={{
           color: 'rgba(255,255,255,0.7)',
-          fontSize: '0.75rem' // Smaller role text
+          fontSize: '0.75rem'
         }}
       >
         {member.role}
@@ -134,10 +129,10 @@ const DraggableMember = ({ member, onRemove }) => {
           sx={{
             color: '#ff4444',
             cursor: 'pointer',
-            fontSize: '1rem', // Slightly smaller close button
-            padding: '0 4px', // Reduced padding
+            fontSize: '1rem',
+            padding: '0 4px',
             float: 'right',
-            mt: -2.5 // Adjusted vertical position
+            mt: -2.5
           }}
         >
           ×
@@ -153,11 +148,8 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
   const [isDropTarget, setIsDropTarget] = useState(false);
 
   const handleDragOver = (e) => {
-    // This is necessary to allow dropping
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    
-    // Show visual indication that drop is allowed
     setIsDropTarget(true);
   };
   
@@ -168,8 +160,7 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDropTarget(false);
-    
-    // Try multiple ways to get the member ID
+
     let memberId;
     try {
       memberId = e.dataTransfer.getData('memberId');
@@ -545,16 +536,12 @@ const TeamPlanner = () => {
 
   const handleDrop = async (memberId, teamId) => {
     try {
-      console.log('Drop member:', memberId, 'to team:', teamId);
-      
-      // Check if member is in participants pool
       let member = participants.find(p => 
         p.id === memberId || p.user_id === memberId || 
         (p.User && p.User.id === memberId)
       );
       let sourceTeamId = null;
   
-      // If not in participants, find in which team they are
       if (!member) {
         for (const team of teams) {
           const foundMember = team.members?.find(m => 
@@ -570,19 +557,13 @@ const TeamPlanner = () => {
       }
   
       if (!member) {
-        console.error('Member not found:', memberId);
         return;
       }
       
       if (sourceTeamId === teamId) {
-        console.log('Source and target teams are the same, ignoring drop');
         return;
       }
-  
-      console.log('Found member:', member);
-      console.log('Source team:', sourceTeamId);
       
-      // Extract the correct user ID
       const userId = member.user_id || member.id || (member.User && member.User.id);
       if (!userId) {
         console.error('Unable to determine user ID from member:', member);
@@ -609,7 +590,6 @@ const TeamPlanner = () => {
       const updatedMember = await response.json();
       console.log('Updated member response:', updatedMember);
   
-      // Format member with builds properly preserved
       const memberWithUserData = formatMemberWithBuilds({
         ...updatedMember,
         User: {
