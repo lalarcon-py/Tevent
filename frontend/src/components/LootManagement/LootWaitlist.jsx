@@ -32,7 +32,12 @@ const LootWaitlist = ({ dkpEnabled }) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axiosInstance.get('/api/waitlist');
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      const response = await axiosInstance.get(`/api/waitlist?guildId=${guildId}`);
       
       if (response.data && Array.isArray(response.data)) {
         setRequests(response.data);

@@ -50,6 +50,131 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.put('/:id', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { id } = req.params;
+    const { status } = req.body;
+    const guildId = req.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Check if user has permission
+    const membership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!membership || !['Guild Master', 'Guild Advisor'].includes(membership.role)) {
+      return res.status(403).json({ error: 'No permission to approve/deny requests' });
+    }
+    
+    // Find the request
+    const request = await db.LootRequest.findOne({
+      where: { 
+        id,
+        guild_id: guildId
+      },
+      include: [
+        {
+          model: db.GuildStorageItem,
+          as: 'storageItem'
+        },
+        {
+          model: db.User,
+          as: 'user'
+        }
+      ]
+    });
+    
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    
+    // Update request status
+    await request.update({ status });
+    
+    // If approved, also check and remove from wishlist
+    if (status === 'Approved' && request.user_id) {
+      try {
+        // Check if item is in wishlist
+        const wishlistItem = await db.WishList.findOne({
+          where: {
+            user_id: request.user_id,
+            guild_id: guildId,
+            item_id: request.storageItem?.item_id
+          }
+        });
+        
+        if (wishlistItem) {
+          // Remove from wishlist
+          await wishlistItem.destroy();
+          console.log(`Removed item ${request.storageItem?.item_id} from wishlist for user ${request.user_id}`);
+        }
+      } catch (error) {
+        console.error('Error removing from wishlist:', error);
+        // Continue despite error - don't fail the whole request
+      }
+    }
+    
+    res.json({ success: true, message: `Request ${status.toLowerCase()}` });
+  } catch (error) {
+    console.error('Update request error:', error);
+    res.status(500).json({ error: 'Failed to update request', details: error.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { id } = req.params;
+    const guildId = req.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Check if user has permission
+    const membership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!membership || !['Guild Master', 'Guild Advisor'].includes(membership.role)) {
+      return res.status(403).json({ error: 'No permission to delete requests' });
+    }
+    
+    // Delete the request
+    const result = await db.LootRequest.destroy({
+      where: { 
+        id,
+        guild_id: guildId
+      }
+    });
+    
+    if (result === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    
+    res.json({ success: true, message: 'Request deleted successfully' });
+  } catch (error) {
+    console.error('Delete request error:', error);
+    res.status(500).json({ error: 'Failed to delete request', details: error.message });
+  }
+});
+
 // Create new request
 router.post('/', async (req, res) => {
   try {

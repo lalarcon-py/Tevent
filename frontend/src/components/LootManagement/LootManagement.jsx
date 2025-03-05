@@ -46,7 +46,7 @@ const LootManagement = () => {
     checkDkpDirectly();
   }, []);
 
-  const effectiveDkpEnabled = directDkpCheck?.dkpEnabled === true ? true : dkpEnabled === true;
+  const effectiveDkpEnabled = Boolean(directDkpCheck?.dkpEnabled || dkpEnabled);
 
   return (
     <Box sx={{ width: '100%' }}>

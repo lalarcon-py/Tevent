@@ -91,7 +91,7 @@ const WaitListTab = ({ dkpEnabled }) => {
             console.error('No guild ID found');
             return;
           }
-          await axiosInstance.put(`/api/request/${request.id}`, { status: 'Approved', guildId });
+          await axiosInstance.put(`/api/waitlist/${request.id}`, { status: 'Approved', guildId });
           await loadRequests();
         } catch (error) {
           console.error('Failed to approve request:', error);
@@ -113,7 +113,7 @@ const WaitListTab = ({ dkpEnabled }) => {
             console.error('No guild ID found');
             return;
           }
-          await axiosInstance.put(`/api/request/${request.id}`, { status: 'Denied', guildId });
+          await axiosInstance.put(`/api/waitlist/${request.id}`, { status: 'Denied', guildId });
           await loadRequests();
         } catch (error) {
           console.error('Failed to deny request:', error);
@@ -135,7 +135,7 @@ const WaitListTab = ({ dkpEnabled }) => {
             console.error('No guild ID found');
             return;
           }
-          await axiosInstance.delete(`/api/request/${request.id}?guildId=${guildId}`);
+          await axiosInstance.delete(`/api/waitlist/${request.id}?guildId=${guildId}`);
           await loadRequests();
         } catch (error) {
           console.error('Failed to delete request:', error);
