@@ -20,29 +20,54 @@ import { useParams } from 'react-router-dom';
 const API_URL = process.env.REACT_APP_API_URL;
 
 const DraggableMember = ({ member, onRemove }) => {
-  const [userData, setUserData] = useState(null);
-  console.log('Raw member data:', member);
-  const builds = member.User?.builds || [];
-  console.log('Member User builds:', builds);
-
-  const handleDragStart = (e) => {
-    e.dataTransfer.setData('memberId', member.id);
-    e.dataTransfer.setData('memberRole', member.role);
-  };
-
-  const parseBuilds = (buildsData) => {
-    try {
-      if (typeof buildsData === 'string') {
-        return JSON.parse(buildsData);
-      }
-      return buildsData;
-    } catch (error) {
-      console.error('Parse error:', error);
-      return [];
-    }
-  };
+  const dragRef = React.useRef(null);
   
-
+  React.useEffect(() => {
+    const currentEl = dragRef.current;
+    if (!currentEl) return;
+    
+    const handleDragStart = (e) => {
+      console.log('Drag started!');
+      
+      // Get the most reliable ID from various possible locations
+      const memberId = member.user_id || member.id || (member.User?.id);
+      
+      if (!memberId) {
+        console.error('No valid ID found for member:', member);
+        e.preventDefault();
+        return;
+      }
+      
+      console.log('Setting drag data with ID:', memberId);
+      
+      // Try multiple ways to set the data
+      try {
+        e.dataTransfer.setData('text/plain', memberId);
+        e.dataTransfer.setData('memberId', memberId);
+      } catch (err) {
+        console.error('Error setting drag data:', err);
+      }
+      
+      // Add a class for visual feedback
+      currentEl.classList.add('dragging');
+    };
+    
+    const handleDragEnd = () => {
+      currentEl.classList.remove('dragging');
+    };
+    
+    // Directly attach event listeners to the DOM element
+    currentEl.setAttribute('draggable', 'true');
+    currentEl.addEventListener('dragstart', handleDragStart);
+    currentEl.addEventListener('dragend', handleDragEnd);
+    
+    // Clean up event listeners
+    return () => {
+      currentEl.removeEventListener('dragstart', handleDragStart);
+      currentEl.removeEventListener('dragend', handleDragEnd);
+    };
+  }, [member]);
+  
   // Color based on role
   const getRoleColor = (role) => {
     switch (role?.toLowerCase()) {
@@ -53,93 +78,70 @@ const DraggableMember = ({ member, onRemove }) => {
     }
   };
 
-  const getWeaponIcon = (weaponName) => {
-    if (!weaponName) return null;
-    return `/weapons/${weaponName.trim()} Art.png`;
-  };
-
-  const parsedBuilds = builds[0] ? 
-    (typeof builds[0] === 'string' ? JSON.parse(builds[0]) : builds[0]) 
-    : null;
-
-    const primaryWeapon = builds[0]?.[0]?.primary;
-    const secondaryWeapon = builds[0]?.[0]?.secondary;
-    console.log('Weapons:', { primaryWeapon, secondaryWeapon });
-
   return (
-    <Box
-      draggable
-      onDragStart={handleDragStart}
+    <Box 
+      ref={dragRef} 
+      draggable={true}
       sx={{
-        p: 1,
-        mb: 1,
-        bgcolor: '#2d2d2d',
-        cursor: 'grab',
+        border: '1px solid rgba(255,255,255,0.2)',
         borderRadius: 1,
-        border: `1px solid ${getRoleColor(member.role)}`,
-        '&:hover': { 
-          bgcolor: '#3d3d3d',
-          transform: 'scale(1.02)',
-          transition: 'all 0.2s ease'
+        p: 0.5, // Reduced padding
+        mb: 0.5, // Reduced margin
+        bgcolor: getRoleColor(member.role),
+        cursor: 'grab',
+        transition: 'transform 0.15s',
+        '&:hover': {
+          transform: 'scale(1.02)'
         },
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1
+        '&.dragging': {
+          opacity: 0.5
+        },
+        minWidth: 120, // Added minimum width
+        maxWidth: 200 // Added maximum width
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: '50px' }}>
-        {primaryWeapon && (
-          <img 
-            src={getWeaponIcon(primaryWeapon)}
-            alt={primaryWeapon}
-            style={{ width: 20, height: 20, objectFit: 'contain' }}
-            onError={(e) => {
-              console.log('Failed to load image:', e.target.src); // Debug log
-              e.target.style.display = 'none';
-            }}
-          />
-        )}
-        {secondaryWeapon && (
-          <img 
-            src={getWeaponIcon(secondaryWeapon)}
-            alt={secondaryWeapon}
-            style={{ width: 20, height: 20, objectFit: 'contain' }}
-            onError={(e) => {
-              console.log('Failed to load image:', e.target.src); // Debug log
-              e.target.style.display = 'none';
-            }}
-          />
-        )}
-      </Box>
-      <Box sx={{ flexGrow: 1 }}>
-        <Typography sx={{ color: 'white' }}>
-          {member.User?.username || member.username}
-        </Typography>
-        <Typography sx={{ 
-          color: getRoleColor(member.role),
-          fontSize: '0.8rem'
-        }}>
-          {member.role}
-        </Typography>
-      </Box>
+      {/* Character name */}
+      <Typography 
+        variant="body2" // Smaller text variant
+        sx={{
+          fontSize: '0.85rem', // Custom font size
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}
+      >
+        {member.User?.username || member.username}
+      </Typography>
+      
+      {/* Role text */}
+      <Typography 
+        variant="caption"
+        sx={{
+          color: 'rgba(255,255,255,0.7)',
+          fontSize: '0.75rem' // Smaller role text
+        }}
+      >
+        {member.role}
+      </Typography>
+      
+      {/* Remove button */}
       {onRemove && (
-        <Typography 
+        <Box
           onClick={(e) => {
             e.stopPropagation();
             onRemove(member);
           }}
-          sx={{ 
+          sx={{
             color: '#ff4444',
             cursor: 'pointer',
-            fontSize: '1.2rem',
-            padding: '0 8px',
-            '&:hover': {
-              color: '#ff6666'
-            }
+            fontSize: '1rem', // Slightly smaller close button
+            padding: '0 4px', // Reduced padding
+            float: 'right',
+            mt: -2.5 // Adjusted vertical position
           }}
         >
           ×
-        </Typography>
+        </Box>
       )}
     </Box>
   );
@@ -148,14 +150,50 @@ const DraggableMember = ({ member, onRemove }) => {
 const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [teamName, setTeamName] = useState(team.name);
+  const [isDropTarget, setIsDropTarget] = useState(false);
 
   const handleDragOver = (e) => {
+    // This is necessary to allow dropping
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    // Show visual indication that drop is allowed
+    setIsDropTarget(true);
+  };
+  
+  const handleDragLeave = () => {
+    setIsDropTarget(false);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    const memberId = e.dataTransfer.getData('memberId');
+    setIsDropTarget(false);
+    
+    // Try multiple ways to get the member ID
+    let memberId;
+    try {
+      memberId = e.dataTransfer.getData('memberId');
+      if (!memberId) {
+        const jsonData = e.dataTransfer.getData('application/json');
+        if (jsonData) {
+          const data = JSON.parse(jsonData);
+          memberId = data.id;
+        }
+      }
+      if (!memberId) {
+        memberId = e.dataTransfer.getData('text/plain');
+      }
+    } catch (err) {
+      console.error('Error getting drag data:', err);
+    }
+    
+    console.log('Team received drop with member ID:', memberId);
+    
+    if (!memberId) {
+      console.error('No member ID received in drop event');
+      return;
+    }
+    
     onDrop(memberId, team.id);
   };
 
@@ -167,11 +205,14 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
   return (
     <Paper
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       sx={{ 
         p: 2, 
-        bgcolor: '#1e1e1e',
-        minHeight: 200
+        bgcolor: isDropTarget ? 'rgba(30, 30, 30, 0.9)' : '#1e1e1e',
+        minHeight: 200,
+        border: isDropTarget ? '2px dashed #4CAF50' : '2px solid transparent',
+        transition: 'all 0.2s ease'
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
@@ -218,7 +259,7 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
       <Box sx={{ minHeight: 100 }}>
         {team.members?.map(member => (
           <DraggableMember 
-            key={member.id} 
+            key={member.id || member.user_id || (member.User && member.User.id)} 
             member={member} 
             onRemove={() => onRemoveMember(team.id, member)} 
           />
@@ -298,6 +339,7 @@ const TeamPlanner = () => {
   const [presets, setPresets] = useState([]);
   const [openPresetDialog, setOpenPresetDialog] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const [guildId, setGuildId] = useState(null);
 
   // First useEffect for fetching initial data
   useEffect(() => {
@@ -305,12 +347,20 @@ const TeamPlanner = () => {
       if (!eventId) return;
     
       try {
+        // Wait for guild ID to be available, if needed
+        if (!guildId) {
+          console.log('Waiting for guild ID...');
+          return;
+        }
+        
+        console.log(`Fetching data with guild ID: ${guildId}`);
+        
         // Fetch all events first
         const [eventsResponse, teamsResponse] = await Promise.all([
-          fetch(`${API_URL}/api/events`, {
+          fetch(`${API_URL}/api/events?guildId=${guildId}`, {
             credentials: 'include'
           }),
-          fetch(`${API_URL}/api/teams/event/${eventId}`, {
+          fetch(`${API_URL}/api/teams/event/${eventId}?guildId=${guildId}`, {
             credentials: 'include'
           })
         ]);
@@ -350,32 +400,7 @@ const TeamPlanner = () => {
         });
     
         // Format participants to ensure they have the correct structure
-        const formattedParticipants = availableParticipants.map(participant => {
-          // Ensure participant has builds array
-          let builds = participant.User?.builds || participant.builds || [];
-          
-          // If builds is a string, parse it
-          if (typeof builds === 'string') {
-            try {
-              builds = JSON.parse(builds);
-            } catch (error) {
-              console.error('Error parsing builds:', error);
-              builds = [];
-            }
-          }
-          
-          // Ensure builds is an array
-          builds = Array.isArray(builds) ? builds : [];
-          
-          return {
-            ...participant,
-            User: {
-              ...(participant.User || {}),
-              builds: builds
-            },
-            builds: builds
-          };
-        });
+        const formattedParticipants = availableParticipants.map(participant => formatMemberWithBuilds(participant));
     
         setParticipants(formattedParticipants);
         setTeams(teamsData);
@@ -386,7 +411,29 @@ const TeamPlanner = () => {
     };
   
     fetchData();
-  }, [eventId]);
+  }, [eventId, guildId]);
+
+  useEffect(() => {
+    const fetchGuildId = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/guilds/my-guilds`, {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const guilds = await response.json();
+          if (guilds.length > 0) {
+            setGuildId(guilds[0].id);
+            console.log('Using guild ID for team planner:', guilds[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching guild ID:', error);
+      }
+    };
+    
+    fetchGuildId();
+  }, []);
 
   const handleEditTeam = async (updatedTeam) => {
     try {
@@ -394,7 +441,10 @@ const TeamPlanner = () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ name: updatedTeam.name })
+        body: JSON.stringify({ 
+          name: updatedTeam.name,
+          guildId: guildId
+        })
       });
   
       if (!response.ok) throw new Error('Failed to update team');
@@ -414,10 +464,11 @@ const TeamPlanner = () => {
         credentials: 'include',
         body: JSON.stringify({
           name: `Team ${teams.length + 1}`,
-          eventId
+          eventId,
+          guildId: guildId
         })
       });
-
+  
       if (!response.ok) throw new Error('Failed to create team');
       const newTeam = await response.json();
       setTeams(prev => [...prev, { ...newTeam, members: [] }]);
@@ -432,7 +483,7 @@ const TeamPlanner = () => {
         throw new Error('Invalid member data');
       }
   
-      const response = await fetch(`${API_URL}/api/teams/${teamId}/members/${member.user_id}`, {
+      const response = await fetch(`${API_URL}/api/teams/${teamId}/members/${member.user_id}?guildId=${guildId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -474,12 +525,12 @@ const TeamPlanner = () => {
       if (!teamToRemove) return;
   
       const members = teamToRemove.members || [];
-      setParticipants(prev => [...prev, ...members.map(member => ({
+      setParticipants(prev => [...prev, ...members.map(member => formatMemberWithBuilds({
         ...member,
         User: member.User
       }))]);
   
-      const response = await fetch(`${API_URL}/api/teams/${teamId}`, {
+      const response = await fetch(`${API_URL}/api/teams/${teamId}?guildId=${guildId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -494,14 +545,22 @@ const TeamPlanner = () => {
 
   const handleDrop = async (memberId, teamId) => {
     try {
+      console.log('Drop member:', memberId, 'to team:', teamId);
+      
       // Check if member is in participants pool
-      let member = participants.find(p => p.id === memberId || p.user_id === memberId);
+      let member = participants.find(p => 
+        p.id === memberId || p.user_id === memberId || 
+        (p.User && p.User.id === memberId)
+      );
       let sourceTeamId = null;
   
       // If not in participants, find in which team they are
       if (!member) {
         for (const team of teams) {
-          const foundMember = team.members?.find(m => m.id === memberId || m.user_id === memberId);
+          const foundMember = team.members?.find(m => 
+            m.id === memberId || m.user_id === memberId || 
+            (m.User && m.User.id === memberId)
+          );
           if (foundMember) {
             member = foundMember;
             sourceTeamId = team.id;
@@ -510,17 +569,35 @@ const TeamPlanner = () => {
         }
       }
   
-      if (!member) return;
-      if (sourceTeamId === teamId) return;
+      if (!member) {
+        console.error('Member not found:', memberId);
+        return;
+      }
+      
+      if (sourceTeamId === teamId) {
+        console.log('Source and target teams are the same, ignoring drop');
+        return;
+      }
+  
+      console.log('Found member:', member);
+      console.log('Source team:', sourceTeamId);
+      
+      // Extract the correct user ID
+      const userId = member.user_id || member.id || (member.User && member.User.id);
+      if (!userId) {
+        console.error('Unable to determine user ID from member:', member);
+        throw new Error('Invalid member data - missing user ID');
+      }
   
       const response = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          memberId: member.user_id || member.id,
+          memberId: userId,
           role: member.role,
-          sourceTeamId
+          sourceTeamId,
+          guildId: guildId
         })
       });
   
@@ -530,12 +607,13 @@ const TeamPlanner = () => {
       }
   
       const updatedMember = await response.json();
+      console.log('Updated member response:', updatedMember);
   
       // Format member with builds properly preserved
       const memberWithUserData = formatMemberWithBuilds({
         ...updatedMember,
         User: {
-          ...member.User,
+          ...(member.User || {}),
           builds: member.User?.builds || member.builds || []
         }
       });
@@ -545,7 +623,11 @@ const TeamPlanner = () => {
           if (team.id === sourceTeamId) {
             return {
               ...team,
-              members: team.members.filter(m => m.id !== memberId && m.user_id !== memberId)
+              members: team.members.filter(m => 
+                m.id !== memberId && 
+                m.user_id !== memberId && 
+                (m.User?.id !== memberId)
+              )
             };
           }
           if (team.id === teamId) {
@@ -557,7 +639,12 @@ const TeamPlanner = () => {
           return team;
         }));
       } else {
-        setParticipants(prev => prev.filter(p => p.id !== memberId && p.user_id !== memberId));
+        setParticipants(prev => prev.filter(p => 
+          p.id !== memberId && 
+          p.user_id !== memberId && 
+          (p.User?.id !== memberId)
+        ));
+        
         setTeams(prev => prev.map(team => {
           if (team.id === teamId) {
             return {
@@ -583,7 +670,8 @@ const TeamPlanner = () => {
         body: JSON.stringify({
           name: presetName,
           eventId,
-          teamsData: teams
+          teamsData: teams,
+          guildId: guildId
         })
       });
   
@@ -597,7 +685,7 @@ const TeamPlanner = () => {
 
   const loadPresets = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/team-presets/event/${eventId}`, {
+      const response = await fetch(`${API_URL}/api/team-presets/event/${eventId}?guildId=${guildId}`, {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to load presets');
@@ -612,7 +700,7 @@ const TeamPlanner = () => {
     try {
       await Promise.all(
         teams.map(team => 
-          fetch(`${API_URL}/api/teams/${team.id}`, {
+          fetch(`${API_URL}/api/teams/${team.id}?guildId=${guildId}`, {
             method: 'DELETE',
             credentials: 'include'
           })
@@ -628,7 +716,7 @@ const TeamPlanner = () => {
     try {
       await cleanupExistingTeams();
   
-      const response = await fetch(`${API_URL}/api/team-presets/${presetId}`, {
+      const response = await fetch(`${API_URL}/api/team-presets/${presetId}?guildId=${guildId}`, {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to load preset');
@@ -653,7 +741,8 @@ const TeamPlanner = () => {
             credentials: 'include',
             body: JSON.stringify({
               name: teamData.name,
-              eventId
+              eventId,
+              guildId: guildId
             })
           });
   
@@ -677,7 +766,8 @@ const TeamPlanner = () => {
                     credentials: 'include',
                     body: JSON.stringify({
                       memberId: member.user_id,
-                      role: member.role
+                      role: member.role,
+                      guildId: guildId
                     })
                   });
                 }
@@ -693,6 +783,7 @@ const TeamPlanner = () => {
       );
   
       setTeams(createdTeams);
+      setPresets([]);
     } catch (error) {
       console.error('Error loading preset:', error);
       setError('Failed to load preset');
@@ -714,6 +805,10 @@ const TeamPlanner = () => {
   };
 
   const formatMemberWithBuilds = (member) => {
+    if (!member) return null;
+    
+    console.log('Formatting member:', member);
+    
     let builds = member.User?.builds || member.builds || [];
     
     // If builds is a string, parse it
@@ -729,10 +824,15 @@ const TeamPlanner = () => {
     // Ensure builds is an array
     builds = Array.isArray(builds) ? builds : [];
   
+    // Ensure User property exists
+    const userInfo = member.User || {};
+  
     return {
       ...member,
+      user_id: member.user_id || member.id || userInfo.id,
       User: {
-        ...member.User,
+        ...userInfo,
+        id: userInfo.id || member.user_id || member.id,
         builds: builds
       },
       builds: builds
@@ -744,7 +844,7 @@ const TeamPlanner = () => {
 
   const handleDeletePreset = async (preset) => {
     try {
-      const response = await fetch(`${API_URL}/api/team-presets/${preset.id}`, {
+      const response = await fetch(`${API_URL}/api/team-presets/${preset.id}?guildId=${guildId}`, {
         method: 'DELETE',
         credentials: 'include'
       });

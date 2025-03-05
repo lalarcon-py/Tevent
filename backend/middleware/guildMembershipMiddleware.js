@@ -3,7 +3,7 @@ const db = require('../models');
 
 const validateGuildMembership = async (req, res, next) => {
   // Extract guild ID from various possible sources
-  const guildId = req.params.guildId || req.query.guildId || req.body.guildId;
+  const guildId = req.params.guildId || req.query.guildId || req.body.guildId || req.guildId;
   
   // Skip validation if no guild ID or not authenticated
   if (!guildId || !req.isAuthenticated()) {
@@ -28,6 +28,10 @@ const validateGuildMembership = async (req, res, next) => {
     
     // Add membership info to request for potential role-based checks later
     req.guildMembership = membership;
+    
+    // Ensure guildId is set on the request
+    req.guildId = guildId;
+    
     next();
   } catch (error) {
     console.error('Guild membership check error:', error);

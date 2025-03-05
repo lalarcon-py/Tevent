@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Event, User, EventParticipant, Team, TeamMember } = require('../models');
+const db = require('../models');
 const { sequelize } = require('../config/database');
 
 // Authentication middleware
@@ -14,11 +15,30 @@ const isAuthenticated = (req, res, next) => {
 // Get all events
 router.get('/', async (req, res) => {
   try {
-    const guildId = req.guildId;
+    // Try to get guildId from multiple places
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body?.guildId;
     
-    if (!guildId) {
-      return res.status(400).json({ error: 'Guild ID is required' });
+    // If no guildId explicitly provided, try to get user's primary guild
+    if (!guildId && req.isAuthenticated()) {
+      console.log('No explicit guildId provided, trying to find user guild...');
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id },
+        order: [['created_at', 'DESC']]
+      });
+      
+      if (guildMember) {
+        guildId = guildMember.guild_id;
+        console.log(`Found user guild: ${guildId}`);
+      } else {
+        return res.status(400).json({ 
+          error: 'Guild ID is required and no default guild found for user'
+        });
+      }
+    } else if (!guildId) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
+    
+    console.log(`Fetching events for guild: ${guildId}`);
     
     const events = await Event.findAll({
       where: { guild_id: guildId },
@@ -45,17 +65,40 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
   try {
     const { role } = req.body;
     const eventId = req.params.id;
-    const guildId = req.guildId;
+    
+    // Try to get guildId from multiple places
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // If no guildId explicitly provided, try to get user's primary guild
+    if (!guildId && req.isAuthenticated()) {
+      console.log('No explicit guildId provided, trying to find user guild...');
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id },
+        order: [['created_at', 'DESC']]
+      });
+      
+      if (guildMember) {
+        guildId = guildMember.guild_id;
+        console.log(`Found user guild: ${guildId}`);
+      }
+    }
     
     if (!guildId) {
       await t.rollback();
-      return res.status(400).json({ error: 'Guild ID is required' });
+      return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
+    }
+
+    // Validate role format
+    const validRoles = ['TANK', 'HEALER', 'DPS'];
+    if (!validRoles.includes(role)) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Invalid role. Must be TANK, HEALER, or DPS' });
     }
 
     const [participant] = await EventParticipant.upsert({
       guild_id: guildId,
       event_id: eventId,
-      user_id: req.user.id,
+      user_id: req.body.userId || req.user.id, // Support admin operations
       role
     }, { transaction: t });
 
@@ -68,24 +111,249 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
   }
 });
 
+router.delete('/:id/signup', isAuthenticated, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const eventId = req.params.id;
+    const userId = req.body.userId || req.user.id; // Allow removing self or specified user
+    
+    // Try to get guildId from multiple places
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // If no guildId explicitly provided, try to get user's primary guild
+    if (!guildId && req.isAuthenticated()) {
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id },
+        order: [['created_at', 'DESC']]
+      });
+      
+      if (guildMember) {
+        guildId = guildMember.guild_id;
+        console.log(`Found user guild: ${guildId}`);
+      }
+    }
+    
+    if (!guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
+    }
+
+    const deletionCount = await EventParticipant.destroy({
+      where: {
+        event_id: eventId,
+        user_id: userId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+
+    if (deletionCount === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Participant not found' });
+    }
+
+    await t.commit();
+    res.status(200).json({ message: 'Participant removed successfully' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Remove participant error:', error);
+    res.status(500).json({ error: 'Failed to remove participant' });
+  }
+});
+
+router.put('/:id', isAuthenticated, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const eventId = req.params.id;
+    
+    // Try to get guildId from multiple places
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // If no guildId explicitly provided, try to get user's primary guild
+    if (!guildId && req.isAuthenticated()) {
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id },
+        order: [['created_at', 'DESC']]
+      });
+      
+      if (guildMember) {
+        guildId = guildMember.guild_id;
+        console.log(`Found user guild: ${guildId}`);
+      }
+    }
+    
+    if (!guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
+    }
+
+    const event = await Event.findOne({
+      where: {
+        id: eventId,
+        guild_id: guildId
+      }
+    });
+
+    if (!event) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    // Update the event
+    await event.update({
+      title: req.body.title || event.title,
+      description: req.body.description || event.description,
+      event_time: req.body.event_time || req.body.eventTime || event.event_time,
+      location: req.body.location || event.location,
+      tanks: req.body.tanks !== undefined ? req.body.tanks : event.tanks,
+      healers: req.body.healers !== undefined ? req.body.healers : event.healers,
+      dps: req.body.dps !== undefined ? req.body.dps : event.dps,
+      requirements: req.body.requirements || event.requirements
+    }, { transaction: t });
+
+    await t.commit();
+
+    // Fetch the updated event with associations
+    const updatedEvent = await Event.findByPk(event.id, {
+      include: [{
+        model: EventParticipant,
+        as: 'participants',
+        include: [{
+          model: User,
+          attributes: ['id', 'username', 'avatar_url']
+        }]
+      }]
+    });
+
+    res.json(updatedEvent);
+  } catch (error) {
+    await t.rollback();
+    console.error('Update event error:', error);
+    res.status(500).json({ error: 'Failed to update event' });
+  }
+});
+
+router.delete('/:id', isAuthenticated, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const eventId = req.params.id;
+    
+    // Try to get guildId from multiple places
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // If no guildId explicitly provided, try to get user's primary guild
+    if (!guildId && req.isAuthenticated()) {
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id },
+        order: [['created_at', 'DESC']]
+      });
+      
+      if (guildMember) {
+        guildId = guildMember.guild_id;
+        console.log(`Found user guild: ${guildId}`);
+      }
+    }
+    
+    if (!guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
+    }
+
+    // Delete participants first
+    await EventParticipant.destroy({
+      where: {
+        event_id: eventId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+
+    // Delete teams associated with this event
+    const teams = await Team.findAll({
+      where: {
+        event_id: eventId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+
+    // Delete team members
+    for (const team of teams) {
+      await TeamMember.destroy({
+        where: {
+          team_id: team.id,
+          guild_id: guildId
+        },
+        transaction: t
+      });
+    }
+
+    await Team.destroy({
+      where: {
+        event_id: eventId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+
+    // Delete the event
+    const deletedCount = await Event.destroy({
+      where: {
+        id: eventId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+
+    if (deletedCount === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    await t.commit();
+    res.status(200).json({ message: 'Event deleted successfully' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Delete event error:', error);
+    res.status(500).json({ error: 'Failed to delete event' });
+  }
+});
+
 // Create event
 router.post('/', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     console.log('Creating event with data:', req.body);
 
-    const guildId = req.guildId;
+    // Try to get guildId from multiple places
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // If no guildId explicitly provided, try to get user's primary guild
+    if (!guildId && req.isAuthenticated()) {
+      console.log('No explicit guildId provided, trying to find user guild...');
+      const guildMember = await db.GuildMember.findOne({
+        where: { user_id: req.user.id },
+        order: [['created_at', 'DESC']]
+      });
+      
+      if (guildMember) {
+        guildId = guildMember.guild_id;
+        console.log(`Found user guild: ${guildId}`);
+      }
+    }
     
     if (!guildId) {
       await t.rollback();
-      return res.status(400).json({ error: 'Guild ID is required' });
+      return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
     }
+
+    console.log(`Using guildId: ${guildId} for event creation`);
 
     const event = await Event.create({
       guild_id: guildId,
       title: req.body.title,
       description: req.body.description,
-      event_time: req.body.eventTime || req.body.event_time,
+      event_time: req.body.eventTime || req.body.event_time, // Handle both field naming conventions
       location: req.body.location,
       tanks: req.body.tanks,
       healers: req.body.healers,
@@ -113,7 +381,11 @@ router.post('/', isAuthenticated, async (req, res) => {
     res.status(201).json(createdEvent);
   } catch (error) {
     await t.rollback();
-    console.error('Event creation error:', error);
+    console.error('Event creation error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     res.status(500).json({ 
       error: 'Failed to create event',
       details: error.message 

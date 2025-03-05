@@ -15,6 +15,7 @@ const EventPlanner = () => {
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
+  const [guildId, setGuildId] = useState(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -25,7 +26,6 @@ const EventPlanner = () => {
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
-          console.log('Authenticated as:', userData);
         } else {
           console.log('Not authenticated');
           setError('Please log in to create events');
@@ -38,9 +38,34 @@ const EventPlanner = () => {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      const fetchUserGuild = async () => {
+        try {
+          const response = await fetch(`${API_URL}/api/guilds/my-guilds`, {
+            credentials: 'include'
+          });
+          if (response.ok) {
+            const guilds = await response.json();
+            if (guilds.length > 0) {
+              setGuildId(guilds[0].id);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user guilds:', error);
+        }
+      };
+      
+      fetchUserGuild();
+    }
+  }, [user]);
+
   const fetchEvents = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/events`, {
+      const url = guildId 
+        ? `${API_URL}/api/events?guildId=${guildId}`
+        : `${API_URL}/api/events`;
+      const response = await fetch(url, {
         credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to fetch events');
@@ -56,30 +81,31 @@ const EventPlanner = () => {
     if (!user) {
       throw new Error('Please log in to create events');
     }
-
+  
     try {
       console.log('Creating event as user:', user);
-      console.log('Attempting to create event with data:', eventData);
-
+      
+      const requestData = {
+        ...eventData,
+        event_time: eventData.eventTime,
+        guildId: guildId // Include guild ID
+      }; 
+  
       const response = await fetch(`${API_URL}/api/events`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({
-          ...eventData,
-          event_time: eventData.eventTime
-        })
+        body: JSON.stringify(requestData)
       });
-
+  
       const responseData = await response.json();
-      console.log('Server response:', responseData);
-
+  
       if (!response.ok) {
         throw new Error(responseData.error || 'Failed to create event');
       }
-
+  
       await fetchEvents();
       return responseData;
     } catch (error) {
@@ -94,11 +120,9 @@ const EventPlanner = () => {
 
   const handleEventClick = (eventData) => {
     if (eventData.id) {
-      // Existing event clicked
       setSelectedEvent(eventData);
       setIsDetailsDialogOpen(true);
     } else {
-      // Empty date clicked - open create dialog with pre-filled date
       setIsCreateDialogOpen(true);
       setSelectedEvent({
         event_time: eventData.event_time,

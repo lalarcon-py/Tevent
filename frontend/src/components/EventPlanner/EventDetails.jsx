@@ -33,6 +33,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
+  const [guildId, setGuildId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
@@ -51,6 +52,27 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     };
 
     fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const fetchGuildId = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/guilds/my-guilds`, {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const guilds = await response.json();
+          if (guilds.length > 0) {
+            setGuildId(guilds[0].id);
+            console.log('Using guild ID for event details:', guilds[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user guilds:', error);
+      }
+    };
+    
+    fetchGuildId();
   }, []);
 
   const totalPages = Math.ceil((event.participants?.length || 0) / PARTICIPANTS_PER_PAGE);
@@ -86,7 +108,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         setError('You must be logged in to sign up');
         return;
       }
-
+  
       // Check if user is already signed up for this event with any role
       const existingSignup = event.participants?.find(p => p.User?.id === currentUser.id);
       
@@ -100,6 +122,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         await handleRemoveParticipant(currentUser.id);
       }
       
+      console.log(`Signing up for role ${role} with guild ID: ${guildId}`);
+      
       // Now proceed with the new signup
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
@@ -107,7 +131,10 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ role })
+        body: JSON.stringify({ 
+          role,
+          guildId: guildId // Add this line
+        })
       });
       
       if (!response.ok) {
@@ -130,7 +157,11 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ role: newRole, userId }) // Include userId for admin operations
+        body: JSON.stringify({ 
+          role: newRole, 
+          userId,
+          guildId: guildId // Add this line
+        })
       });
       
       if (!response.ok) {
@@ -147,14 +178,16 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRemoveParticipant = async (userId) => {
     try {
-      // Send DELETE request to /api/events/{eventId}/signup with userId in the body
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ 
+          userId,
+          guildId: guildId // Add this line
+        })
       });
       
       if (!response.ok) {
@@ -362,34 +395,35 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         fullWidth
       >
         <EventForm 
-          initialData={{
-            ...event,
-            eventTime: event.event_time
-          }}
-          onSubmit={async (updatedData) => {
-            try {
-              const response = await fetch(`${API_URL}/api/events/${event.id}`, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                  ...updatedData,
-                  event_time: updatedData.eventTime
-                })
-              });
-              
-              if (!response.ok) throw new Error('Failed to update event');
-              await onEventUpdate();
-              setIsEditDialogOpen(false);
-            } catch (error) {
-              console.error('Error updating event:', error);
-              setError(error.message);
-            }
-          }}
-          onClose={() => setIsEditDialogOpen(false)}
-        />
+            initialData={{
+              ...event,
+              eventTime: event.event_time
+            }}
+            onSubmit={async (updatedData) => {
+              try {
+                const response = await fetch(`${API_URL}/api/events/${event.id}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                    ...updatedData,
+                    event_time: updatedData.eventTime,
+                    guildId: guildId // Add this line
+                  })
+                });
+                
+                if (!response.ok) throw new Error('Failed to update event');
+                await onEventUpdate();
+                setIsEditDialogOpen(false);
+              } catch (error) {
+                console.error('Error updating event:', error);
+                setError(error.message);
+              }
+            }}
+            onClose={() => setIsEditDialogOpen(false)}
+          />
       </Dialog>
 
       <Snackbar 

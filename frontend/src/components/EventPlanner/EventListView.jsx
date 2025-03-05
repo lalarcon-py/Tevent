@@ -21,6 +21,29 @@ const API_URL = process.env.REACT_APP_API_URL;
 
 const EventListView = ({ events, onEventSelect, onEventUpdate }) => {
   const [expandedDay, setExpandedDay] = useState(null);
+  const [guildId, setGuildId] = useState(null);
+
+
+  useEffect(() => {
+    const fetchGuildId = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/guilds/my-guilds`, {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const guilds = await response.json();
+          if (guilds.length > 0) {
+            setGuildId(guilds[0].id);
+            console.log('Using guild ID for event list:', guilds[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user guilds:', error);
+      }
+    };
+    
+    fetchGuildId();
+  }, []);
 
   // Group events by day
   const groupedEvents = events.reduce((groups, event) => {
@@ -34,7 +57,11 @@ const EventListView = ({ events, onEventSelect, onEventUpdate }) => {
 
   const handleDelete = async (eventId) => {
     try {
-      await fetch(`${API_URL}/api/events/${eventId}`, {
+      const url = guildId 
+        ? `${API_URL}/api/events/${eventId}?guildId=${guildId}`
+        : `${API_URL}/api/events/${eventId}`;
+        
+      await fetch(url, {
         method: 'DELETE',
         credentials: 'include'
       });

@@ -42,3 +42,26 @@ body, #root {
   background: linear-gradient(180deg, #1a1a1a 0%, #2d1a1a 100%);
   background-attachment: fixed;
 }
+
+.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.drag-over {
+  background-color: rgba(76, 175, 80, 0.1) !important;
+  border: 2px dashed #4CAF50 !important;
+}
+
+.dragging {
+  opacity: 0.5;
+}
+
+.drop-target {
+  background-color: #2a3f2a !important;
+  border: 2px dashed #4CAF50 !important;
+}
+
+.draggable-member {
+  transition: none !important; /* Disable transitions which can cause rubber-banding */
+}
