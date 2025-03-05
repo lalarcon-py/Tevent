@@ -219,7 +219,8 @@ function AppContent() {
           }}
         >
           <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/guild-management" element={<GuildManagement />} />
           <Route path="/loot-management" element={<LootManagement />} />
           <Route path="/gear-check" element={<GearCheck />} />
@@ -230,8 +231,8 @@ function AppContent() {
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
           <Route path="/auth-error" element={<AuthError />} />
-          <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/" replace />} />
-          <Route path="/guilds/setup" element={<Navigate to="/" replace />} />
+          <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/guilds/setup" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Box>
       </Router>

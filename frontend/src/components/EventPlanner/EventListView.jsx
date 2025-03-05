@@ -1,5 +1,5 @@
 // EventPlanner/EventListView.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   List,

@@ -41,7 +41,7 @@ const Navigation = ({ guildId }) => {
     {
       text: 'Dashboard',
       icon: <DashboardIcon />,
-      path: '/'
+      path: '/dashboard'
     },
     {
       text: 'Guild Management',
