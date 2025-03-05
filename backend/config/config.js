@@ -25,23 +25,10 @@ const baseConfig = {
   }
 };
 
-// Function to generate config for a specific guild
+// We're now simply returning the config without schema manipulation
 const getGuildConfig = (guildId = null) => {
-  const config = JSON.parse(JSON.stringify(baseConfig));
-  
-  if (guildId) {
-    if (process.env.NODE_ENV === 'production') {
-      const url = new URL(process.env.DATABASE_URL);
-      url.pathname = `/guild_manager_${guildId}`;
-      config.production.url = url.toString();
-    } else {
-      const url = new URL(process.env.DATABASE_URL);
-      url.pathname = `/guild_manager_${guildId}`;
-      config.development.url = url.toString();
-    }
-  }
-  
-  return config;
+  // Just return the base config - no schema switching needed
+  return baseConfig;
 };
 
 module.exports = {

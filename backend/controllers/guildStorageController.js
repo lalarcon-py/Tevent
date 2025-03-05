@@ -27,7 +27,9 @@ const getGuildStorageItems = async (req, res) => {
     const storageItems = await db.GuildStorageItem.findAll({
       where: { guild_id: guildId },
       include: [{
-        model: db.Item
+        model: db.Item,
+        where: { guild_id: guildId },
+        required: false
       }]
     });
     
@@ -67,14 +69,19 @@ const addItemToStorage = async (req, res) => {
       return res.status(403).json({ error: 'Not a member of this guild' });
     }
     
-    // Verify the item exists in public catalog
-    const itemExists = await db.Item.findByPk(item_id);
+    // Verify the item exists in guild catalog
+    const itemExists = await db.Item.findOne({
+      where: {
+        id: item_id,
+        guild_id: guildId
+      }
+    });
     
     if (!itemExists) {
-      return res.status(404).json({ error: 'Item not found in catalog' });
+      return res.status(404).json({ error: 'Item not found in catalog for this guild' });
     }
     
-    // Create storage item
+    // Create storage item with guild_id
     const storageItem = await db.GuildStorageItem.create({
       guild_id: guildId,
       item_id: item_id,
@@ -85,7 +92,11 @@ const addItemToStorage = async (req, res) => {
     
     // Return with item details
     const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
-      include: [db.Item]
+      include: [{
+        model: db.Item,
+        where: { guild_id: guildId },
+        required: false
+      }]
     });
     
     res.status(201).json(fullItem);

@@ -16,6 +16,14 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true 
     },
+    guild_id: {
+      type: DataTypes.UUID,
+      allowNull: true, // Allow null for global user records
+      references: {
+        model: 'guilds',
+        key: 'id'
+      }
+    },
     discord_id: { type: DataTypes.STRING },
     username: { type: DataTypes.STRING },
     role: { type: DataTypes.STRING },
@@ -24,13 +32,21 @@ module.exports = (sequelize, DataTypes) => {
     builds: { 
       type: DataTypes.JSONB,
       defaultValue: [] 
-    }
+    },
+    combat_power: { type: DataTypes.INTEGER }
   }, {
     sequelize,
     modelName: 'User',
     tableName: 'users',
-    freezeTableName: true
+    freezeTableName: true,
+    scopes: {
+      forGuild(guildId) {
+        return {
+          where: { guild_id: guildId }
+        };
+      }
+    }
   });
 
   return User;
-};
+}

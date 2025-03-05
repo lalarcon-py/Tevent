@@ -25,11 +25,19 @@ module.exports = (sequelize, DataTypes) => {
     },
     storage_item_id: {
       type: DataTypes.UUID,
-      allowNull: true
+      allowNull: true,
+      references: {
+        model: 'guild_storage_items',
+        key: 'id'
+      }
     },
     user_id: {
       type: DataTypes.UUID,
-      allowNull: true
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
     },
     status: {
       type: DataTypes.STRING(255),

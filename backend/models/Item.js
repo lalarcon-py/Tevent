@@ -1,6 +1,5 @@
 'use strict';
 const { Model } = require('sequelize');
-const defineGuildScopedModel = require('../utils/defineGuildScopedModel');
 
 module.exports = (sequelize, DataTypes) => {
   class Item extends Model {
@@ -9,11 +8,19 @@ module.exports = (sequelize, DataTypes) => {
     }
   }
 
-  return defineGuildScopedModel(sequelize, Item, 'Item', {
+  Item.init({
     id: { 
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true 
+    },
+    guild_id: {
+      type: DataTypes.UUID,
+      allowNull: true, // Allow null for global items
+      references: {
+        model: 'guilds',
+        key: 'id'
+      }
     },
     name: { type: DataTypes.STRING, allowNull: false },
     type: { type: DataTypes.STRING },
@@ -26,6 +33,15 @@ module.exports = (sequelize, DataTypes) => {
     sequelize,
     modelName: 'Item',
     tableName: 'items',
-    freezeTableName: true
+    freezeTableName: true,
+    scopes: {
+      forGuild(guildId) {
+        return {
+          where: { guild_id: guildId }
+        };
+      }
+    }
   });
-};
+
+  return Item;
+}

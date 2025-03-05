@@ -29,7 +29,7 @@ const waitlistRouter = require('./routes/waitlist');
 const guildStorageRouter = require('./routes/guildStorage');
 const statsRoutes = require('./routes/statsRoutes');
 const guildSettingsRoutes = require('./routes/guildSettings');
-const wishlistRoutes = require('./routes/wishlist');
+const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
 

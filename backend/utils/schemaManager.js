@@ -1,194 +1,66 @@
-// backend/utils/schemaManager.js
+// utils/schemaManager.js
 const { sequelize } = require('../config/database');
+const logger = require('./logger');
 
-class SchemaManager {
-  constructor() {
-    this.sequelize = sequelize;
-  }
+// This utility is now simplified to only work with guild_id filters
+// No more creating or switching schemas
 
-  async createGuildSchema(guildId) {
-    const schemaName = `guild_${guildId}`;
-    try {
-      // Create new schema
-      await this.sequelize.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-      
-      // Create tables in the new schema with proper definitions
-      await this.sequelize.query(`
-        SET search_path TO "${schemaName}";
-        
-        CREATE TABLE IF NOT EXISTS "${schemaName}".users (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          discord_id VARCHAR(255) NOT NULL,
-          username VARCHAR(255) NOT NULL,
-          role VARCHAR(50) NOT NULL DEFAULT 'Member',
-          status VARCHAR(50) NOT NULL DEFAULT 'Active',
-          avatar_url TEXT,
-          builds JSONB DEFAULT '[]'::jsonb,
-          combat_power INTEGER,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE TABLE IF NOT EXISTS "${schemaName}".items (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          name VARCHAR(255) NOT NULL,
-          type VARCHAR(255),
-          rarity VARCHAR(50),
-          quantity INTEGER DEFAULT 0,
-          icon VARCHAR(255),
-          dkp_cost INTEGER DEFAULT 0,
-          in_storage BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE TABLE IF NOT EXISTS "${schemaName}".events (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          title VARCHAR(255) NOT NULL,
-          description TEXT,
-          event_time TIMESTAMP NOT NULL,
-          location VARCHAR(255),
-          tanks INTEGER DEFAULT 2,
-          healers INTEGER DEFAULT 4,
-          dps INTEGER DEFAULT 24,
-          requirements TEXT,
-          created_by UUID,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE TABLE IF NOT EXISTS "${schemaName}".event_participants (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          event_id UUID,
-          user_id UUID,
-          role VARCHAR(10) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE TABLE IF NOT EXISTS "${schemaName}".guild_storage_items (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          item_id UUID NOT NULL,
-          quantity INTEGER DEFAULT 0,
-          trait VARCHAR(255),
-          dkp_cost INTEGER DEFAULT 0,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      
-      // Always reset search_path to public after operation
-      await this.sequelize.query(`SET search_path TO public`);
+const initializeGuildData = async (guildId) => {
+  try {
+    logger.info(`Initializing data for guild ${guildId}`);
+    // No need to create a schema, just return the guild ID
+    return guildId;
+  } catch (error) {
+    logger.error(`Error initializing guild data: ${error.message}`);
+    throw error;
+  }
+};
 
-      return true;
-    } catch (error) {
-      console.error(`Failed to create schema for guild ${guildId}:`, error);
-      // Try to reset search path in case of error
-      try {
-        await this.sequelize.query(`SET search_path TO public`);
-      } catch (resetError) {
-        console.error('Failed to reset search path:', resetError);
-      }
-      throw error;
-    }
-  }
-
-  async dropGuildSchema(guildId) {
-    const schemaName = `guild_${guildId}`;
-    try {
-      console.log(`Attempting to drop schema "${schemaName}"`);
-      
-      // First check if schema exists
-      const schemaExists = await this.sequelize.query(
-        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
-        { type: this.sequelize.QueryTypes.SELECT }
-      );
-      
-      if (!schemaExists[0].exists) {
-        console.log(`Schema "${schemaName}" does not exist, skipping drop operation`);
-        return true; // Return true since there's nothing to delete
-      }
-      
-      // Count objects in the schema before dropping
-      const objects = await this.sequelize.query(
-        `SELECT count(*) FROM pg_catalog.pg_class c 
-         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace 
-         WHERE n.nspname = '${schemaName}'`,
-        { type: this.sequelize.QueryTypes.SELECT }
-      );
-      
-      console.log(`Schema "${schemaName}" has ${objects[0].count} objects before dropping`);
-      
-      // Drop the schema with CASCADE to ensure all objects are dropped
-      await this.sequelize.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-      
-      // Verify it was dropped
-      const schemaExistsAfter = await this.sequelize.query(
-        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
-        { type: this.sequelize.QueryTypes.SELECT }
-      );
-      
-      if (schemaExistsAfter[0].exists) {
-        console.error(`Failed to drop schema "${schemaName}" - it still exists after DROP command`);
-        return false;
-      }
-      
-      console.log(`Successfully dropped schema "${schemaName}"`);
-      return true;
-    } catch (error) {
-      console.error(`Failed to drop schema for guild ${guildId}:`, error);
-      return false; // Return false instead of throwing to prevent transaction rollback
-    }
-  }
-  
-  async clearGuildUsers(guildId) {
-    const schemaName = `guild_${guildId}`;
-    try {
-      console.log(`Attempting to clear user data for guild ${guildId}`);
-      
-      // First check if schema exists
-      const schemaExists = await this.sequelize.query(
-        `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = '${schemaName}')`,
-        { type: this.sequelize.QueryTypes.SELECT }
-      );
-      
-      if (!schemaExists[0].exists) {
-        console.log(`Schema "${schemaName}" does not exist, cannot clear users`);
-        return false;
-      }
-      
-      // Delete all users in the guild schema
-      await this.sequelize.query(`DELETE FROM "${schemaName}".users`);
-      
-      console.log(`Successfully cleared all users from schema "${schemaName}"`);
-      return true;
-    } catch (error) {
-      console.error(`Failed to clear users in guild ${guildId}:`, error);
-      return false;
-    }
-  }
-  
-  async copyUserToGuildSchema(userId, guildId) {
-    const schemaName = `guild_${guildId}`;
-    try {
-      console.log(`Copying user ${userId} to guild schema ${schemaName}`);
-      
-      // Copy user data from public to guild schema
-      await this.sequelize.query(`
-        INSERT INTO "${schemaName}".users
-        SELECT * FROM public.users
-        WHERE id = :userId
-      `, {
-        replacements: { userId }
+const deleteGuildData = async (guildId) => {
+  try {
+    logger.info(`Deleting data for guild ${guildId}`);
+    
+    // Delete all data for this guild
+    await sequelize.transaction(async (t) => {
+      await sequelize.query(`DELETE FROM users WHERE guild_id = :guildId`, {
+        replacements: { guildId },
+        transaction: t
       });
       
-      console.log(`Successfully copied user ${userId} to guild schema ${schemaName}`);
-      return true;
-    } catch (error) {
-      console.error(`Failed to copy user to guild schema:`, error);
-      return false;
-    }
+      await sequelize.query(`DELETE FROM events WHERE guild_id = :guildId`, {
+        replacements: { guildId },
+        transaction: t
+      });
+      
+      await sequelize.query(`DELETE FROM teams WHERE guild_id = :guildId`, {
+        replacements: { guildId },
+        transaction: t
+      });
+      
+      await sequelize.query(`DELETE FROM guild_storage_items WHERE guild_id = :guildId`, {
+        replacements: { guildId },
+        transaction: t
+      });
+      
+      await sequelize.query(`DELETE FROM loot_requests WHERE guild_id = :guildId`, {
+        replacements: { guildId },
+        transaction: t
+      });
+      
+      await sequelize.query(`DELETE FROM wishlists WHERE guild_id = :guildId`, {
+        replacements: { guildId },
+        transaction: t
+      });
+    });
+    
+    return true;
+  } catch (error) {
+    logger.error(`Error deleting guild data: ${error.message}`);
+    throw error;
   }
-}
+};
 
-module.exports = new SchemaManager();
+module.exports = {
+  initializeGuildData,
+  deleteGuildData
+};

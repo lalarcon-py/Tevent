@@ -1,32 +1,30 @@
-// backend/utils/guildContext.js
-const { AsyncLocalStorage } = require('async_hooks');
+// utils/guildContext.js
+let currentGuildId = null;
 
-const guildContextStorage = new AsyncLocalStorage();
-// Flag to indicate schema migration is in progress
-let migrationMode = false;
-
+// Store guild ID in context
 const setGuildContext = (guildId, callback) => {
-  return guildContextStorage.run({ guildId }, callback);
+  // Just store the guild ID, no schema switching
+  currentGuildId = guildId;
+  
+  if (typeof callback === 'function') {
+    callback();
+  }
+  
+  return guildId;
 };
 
-const getGuildContext = () => {
-  return guildContextStorage.getStore();
-};
-
+// Get current guild ID from context
 const getCurrentGuildId = () => {
-  if (migrationMode) return null;
-  const context = getGuildContext();
-  return context ? context.guildId : null;
+  return currentGuildId;
 };
 
-// Enable/disable migration mode
-const setMigrationMode = (enabled) => {
-  migrationMode = enabled;
+// Clear guild context
+const clearGuildContext = () => {
+  currentGuildId = null;
 };
 
 module.exports = {
   setGuildContext,
-  getGuildContext,
   getCurrentGuildId,
-  setMigrationMode
+  clearGuildContext
 };

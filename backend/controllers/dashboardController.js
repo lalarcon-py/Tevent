@@ -14,8 +14,10 @@ const dashboardController = {
         return res.status(400).json({ error: 'Guild ID is required' });
       }
       
-      // Use the scope helper to filter by guild
-      const users = await User.scope({ method: ['forGuild', guildId] }).findAll();
+      // Use guild_id directly in the query
+      const users = await User.findAll({
+        where: { guild_id: guildId }
+      });
       
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -43,12 +45,18 @@ const dashboardController = {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
-  
+      
+      const guildId = req.guildId;
+      if (!guildId) {
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
+
       const users = await User.findAll({
+        where: { guild_id: guildId },
         attributes: ['id', 'builds', 'combat_power'],
         raw: true
       });
-  
+
       console.log('Found users:', users.length);
       
       const stats = {
@@ -59,7 +67,7 @@ const dashboardController = {
         },
         specs: {}
       };
-  
+
       users.forEach(user => {
         try {
           const buildsData = user.builds;
@@ -80,7 +88,7 @@ const dashboardController = {
             const weaponSpec = (build.weapon_spec || '').toLowerCase();
             const primary = (build.primary || '').toLowerCase();
             const secondary = (build.secondary || '').toLowerCase();
-  
+
             if (role) stats.roles[role] = (stats.roles[role] || 0) + 1;
             if (weaponSpec) stats.specs[weaponSpec] = (stats.specs[weaponSpec] || 0) + 1;
             if (primary) stats.weapons.primary[primary] = (stats.weapons.primary[primary] || 0) + 1;
@@ -94,14 +102,14 @@ const dashboardController = {
           });
         }
       });
-  
+
       console.log('Stats prepared with counts:', {
         rolesCount: Object.keys(stats.roles).length,
         specsCount: Object.keys(stats.specs).length,
         primaryWeaponsCount: Object.keys(stats.weapons.primary).length,
         secondaryWeaponsCount: Object.keys(stats.weapons.secondary).length
       });
-  
+
       res.json(stats);
     } catch (error) {
       console.error('Combat stats error:', {
@@ -122,23 +130,34 @@ const dashboardController = {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
+      
+      const guildId = req.guildId;
+      if (!guildId) {
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
 
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const events = await Event.findAll({
-        include: [{
-          model: EventParticipant,
-          as: 'participants'
-        }],
         where: {
+          guild_id: guildId,
           event_time: {
             [Op.gte]: thirtyDaysAgo
           }
-        }
+        },
+        include: [{
+          model: EventParticipant,
+          as: 'participants',
+          where: { guild_id: guildId },
+          required: false
+        }]
       });
 
-      const totalUsers = await User.count();
+      const totalUsers = await User.count({
+        where: { guild_id: guildId }
+      });
+      
       const stats = {
         total_events: events.length,
         average_attendance_rate: events.length ? 
@@ -162,8 +181,14 @@ const dashboardController = {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
+      
+      const guildId = req.guildId;
+      if (!guildId) {
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
 
       const users = await User.findAll({
+        where: { guild_id: guildId },
         attributes: ['builds']
       });
 

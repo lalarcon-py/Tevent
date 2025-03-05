@@ -114,11 +114,11 @@ const joinGuild = async (req, res) => {
       role: 'Member'
     }, { transaction: t });
     
-    // CRITICAL: Copy user data to guild schema
+    // CRITICAL: Create user record with guild_id
     try {
-      console.log(`Copying user ${req.user.id} data to guild schema guild_${guildId}`);
+      console.log(`Creating user ${req.user.id} record for guild ${guildId}`);
       
-      // Get user data from public schema
+      // Get user data from public users table
       const [userData] = await sequelize.query(`
         SELECT * FROM public.users WHERE id = :userId
       `, {
@@ -128,35 +128,19 @@ const joinGuild = async (req, res) => {
       });
       
       if (userData) {
-        // Switch to guild schema
-        await sequelize.query(`SET search_path TO "guild_${guildId}"`, { transaction: t });
+        // Create user with guild_id
+        await db.User.create({
+          ...userData,
+          id: userData.id,  // Keep same ID
+          guild_id: guildId,
+          role: 'Member',
+          status: 'Active'
+        }, { transaction: t });
         
-        // Insert user data with all fields
-        const fields = Object.keys(userData).join(', ');
-        const values = Object.keys(userData).map(key => `:${key}`).join(', ');
-        
-        await sequelize.query(`
-          INSERT INTO users (${fields})
-          VALUES (${values})
-          ON CONFLICT (id) DO UPDATE
-          SET 
-            username = :username,
-            avatar_url = :avatar_url,
-            role = 'Member',
-            status = 'Active',
-            updated_at = CURRENT_TIMESTAMP
-        `, {
-          replacements: userData,
-          transaction: t
-        });
-        
-        // Reset search path
-        await sequelize.query(`SET search_path TO public`, { transaction: t });
-        
-        console.log(`Successfully copied user ${req.user.id} data to guild schema guild_${guildId}`);
+        console.log(`Successfully created user ${req.user.id} record for guild ${guildId}`);
       }
     } catch (copyError) {
-      console.error(`Failed to copy user data to guild schema:`, copyError);
+      console.error(`Failed to create user data with guild_id:`, copyError);
       // Continue even if this fails
     }
     
@@ -249,37 +233,50 @@ const leaveGuild = async (req, res) => {
     await membership.destroy({ transaction: t });
     console.log(`User ${req.user.id} has left guild ${guildId}`);
     
-    // *** NEW CODE: Delete user data from the guild schema ***
+    // Delete user data from this guild
     try {
-      console.log(`Deleting user ${req.user.id} data from guild schema guild_${guildId}`);
+      console.log(`Deleting user ${req.user.id} data for guild ${guildId}`);
       
-      // Try two methods to ensure data is deleted
-      // Method 1: Using model
-      try {
-        await sequelize.query(`
-          SET search_path TO "guild_${guildId}";
-          DELETE FROM "guild_${guildId}".users WHERE id = :userId;
-          SET search_path TO public;
-        `, {
-          replacements: { userId: req.user.id },
-          transaction: t
-        });
-      } catch (deleteError) {
-        console.error(`Error deleting user with model method:`, deleteError);
-        
-        // Method 2: Direct SQL
-        await sequelize.query(`
-          DELETE FROM "guild_${guildId}".users WHERE id = :userId
-        `, {
-          replacements: { userId: req.user.id },
+      // Delete by guild_id filter
+      await db.User.destroy({
+        where: { 
+          id: req.user.id,
+          guild_id: guildId
+        },
+        transaction: t
+      });
+      
+      // Also clean up other related data
+      await db.EventParticipant.destroy({
+        where: { 
+          user_id: req.user.id,
+          guild_id: guildId
+        },
+        transaction: t
+      });
+      
+      await db.TeamMember.destroy({
+        where: { 
+          user_id: req.user.id,
+          guild_id: guildId
+        },
+        transaction: t
+      });
+      
+      if (db.WishList) {
+        await db.WishList.destroy({
+          where: { 
+            user_id: req.user.id,
+            guild_id: guildId
+          },
           transaction: t
         });
       }
       
-      console.log(`Successfully deleted user ${req.user.id} data from guild schema guild_${guildId}`);
+      console.log(`Successfully deleted user ${req.user.id} data for guild ${guildId}`);
     } catch (userDeleteError) {
       // Log but continue - we don't want to prevent leaving if this fails
-      console.error(`Failed to delete user data from guild schema:`, userDeleteError);
+      console.error(`Failed to delete user data for guild:`, userDeleteError);
     }
     
     // Check if guild is now empty
@@ -324,7 +321,55 @@ const deleteEmptyGuild = async (guildId, transaction) => {
       throw new Error(`Guild record ${guildId} not found or could not be deleted`);
     }
     
-    console.log(`Guild record deleted from database. Now dropping schema...`);
+    // Delete all guild data by guild_id
+    await db.User.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.Event.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.EventParticipant.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.Team.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.TeamMember.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.Item.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.GuildStorageItem.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    await db.LootRequest.destroy({ 
+      where: { guild_id: guildId }, 
+      transaction 
+    });
+    
+    if (db.WishList) {
+      await db.WishList.destroy({ 
+        where: { guild_id: guildId }, 
+        transaction 
+      });
+    }
+    
+    console.log(`Guild record and all associated data deleted for guild ${guildId}`);
     
     return true;
   } catch (error) {
@@ -619,9 +664,6 @@ const getGuildMembers = async (req, res) => {
     
     const { guildId } = req.params;
     
-    // Explicitly set search path to public schema for guild membership operations
-    await sequelize.query(`SET search_path TO public`);
-    
     // Check if user is a member
     const membership = await db.GuildMember.findOne({
       where: {
@@ -631,11 +673,10 @@ const getGuildMembers = async (req, res) => {
     });
     
     if (!membership) {
-      await sequelize.query(`SET search_path TO public`); // Reset schema
       return res.status(403).json({ error: 'Not a member of this guild' });
     }
     
-    // Get all members (still in public schema)
+    // Get all members with guild_id filter
     const members = await db.GuildMember.findAll({
       where: { guild_id: guildId },
       include: [{
@@ -643,7 +684,6 @@ const getGuildMembers = async (req, res) => {
         attributes: ['id', 'username', 'avatar_url', 'discord_id', 'builds', 'combat_power']
       }],
       order: [
-        // Fix ambiguous column reference by fully qualifying the column
         [sequelize.literal(`CASE 
           WHEN "GuildMember"."role" = 'Guild Master' THEN 1
           WHEN "GuildMember"."role" = 'Guild Advisor' THEN 2
@@ -654,7 +694,7 @@ const getGuildMembers = async (req, res) => {
       ]
     });
     
-    // Format before switching schemas
+    // Format the response
     const formattedMembers = members.map(member => ({
       id: member.User.id,
       username: member.User.username,
@@ -668,18 +708,8 @@ const getGuildMembers = async (req, res) => {
       joinedViaInvite: member.joined_via_invite || false
     }));
     
-    // Switch to guild schema if needed for the response
-    await sequelize.query(`SET search_path TO public`);
-    
     res.json(formattedMembers);
   } catch (error) {
-    // Always reset schema path on error
-    try {
-      await sequelize.query(`SET search_path TO public`);
-    } catch (e) {
-      console.error('Failed to reset schema path:', e);
-    }
-    
     console.error('Get guild members error:', error);
     res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
   }
