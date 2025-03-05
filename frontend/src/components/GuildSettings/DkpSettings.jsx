@@ -87,6 +87,7 @@ const DkpSettings = ({ guildData, onUpdate }) => {
               <li>DKP cost for items</li>
               <li>DKP assignment for events</li>
               <li>DKP-based loot distribution</li>
+              <li>If you're sure you want to disable this setting, please reload your page after saving.</li>
             </ul>
           </Alert>
         )}

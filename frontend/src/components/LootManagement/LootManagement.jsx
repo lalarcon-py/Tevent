@@ -8,14 +8,20 @@ import LootWaitlist from './LootWaitlist';
 import WishlistTab from './WishlistTab';
 import { useAuth } from '../../contexts/AuthContext';
 import axiosInstance from '../../config/axios';
+import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 
 const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
+  const { settings } = useGuildSettings();
   const { isAuthenticated, user } = useAuth();
-  const [dkpEnabled, setDkpEnabled] = useState(false);
   const [directDkpCheck, setDirectDkpCheck] = useState(null);
   
   const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+
+  useEffect(() => {
+    // Log GuildSettings context value for debugging
+    console.log('GuildSettings from context:', settings);
+  }, [settings]);
 
   useEffect(() => {
     const checkDkpDirectly = async () => {
@@ -37,16 +43,28 @@ const LootManagement = () => {
         
         // Update DKP state directly from this check
         setDirectDkpCheck(response.data);
-        setDkpEnabled(response.data.dkpEnabled);
       } catch (error) {
         console.error('Direct DKP check failed:', error);
       }
     };
     
-    checkDkpDirectly();
-  }, []);
+    if (!settings) {
+      checkDkpDirectly();
+    }
+  }, [settings]);
 
-  const effectiveDkpEnabled = Boolean(directDkpCheck?.dkpEnabled || dkpEnabled);
+  const dkpEnabled = settings?.dkpEnabled !== undefined 
+    ? Boolean(settings.dkpEnabled) 
+    : Boolean(directDkpCheck?.dkpEnabled);
+
+  // Log the final determination for debugging
+  useEffect(() => {
+    console.log('Final DKP determination:', {
+      fromContext: settings?.dkpEnabled,
+      fromDirectCheck: directDkpCheck?.dkpEnabled,
+      finalValue: dkpEnabled
+    });
+  }, [dkpEnabled, settings, directDkpCheck]);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -70,22 +88,22 @@ const LootManagement = () => {
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
         {isAdmin ? (
-          <AdminLootPanel key={`admin-panel-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)} />
+          <AdminLootPanel key={`admin-panel-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
         ) : (
-          <LootRequestForm key={`request-form-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
+          <LootRequestForm key={`request-form-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
         )}
       </Box>
 
       <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
         {isAdmin ? (
-          <WaitListTab key={`waitlist-tab-${String(effectiveDkpEnabled)}`} dkpEnabled={Boolean(effectiveDkpEnabled)} />
+          <WaitListTab key={`waitlist-tab-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
         ) : (
-          <LootWaitlist key={`loot-waitlist-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
+          <LootWaitlist key={`loot-waitlist-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
         )}
       </Box>
       
       <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
-        <WishlistTab key={`wishlist-tab-${effectiveDkpEnabled}`} dkpEnabled={effectiveDkpEnabled} />
+        <WishlistTab key={`wishlist-tab-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
       </Box>
     </Box>
   );

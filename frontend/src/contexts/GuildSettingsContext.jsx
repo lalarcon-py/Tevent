@@ -11,6 +11,13 @@ export const GuildSettingsProvider = ({ children }) => {
   const [guildId, setGuildId] = useState(null);
 
   useEffect(() => {
+    if (settings) {
+      // Log for debugging
+      console.log("GuildSettings context - DKP enabled:", settings.dkpEnabled);
+    }
+  }, [settings]);
+
+  useEffect(() => {
     // Try to get guild ID from multiple sources in order of preference
     const getGuildId = () => {
       // 1. First try from URL
