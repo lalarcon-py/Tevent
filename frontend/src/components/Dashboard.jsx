@@ -37,8 +37,9 @@ class Dashboard extends React.Component {
         members: [],
         events: [],
         combat: {},
-        guildMembers: []  // Add this to store the raw guild members data
+        guildMembers: []
       },
+      guildName: 'Guild', // Default guild name
       loading: true,
       error: null,
       guildId: null
@@ -59,7 +60,10 @@ class Dashboard extends React.Component {
     try {
       const storedGuildId = localStorage.getItem('guildId');
       if (storedGuildId && this.mounted) {
-        this.setState({ guildId: storedGuildId }, this.fetchDashboardData);
+        this.setState({ guildId: storedGuildId }, () => {
+          this.fetchGuildInfo();
+          this.fetchDashboardData();
+        });
       } else {
         if (this.mounted) {
           this.setState({ loading: false });
@@ -70,6 +74,22 @@ class Dashboard extends React.Component {
       if (this.mounted) {
         this.setState({ loading: false });
       }
+    }
+  };
+
+  fetchGuildInfo = async () => {
+    const { guildId } = this.state;
+    if (!guildId) return;
+    
+    try {
+      // Fetch guild details to get the name
+      const response = await axiosInstance.get(`/api/guilds/${guildId}`);
+      if (response.data && response.data.name) {
+        this.setState({ guildName: response.data.name });
+      }
+    } catch (error) {
+      console.error('Error fetching guild info:', error);
+      // Don't set an error state here - just fallback to default guild name
     }
   };
 
@@ -160,7 +180,7 @@ class Dashboard extends React.Component {
   };
 
   render() {
-    const { loading, error, data } = this.state;
+    const { loading, error, data, guildName } = this.state;
 
     // Loading state
     if (loading) {
@@ -231,7 +251,7 @@ class Dashboard extends React.Component {
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent'
             }}>
-              Guild Dashboard
+              {guildName} Dashboard
             </Typography>
           </Box>
 
