@@ -69,7 +69,37 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       defaultValue: 'You are at risk of falling below the minimum attendance threshold and may be removed if improvements are not shown.',
       allowNull: false
-    }
+    },
+    private_guild: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    auto_kick_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    attendance_threshold: {
+      type: DataTypes.INTEGER,
+      defaultValue: 40,
+      allowNull: false
+    },
+    no_show_count: {
+      type: DataTypes.INTEGER,
+      defaultValue: 3,
+      allowNull: false
+    },
+    gear_check_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    gear_check_frequency: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30,
+      allowNull: false
+    },
   }, {
     sequelize,
     modelName: 'Guild',

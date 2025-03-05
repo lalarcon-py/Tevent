@@ -12,6 +12,7 @@ const format = require('pg-format');
 const pgSession = require('connect-pg-simple')(session);
 const crypto = require('crypto');
 
+
 // Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
 const schemaMiddleware = require('./middleware/schemaMiddleware');
@@ -167,6 +168,7 @@ app.use('/api/events', guildScopeMiddleware, validateGuildMembership, eventsRout
 app.use('/api/teams', guildScopeMiddleware, validateGuildMembership, teamsRouter);
 app.use('/api/team-presets', guildScopeMiddleware, validateGuildMembership, teamPresetsRouter);
 app.use('/api/dashboard', guildScopeMiddleware, validateGuildMembership, dashboardRouter);
+app.use('/api/guild-applications', guildScopeMiddleware, validateGuildMembership, require('./routes/guildApplicationRoutes'));
 
 const guildSettingsController = require('./controllers/guildSettingsController');
 

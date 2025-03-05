@@ -17,6 +17,8 @@ import DkpSettings from './DkpSettings';
 import RoleLimits from './RoleLimits';
 import AttendanceSettings from './AttendanceSettings';
 import DestructiveActions from './DestructiveActions';
+import AdvancedSettings from './AdvancedSettings';
+import BuildIcon from '@mui/icons-material/Build';
 
 const GuildSettings = () => {
   const [currentTab, setCurrentTab] = useState(0);
@@ -274,6 +276,7 @@ const GuildSettings = () => {
             <Tab icon={<FormatListNumberedIcon />} label="DKP System" iconPosition="start" />
             <Tab icon={<PeopleIcon />} label="Role Limits" iconPosition="start" />
             <Tab icon={<PercentIcon />} label="Attendance" iconPosition="start" />
+            <Tab icon={<BuildIcon />} label="Advanced" iconPosition="start" />
             <Tab icon={<WarningIcon />} label="Destructive Actions" iconPosition="start" />
           </Tabs>
           
@@ -303,6 +306,12 @@ const GuildSettings = () => {
               />
             )}
             {currentTab === 4 && (
+              <AdvancedSettings 
+                guildData={guildData} 
+                onUpdate={(settings) => handleSettingsUpdate('advanced', settings)} 
+              />
+            )}
+            {currentTab === 5 && (
               <DestructiveActions 
                 guildData={guildData} 
                 guildId={actualGuildId}

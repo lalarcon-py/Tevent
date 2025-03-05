@@ -17,6 +17,7 @@ import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../../contexts/AuthContext';
 import LogoutButton from '../Auth/LogoutButton';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
 const Navigation = ({ guildId }) => {
   const location = useLocation();
@@ -48,6 +49,12 @@ const Navigation = ({ guildId }) => {
       path: '/guild-management'
     },
     {
+      text: 'Guild Applications',
+      icon: <PersonAddIcon />,
+      path: '/applications',
+      condition: user => !user || ['Guild Master', 'Guild Advisor'].includes(user.role)
+    },
+    {
       text: 'Loot Management',
       icon: <StorageIcon />,
       path: '/loot-management'
@@ -61,7 +68,8 @@ const Navigation = ({ guildId }) => {
       text: 'Event Summaries',
       icon: <FormatListBulletedIcon />,
       path: '/event-summaries'
-    }
+    },
+    
   ];
 
   const drawer = (

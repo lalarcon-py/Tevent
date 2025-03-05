@@ -50,13 +50,20 @@ const guildSettingsController = {
       res.json({
         name: guild.name,
         lastNameChange: guild.last_name_change || null,
-        dkpEnabled: dkpEnabledValue, // Explicit boolean true/false
+        dkpEnabled: dkpEnabledValue,
         maxTanks: guild.max_tanks || 10,
         maxHealers: guild.max_healers || 15,
         maxDps: guild.max_dps || 75,
         minAttendanceThreshold: guild.min_attendance_threshold || 60,
         attendanceWarningMessage: guild.attendance_warning_message || 
-          "You are at risk of falling below the minimum attendance threshold and may be removed if improvements are not shown."
+          "You are at risk of falling below the minimum attendance threshold and may be removed if improvements are not shown.",
+        // New fields
+        privateGuild: guild.private_guild === true,
+        autoKickEnabled: guild.auto_kick_enabled === true,
+        attendanceThreshold: guild.attendance_threshold || 40,
+        noShowCount: guild.no_show_count || 3,
+        gearCheckEnabled: guild.gear_check_enabled === true,
+        gearCheckFrequency: guild.gear_check_frequency || 30
       });
     } catch (error) {
       console.error('Error getting guild settings:', error);
@@ -171,6 +178,15 @@ const guildSettingsController = {
             updateData.attendance_warning_message = settings.attendanceWarningMessage;
           }
           break;
+        
+          case 'advanced':
+            if (settings.privateGuild !== undefined) updateData.private_guild = settings.privateGuild;
+            if (settings.autoKickEnabled !== undefined) updateData.auto_kick_enabled = settings.autoKickEnabled;
+            if (settings.attendanceThreshold !== undefined) updateData.attendance_threshold = settings.attendanceThreshold;
+            if (settings.noShowCount !== undefined) updateData.no_show_count = settings.noShowCount;
+            if (settings.gearCheckEnabled !== undefined) updateData.gear_check_enabled = settings.gearCheckEnabled;
+            if (settings.gearCheckFrequency !== undefined) updateData.gear_check_frequency = settings.gearCheckFrequency;
+            break;
           
         default:
           return res.status(400).json({ error: 'Invalid setting group' });
