@@ -11,6 +11,8 @@ const Joi = require('joi');
 const format = require('pg-format');
 const pgSession = require('connect-pg-simple')(session);
 const crypto = require('crypto');
+const supportRoutes = require('./routes/supportRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 
 // Middleware imports
@@ -153,11 +155,8 @@ if (!validateGuildMembership) {
 // Non-guild specific routes
 app.delete('/api/user/delete', userController.deleteUser);
 
-// Guild-specific API routes with proper middleware order:
-// 1. Membership validation
-// 2. Schema selection
-// 3. Database connection
-// 4. Route handlers
+app.use('/api/support', supportRoutes);
+app.use('/api/user', userRoutes);
 
 app.use('/api/wishlist', guildScopeMiddleware, validateGuildMembership, wishlistRoutes);
 app.use('/api/stats', guildScopeMiddleware, validateGuildMembership, statsRoutes);

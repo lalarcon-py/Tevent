@@ -12,9 +12,12 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import LinkIcon from '@mui/icons-material/Link';
 import { useAuth } from '../../contexts/AuthContext';
 import LeaveGuildDialog from '../Guild/LeaveGuildDialog';
+import EmailIcon from '@mui/icons-material/Email';
 
 
 const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
+  const [email, setEmail] = useState('');
+  const [openEmailDialog, setOpenEmailDialog] = useState(false);
   const { user, logout } = useAuth();
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
@@ -30,6 +33,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
   useEffect(() => {
     if (user?.username) {
       setUsername(user.username);
+      setEmail(user.email || '');
     }
   }, [user, open]);
 
@@ -111,6 +115,60 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       window.location.href = '/guilds/setup';
     }
   };
+
+  const handleEmailSubmit = async () => {
+    try {
+      setOpenEmailDialog(false);
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/user/email`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update email');
+      }
+      
+      // Force refresh to show updated email
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('Failed to update email:', error);
+    }
+  };
+
+  const handleGearSubmit = async () => {
+    if (!gearImage) return;
+    
+    const formData = new FormData();
+    formData.append('gearImage', gearImage);
+    
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/user/gear-screenshot`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload gear screenshot');
+      }
+      
+      const data = await response.json();
+      setOpenGearDialog(false);
+      setGearImage(null);
+      
+      // Show success message
+      alert('Gear screenshot uploaded successfully!');
+    } catch (error) {
+      console.error('Failed to upload gear screenshot:', error);
+      alert('Failed to upload gear screenshot. Please try again.');
+    }
+  };
   
   // Form submission handlers
   const handleUsernameSubmit = async () => {
@@ -156,25 +214,6 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
     } catch (error) {
       console.error('Failed to update username:', error);
       // You could set an error state here to show to the user
-    }
-  };
-  
-  const handleGearSubmit = async () => {
-    if (!gearImage) return;
-    
-    const formData = new FormData();
-    formData.append('gearImage', gearImage);
-    
-    try {
-      // API call to upload gear image
-      await fetch('/api/user/gear-screenshot', {
-        method: 'POST',
-        body: formData,
-      });
-      setOpenGearDialog(false);
-      setGearImage(null);
-    } catch (error) {
-      console.error('Failed to upload gear screenshot:', error);
     }
   };
   
@@ -295,6 +334,13 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
           <ListItemText>Edit In-Game Name</ListItemText>
         </MenuItem>
         
+        <MenuItem onClick={() => setOpenEmailDialog(true)} sx={{ color: 'white' }}>
+          <ListItemIcon>
+            <EmailIcon fontSize="small" sx={{ color: '#90caf9' }} />
+          </ListItemIcon>
+          <ListItemText>Update Email Address</ListItemText>
+        </MenuItem>
+        
         <MenuItem onClick={handleGearDialogOpen} sx={{ color: 'white' }}>
           <ListItemIcon>
             <PhotoCameraIcon fontSize="small" sx={{ color: '#90caf9' }} />
@@ -359,6 +405,48 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             Cancel
           </Button>
           <Button onClick={handleUsernameSubmit} variant="contained" color="primary">
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Email Dialog */}
+      <Dialog 
+        open={openEmailDialog} 
+        onClose={() => setOpenEmailDialog(false)}
+        PaperProps={{
+          sx: { bgcolor: '#1e1e1e', color: 'white' }
+        }}
+      >
+        <DialogTitle>Update Email Address</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Your email will be used for support tickets and important notifications.
+          </Typography>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Email Address"
+            type="email"
+            fullWidth
+            variant="outlined"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            sx={{
+              mt: 1,
+              '& .MuiOutlinedInput-root': {
+                color: 'white',
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              },
+              '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEmailDialog(false)} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleEmailSubmit} variant="contained" color="primary">
             Save
           </Button>
         </DialogActions>
@@ -483,65 +571,65 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       
       {/* Delete Account Dialog */}
       <Dialog 
-            open={openDeleteDialog} 
-            onClose={() => setOpenDeleteDialog(false)}
-            PaperProps={{
-              sx: { bgcolor: '#1e1e1e', color: 'white' }
-            }}
+        open={openDeleteDialog} 
+        onClose={() => setOpenDeleteDialog(false)}
+        PaperProps={{
+          sx: { bgcolor: '#1e1e1e', color: 'white' }
+        }}
+      >
+        <DialogTitle sx={{ color: '#f44336' }}>
+          ⚠️ Delete Account Permanently
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you absolutely sure you want to delete your account? This action cannot be undone.
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)', mb: 2 }}>
+            Your account data, guild memberships, and all associated information will be permanently removed.
+          </Typography>
+          <Box sx={{ 
+            p: 2, 
+            bgcolor: 'rgba(244, 67, 54, 0.1)', 
+            borderRadius: 1,
+            border: '1px solid rgba(244, 67, 54, 0.3)'
+          }}>
+            <Typography variant="subtitle2">
+              To confirm, please type "DELETE" below:
+            </Typography>
+            <TextField
+              margin="dense"
+              fullWidth
+              variant="outlined"
+              value={deleteConfirmation}
+              onChange={(e) => {
+                setDeleteConfirmation(e.target.value);
+                setDeleteConfirmError(false);
+              }}
+              error={deleteConfirmError}
+              helperText={deleteConfirmError ? "You must type 'DELETE' exactly" : ""}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  color: 'white',
+                  '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                },
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)} color="primary">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleAccountDelete} 
+            variant="contained" 
+            color="error"
+            disabled={deleteConfirmation !== "DELETE"}
           >
-            <DialogTitle sx={{ color: '#f44336' }}>
-              ⚠️ Delete Account Permanently
-            </DialogTitle>
-            <DialogContent>
-              <Typography variant="body1" sx={{ mb: 2 }}>
-                Are you absolutely sure you want to delete your account? This action cannot be undone.
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)', mb: 2 }}>
-                Your account data, guild memberships, and all associated information will be permanently removed.
-              </Typography>
-              <Box sx={{ 
-                p: 2, 
-                bgcolor: 'rgba(244, 67, 54, 0.1)', 
-                borderRadius: 1,
-                border: '1px solid rgba(244, 67, 54, 0.3)'
-              }}>
-                <Typography variant="subtitle2">
-                  To confirm, please type "DELETE" below:
-                </Typography>
-                <TextField
-                  margin="dense"
-                  fullWidth
-                  variant="outlined"
-                  value={deleteConfirmation}
-                  onChange={(e) => {
-                    setDeleteConfirmation(e.target.value);
-                    setDeleteConfirmError(false);
-                  }}
-                  error={deleteConfirmError}
-                  helperText={deleteConfirmError ? "You must type 'DELETE' exactly" : ""}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      color: 'white',
-                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
-                    },
-                  }}
-                />
-              </Box>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setOpenDeleteDialog(false)} color="primary">
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleAccountDelete} 
-                variant="contained" 
-                color="error"
-                disabled={deleteConfirmation !== "DELETE"}
-              >
-                Delete Forever
-              </Button>
-            </DialogActions>
-          </Dialog>
+            Delete Forever
+          </Button>
+        </DialogActions>
+      </Dialog>
       
       <LeaveGuildDialog 
         open={openLeaveGuildDialog}

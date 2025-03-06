@@ -214,24 +214,20 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
         return;
       }
       
-      // Mock response until backend is implemented
-      // Remove this and uncomment the actual API call once backend is ready
-      setGearCheckStatus('none');
-      
-      /* Uncomment this when backend endpoint is ready
-      const response = await axiosInstance.get(`/api/gear-check/${member.id}/status`, {
+      // Get the user's data to check for gear screenshot
+      const response = await axiosInstance.get(`/api/members/${member.id}`, {
         params: { guildId }
       });
       
-      if (response.data) {
-        setGearCheckStatus(response.data.status || 'none');
-        setGearCheckImage(response.data.imageUrl || null);
-        setGearCheckDenialReason(response.data.reason || '');
+      if (response.data && response.data.gear_screenshot_url) {
+        setGearCheckStatus('approved'); // If there's a screenshot, consider it approved
+        setGearCheckImage(response.data.gear_screenshot_url);
+      } else {
+        setGearCheckStatus('none');
       }
-      */
     } catch (error) {
       console.error('Failed to fetch gear check status:', error);
-      // This is supplementary info, so don't set an error state
+      setGearCheckStatus('none');
     }
   };
 

@@ -164,6 +164,71 @@ const userController = {
       console.error('Delete user error:', error);
       res.status(500).json({ error: 'Failed to delete account', details: error.message });
     }
+  },
+  updateEmail: async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+      
+      const { email } = req.body;
+      
+      // Basic email validation
+      if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+      
+      // Update the user's email
+      await db.User.update(
+        { email },
+        { where: { id: req.user.id } }
+      );
+      
+      res.json({ success: true, message: 'Email updated successfully' });
+    } catch (error) {
+      console.error('Error updating email:', error);
+      res.status(500).json({ error: 'Failed to update email' });
+    }
+  },
+  uploadGearScreenshot: async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      
+      // Process file upload
+      const uploadsDir = path.join(__dirname, '..', 'uploads', 'gear');
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      
+      const fileName = `${uuidv4()}${path.extname(req.file.originalname)}`;
+      const filePath = path.join(uploadsDir, fileName);
+      
+      fs.writeFileSync(filePath, req.file.buffer);
+      const fileUrl = `/uploads/gear/${fileName}`;
+      
+      // Update user with gear screenshot URL
+      await db.User.update(
+        { gear_screenshot_url: fileUrl },
+        { where: { id: req.user.id } }
+      );
+      
+      res.json({ 
+        success: true, 
+        message: 'Gear screenshot uploaded successfully',
+        url: fileUrl 
+      });
+    } catch (error) {
+      console.error('Error uploading gear screenshot:', error);
+      res.status(500).json({ error: 'Failed to upload gear screenshot' });
+    }
   }
 };
 

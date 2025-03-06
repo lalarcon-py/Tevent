@@ -1,14 +1,16 @@
 // components/Header/SupportForm.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Typography, Box, Chip, CircularProgress, Alert
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { useAuth } from '../../contexts/AuthContext';
 
 const SupportForm = ({ open, handleClose }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
-    email: '',
+    email: user?.email || '',
     subject: '',
     description: '',
     images: []
@@ -16,6 +18,18 @@ const SupportForm = ({ open, handleClose }) => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
+
+
+  useEffect(() => {
+    if (user?.email && !formData.email) {
+      setFormData(prev => ({
+        ...prev,
+        email: user.email
+      }));
+    }
+  }, [user, formData.email]);
+
+  
   
   const handleFileChange = (event) => {
     const newFiles = Array.from(event.target.files);
@@ -24,6 +38,8 @@ const SupportForm = ({ open, handleClose }) => {
       images: [...formData.images, ...newFiles].slice(0, 5) // Limit to 5 files
     });
   };
+
+  
   
   const handleRemoveFile = (index) => {
     setFormData({
@@ -62,9 +78,10 @@ const SupportForm = ({ open, handleClose }) => {
       });
       
       // API call to submit ticket
-      const response = await fetch('/api/support/ticket', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/support/ticket`, {
         method: 'POST',
         body: submissionData,
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -76,7 +93,7 @@ const SupportForm = ({ open, handleClose }) => {
         handleClose();
         // Reset form after closing
         setFormData({
-          email: '',
+          email: user?.email || '',
           subject: '',
           description: '',
           images: []
