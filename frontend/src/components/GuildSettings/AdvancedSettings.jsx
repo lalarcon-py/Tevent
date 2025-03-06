@@ -3,11 +3,13 @@ import { useState, useEffect } from 'react';
 import { 
   Box, Typography, Switch, FormControlLabel, Divider, Paper, Button,
   Alert, TextField, InputAdornment, Slider, Select, MenuItem, FormControl,
-  InputLabel, Grid
+  InputLabel, Grid, CircularProgress
 } from '@mui/material';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import NotInterestedIcon from '@mui/icons-material/NotInterested';
 import TimerIcon from '@mui/icons-material/Timer';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import axiosInstance from '../../config/axios';
 
 const AdvancedSettings = ({ guildData, onUpdate }) => {
   // Private view settings
@@ -21,6 +23,10 @@ const AdvancedSettings = ({ guildData, onUpdate }) => {
   // Gear check settings
   const [gearCheckEnabled, setGearCheckEnabled] = useState(false);
   const [gearCheckFrequency, setGearCheckFrequency] = useState(30);
+
+  // Join code settings
+  const [joinCode, setJoinCode] = useState('');
+  const [regeneratingCode, setRegeneratingCode] = useState(false);
   
   // UI state
   const [saveError, setSaveError] = useState(null);
@@ -37,8 +43,27 @@ const AdvancedSettings = ({ guildData, onUpdate }) => {
       
       setGearCheckEnabled(guildData.settings.gearCheckEnabled || false);
       setGearCheckFrequency(guildData.settings.gearCheckFrequency || 30);
+      
+      setJoinCode(guildData.settings.joinCode || '');
     }
   }, [guildData]);
+
+  const handleRegenerateJoinCode = async () => {
+    try {
+      setRegeneratingCode(true);
+      setSaveError(null);
+      
+      const response = await axiosInstance.post(`/api/guilds/${guildData.id}/regenerate-join-code`);
+      setJoinCode(response.data.joinCode);
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      setSaveError('Failed to regenerate join code. Please try again.');
+    } finally {
+      setRegeneratingCode(false);
+    }
+  };
   
   const handleSaveSettings = async () => {
     try {
@@ -111,6 +136,58 @@ const AdvancedSettings = ({ guildData, onUpdate }) => {
             Your guild is now private. Guild applications are disabled and new members can only join with direct invite links.
           </Alert>
         )}
+      </Paper>
+      
+      {/* Join Code Section */}
+      <Paper sx={{ 
+        p: 3, 
+        mb: 3, 
+        bgcolor: 'rgba(30, 30, 30, 0.6)',
+        border: '1px solid rgba(255, 255, 255, 0.12)'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <VpnKeyIcon sx={{ mr: 1, color: '#aed581' }} />
+          <Typography variant="subtitle1" sx={{ color: 'white' }}>
+            Guild Join Code
+          </Typography>
+        </Box>
+        
+        <Typography variant="body2" sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.7)' }}>
+          This is your guild's unique join code. Share this code with players you want to invite to your guild.
+        </Typography>
+        
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <TextField
+            fullWidth
+            value={joinCode}
+            InputProps={{
+              readOnly: true,
+              style: { color: 'white', backgroundColor: 'rgba(0, 0, 0, 0.2)' }
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              },
+            }}
+          />
+          <Button 
+            variant="contained"
+            onClick={handleRegenerateJoinCode}
+            disabled={regeneratingCode}
+            startIcon={regeneratingCode ? <CircularProgress size={20} /> : null}
+            sx={{ 
+              bgcolor: '#aed581',
+              color: 'black',
+              '&:hover': { bgcolor: '#8bc34a' }
+            }}
+          >
+            Regenerate
+          </Button>
+        </Box>
+        
+        <Alert severity="info">
+          When regenerating a new code, any previous code will no longer work.
+        </Alert>
       </Paper>
       
       {/* Auto Kick Section */}

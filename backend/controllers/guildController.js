@@ -5,6 +5,52 @@ const crypto = require('crypto');
 const db = require('../models');
 const schemaManager = require('../utils/schemaManager');
 
+const generateRandomCode = () => {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+};
+
+const regenerateJoinCode = async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { guildId } = req.params;
+    
+    // Check if user is the guild master
+    const membership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id,
+        role: 'Guild Master'
+      }
+    });
+    
+    if (!membership) {
+      return res.status(403).json({ error: 'Only the Guild Master can regenerate the join code' });
+    }
+    
+    // Generate a new join code
+    const newJoinCode = generateRandomCode();
+    
+    // Update the guild
+    await db.Guild.update(
+      { join_code: newJoinCode },
+      { where: { id: guildId } }
+    );
+    
+    res.json({ joinCode: newJoinCode });
+  } catch (error) {
+    console.error('Regenerate join code error:', error);
+    res.status(500).json({ error: 'Failed to regenerate join code' });
+  }
+};
+
 const createGuild = async (req, res) => {
   const t = await sequelize.transaction();
   
@@ -33,7 +79,8 @@ const createGuild = async (req, res) => {
     const guild = await db.Guild.create({
       name: name.trim(),
       owner_id: req.user.id,
-      status: 'ACTIVE' // Add a status field to track guild state
+      status: 'ACTIVE',
+      join_code: generateRandomCode()
     }, { transaction: t });
     
     console.log(`Guild created with ID: ${guild.id}`);
@@ -79,6 +126,7 @@ const joinGuild = async (req, res) => {
   
   try {
     const { guildId } = req.params;
+    const { joinCode } = req.body; // Get the join code from the request
     
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
@@ -87,11 +135,19 @@ const joinGuild = async (req, res) => {
     // Check if guild exists
     const guild = await Guild.findByPk(guildId);
     if (!guild) {
+      await t.rollback();
       return res.status(404).json({ error: 'Guild not found' });
+    }
+    
+    // Verify join code
+    if (guild.join_code !== joinCode) {
+      await t.rollback();
+      return res.status(403).json({ error: 'Invalid join code' });
     }
     
     // Check if guild is active
     if (guild.status !== 'ACTIVE') {
+      await t.rollback();
       return res.status(400).json({ error: 'This guild is not active' });
     }
     
@@ -104,6 +160,7 @@ const joinGuild = async (req, res) => {
     });
     
     if (existingMembership) {
+      await t.rollback();
       return res.status(400).json({ error: 'Already a member of this guild' });
     }
     

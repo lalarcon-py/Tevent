@@ -6,6 +6,8 @@ const crypto = require('crypto');
 const schemaManager = require('../utils/schemaManager');
 const db = require('../models');
 const { sequelize } = require('../config/database');
+const guildController = require('../controllers/guildController');
+
 
 // Create a new guild
 // backend/routes/guildRoutes.js
@@ -73,6 +75,54 @@ router.get('/join/:guildId', async (req, res) => {
 router.post('/join/:guildId', async (req, res) => {
   await joinGuild(req, res);
 });
+
+const regenerateJoinCode = async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { guildId } = req.params;
+    
+    // Check if user is the guild master
+    const membership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id,
+        role: 'Guild Master'
+      }
+    });
+    
+    if (!membership) {
+      return res.status(403).json({ error: 'Only the Guild Master can regenerate the join code' });
+    }
+    
+    // Generate a new join code
+    const newJoinCode = generateRandomCode();
+    
+    // Update the guild
+    await db.Guild.update(
+      { join_code: newJoinCode },
+      { where: { id: guildId } }
+    );
+    
+    res.json({ joinCode: newJoinCode });
+  } catch (error) {
+    console.error('Regenerate join code error:', error);
+    res.status(500).json({ error: 'Failed to regenerate join code' });
+  }
+};
+
+const generateRandomCode = () => {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+};
+
+router.post('/:guildId/regenerate-join-code', regenerateJoinCode);
 
 // Common function for joining a guild
 async function joinGuild(req, res) {

@@ -100,6 +100,11 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 30,
       allowNull: false
     },
+    join_code: {
+      type: DataTypes.STRING(12),
+      allowNull: false,
+      unique: true
+    }
   }, {
     sequelize,
     modelName: 'Guild',

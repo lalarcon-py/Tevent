@@ -5,24 +5,25 @@ const { sequelize } = require('../config/database');
 
 const guildSettingsController = {
   // Get guild settings
+  // Get guild settings
   getGuildSettings: async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
-  
+
       // Log the request parameters for debugging
       console.log("Request params:", req.params);
       console.log("Request query:", req.query);
       console.log("Request path:", req.path);
-  
+
       // Try to get guildId from multiple places
       const { guildId } = req.params;
       
       if (!guildId) {
         return res.status(400).json({ error: 'Guild ID is required' });
       }
-  
+
       // Ensure we're using the public schema for guild operations
       await sequelize.query(`SET search_path TO public`);
       
@@ -31,13 +32,13 @@ const guildSettingsController = {
       if (!guild) {
         return res.status(404).json({ error: 'Guild not found' });
       }
-  
+
       // Debug the raw value
       console.log('DKP DEBUG - Database value:', {
         raw: guild.dkp_enabled,
         type: typeof guild.dkp_enabled
       });
-  
+
       // Make it explicitly true/false by forcing a boolean comparison
       const dkpEnabledValue = guild.dkp_enabled === true;
       
@@ -45,7 +46,7 @@ const guildSettingsController = {
         value: dkpEnabledValue,
         type: typeof dkpEnabledValue
       });
-  
+
       // Return the settings as a plain object with explicit boolean
       res.json({
         name: guild.name,
@@ -63,7 +64,8 @@ const guildSettingsController = {
         attendanceThreshold: guild.attendance_threshold || 40,
         noShowCount: guild.no_show_count || 3,
         gearCheckEnabled: guild.gear_check_enabled === true,
-        gearCheckFrequency: guild.gear_check_frequency || 30
+        gearCheckFrequency: guild.gear_check_frequency || 30,
+        joinCode: guild.join_code || '' // Add this line
       });
     } catch (error) {
       console.error('Error getting guild settings:', error);

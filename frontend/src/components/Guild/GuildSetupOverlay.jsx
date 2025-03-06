@@ -4,16 +4,20 @@ import {
   Box,
   Typography,
   Paper,
+  Tabs,
+  Tab,
   TextField,
   Button,
   CircularProgress,
-  Tabs,
-  Tab,
+  Alert,
   Divider,
   Card,
   CardContent,
   CardActions,
-  Alert
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
@@ -38,12 +42,24 @@ const GuildSetupOverlay = () => {
   const [success, setSuccess] = useState(null);
   const [joinGuildId, setJoinGuildId] = useState('');
   const navigate = useNavigate();
+
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [selectedGuildId, setSelectedGuildId] = useState(null);
+  const [selectedGuildName, setSelectedGuildName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
   
   // Clear any errors when tab changes
   useEffect(() => {
     setError(null);
     setSuccess(null);
   }, [tab]);
+
+  const openJoinDialog = (guild) => {
+    setSelectedGuildId(guild.id);
+    setSelectedGuildName(guild.name);
+    setJoinCode('');
+    setJoinDialogOpen(true);
+  };
 
   /**
    * Fetch available guilds for joining
@@ -158,19 +174,20 @@ const GuildSetupOverlay = () => {
   /**
    * Handle joining an existing guild
    */
-  const handleJoinGuild = async (guildId) => {
-    if (!guildId) return;
+  const handleJoinGuild = async () => {
+    setLoading(true);
+    setError(null);
     
     try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch(`${API_URL}/api/guilds/join/${guildId}`, {
+      const response = await fetch(`${API_URL}/api/guilds/join/${selectedGuildId}`, {
         method: 'POST',
-        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          joinCode: joinCode
+        })
       });
       
       if (!response.ok) {
@@ -178,27 +195,19 @@ const GuildSetupOverlay = () => {
         throw new Error(errorData.error || 'Failed to join guild');
       }
       
-      const data = await response.json();
-      setSuccess(`Successfully joined guild!`);
+      setJoinDialogOpen(false);
       
-      // Safely store guild ID
       try {
-        localStorage.setItem('guildId', guildId);
-      } catch (storageError) {
-        console.warn('Failed to store guild ID in localStorage:', storageError);
+        localStorage.setItem('guildId', selectedGuildId);
+      } catch (e) {
+        console.warn('Failed to update localStorage:', e);
       }
       
-      // Reset form
-      setJoinGuildId('');
-      
-      // Redirect after delay
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1500);
-      
+      // Redirect to dashboard
+      window.location.href = `/guilds/${selectedGuildId}/dashboard`;
     } catch (error) {
       console.error('Failed to join guild:', error);
-      setError(error.message || 'Failed to join guild. Please try again.');
+      setError(error.message || 'Failed to join guild');
     } finally {
       setLoading(false);
     }
@@ -372,58 +381,58 @@ const GuildSetupOverlay = () => {
                     
                     {guilds.map(guild => (
                       <Card 
-                      key={guild.id} 
-                      sx={{ 
-                        mb: 2, 
-                        bgcolor: 'rgba(30, 30, 30, 0.6)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        transition: 'transform 0.2s ease',
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
-                        }
-                      }}
-                    >
-                      <CardContent>
-                        <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
-                          {guild.name}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
-                          Owner: {guild.ownerName}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#bbb' }}>
-                          Members: {guild.memberCount}
-                        </Typography>
-                      </CardContent>
-                      <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
-                        <Button 
-                          variant="outlined" 
-                          onClick={() => {
-                            window.location.href = `/applications?guildId=${guild.id}`;
-                          }}
-                          sx={{
-                            mr: 1,
-                            color: '#90caf9',
-                            borderColor: '#90caf9',
-                            '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
-                          }}
-                        >
-                          Apply
-                        </Button>
-                        <Button 
-                          variant="contained" 
-                          onClick={() => handleJoinGuild(guild.id)}
-                          disabled={loading}
-                          sx={{
-                            bgcolor: '#90caf9',
-                            color: '#1a1a1a',
-                            '&:hover': { bgcolor: '#64b5f6' }
-                          }}
-                        >
-                          Join Guild
-                        </Button>
-                      </CardActions>
-                    </Card>
+                        key={guild.id} 
+                        sx={{ 
+                          mb: 2, 
+                          bgcolor: 'rgba(30, 30, 30, 0.6)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          transition: 'transform 0.2s ease',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
+                          }
+                        }}
+                      >
+                        <CardContent>
+                          <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
+                            {guild.name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
+                            Owner: {guild.ownerName}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#bbb' }}>
+                            Members: {guild.memberCount}
+                          </Typography>
+                        </CardContent>
+                        <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
+                          <Button 
+                            variant="outlined" 
+                            onClick={() => {
+                              window.location.href = `/applications?guildId=${guild.id}`;
+                            }}
+                            sx={{
+                              mr: 1,
+                              color: '#90caf9',
+                              borderColor: '#90caf9',
+                              '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
+                            }}
+                          >
+                            Apply
+                          </Button>
+                          <Button 
+                            variant="contained" 
+                            onClick={() => openJoinDialog(guild)}
+                            disabled={loading}
+                            sx={{
+                              bgcolor: '#90caf9',
+                              color: '#1a1a1a',
+                              '&:hover': { bgcolor: '#64b5f6' }
+                            }}
+                          >
+                            Join Guild
+                          </Button>
+                        </CardActions>
+                      </Card>
                     ))}
                   </Box>
                 ) : (
@@ -473,6 +482,60 @@ const GuildSetupOverlay = () => {
           </Box>
         )}
       </Paper>
+  
+      {/* Join Dialog */}
+      <Dialog
+        open={joinDialogOpen}
+        onClose={() => !loading && setJoinDialogOpen(false)}
+        PaperProps={{
+          sx: { bgcolor: '#1e1e1e', color: 'white' }
+        }}
+      >
+        <DialogTitle>Join {selectedGuildName}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.7)' }}>
+            Enter the guild's join code to become a member:
+          </Typography>
+          
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          
+          <TextField
+            fullWidth
+            label="Join Code"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            disabled={loading}
+            sx={{
+              mt: 1,
+              '& .MuiOutlinedInput-root': {
+                color: 'white',
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              },
+              '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setJoinDialogOpen(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="contained"
+            onClick={handleJoinGuild}
+            disabled={!joinCode.trim() || loading}
+            startIcon={loading ? <CircularProgress size={20} /> : null}
+          >
+            {loading ? 'Joining...' : 'Join Guild'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
