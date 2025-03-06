@@ -18,13 +18,13 @@ import TeamPlanner from './components/TeamPlanner/TeamPlanner';
 import { TeamProvider } from './contexts/TeamContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthError from './pages/AuthError';
-import GuildSetupOverlay from './components/Guild/GuildSetupOverlay';
 import theme from './theme';
 import EventSummaries from './components/EventSummaries/EventSummaries';
 import GuildSettings from './components/GuildSettings/GuildSettings';
 import { GuildSettingsProvider } from './contexts/GuildSettingsContext';
 import GuildApplications from './pages/GuildApplications';
 import GuildSetupPage from './pages/GuildSetupPage';
+import LandingPage from './pages/LandingPage';
   
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -63,26 +63,6 @@ function AppContent() {
     return () => clearInterval(interval);
   }, [checkAuth]);
 
-  // Safe localStorage access
-  const safeGetLocalStorage = (key) => {
-    try {
-      return localStorage.getItem(key);
-    } catch (error) {
-      console.warn('localStorage access error:', error);
-      return null;
-    }
-  };
-
-  const safeSetLocalStorage = (key, value) => {
-    try {
-      localStorage.setItem(key, value);
-      return true;
-    } catch (error) {
-      console.warn('localStorage set error:', error);
-      return false;
-    }
-  };
-
   // Check guild membership when auth state changes
   useEffect(() => {
     const checkGuildMembership = async () => {
@@ -93,6 +73,7 @@ function AppContent() {
           console.log('Not authenticated, clearing guild state');
           setHasGuild(false);
           setCurrentGuildId(null);
+          setLoading(false);
           return;
         }
         
@@ -188,38 +169,48 @@ function AppContent() {
       </Box>
     );
   }
-
-  return (
-    <>
+  
+  // If not authenticated or no guild, show landing page with separate routes
+  if (!isAuthenticated || !hasGuild) {
+    return (
       <Router>
-        <AppHeader />
-        {(!isAuthenticated || (isAuthenticated && !hasGuild)) && <GuildSetupOverlay />}
-        <Navigation guildId={currentGuildId} />
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            p: isMobile ? 2 : 3,
-            ml: isMobile ? 0 : '240px',
-            mt: { xs: '56px', sm: '64px' },
-            mb: isMobile ? '64px' : 0,
-            position: 'relative',
-            '&::before': {
-              content: '""',
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'linear-gradient(135deg, rgba(144, 202, 249, 0.05) 0%, transparent 100%)',
-              pointerEvents: 'none',
-              zIndex: 0,
-            },
-            filter: !isAuthenticated ? 'blur(5px)' : 'none',
-            pointerEvents: !isAuthenticated ? 'none' : 'auto'
-          }}
-        >
-          <Routes>
+        <AppHeader showNavItems={false} />
+        <Routes>
+          <Route path="/auth-error" element={<AuthError />} />
+          <Route path="*" element={<LandingPage />} />
+        </Routes>
+      </Router>
+    );
+  }
+
+  // User is authenticated and has guild, show full app
+  return (
+    <Router>
+      <AppHeader showNavItems={true} />
+      <Navigation guildId={currentGuildId} />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: isMobile ? 2 : 3,
+          ml: isMobile ? 0 : '240px',
+          mt: { xs: '56px', sm: '64px' },
+          mb: isMobile ? '64px' : 0,
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'linear-gradient(135deg, rgba(144, 202, 249, 0.05) 0%, transparent 100%)',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }
+        }}
+      >
+        <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/guild-management" element={<GuildManagement />} />
@@ -232,12 +223,10 @@ function AppContent() {
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
           <Route path="/auth-error" element={<AuthError />} />
-          <Route path="/guilds/setup" element={<GuildSetupPage />} />
           <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Box>
-      </Router>
-    </>
+        </Routes>
+      </Box>
+    </Router>
   );
 }
 
@@ -247,13 +236,13 @@ function App() {
       <AuthProvider>
         <GuildProvider>
           <GuildSettingsProvider>
-          <LootProvider>
-            <AttendanceProvider>
-              <TeamProvider>
-                <AppContent />
-              </TeamProvider>
-            </AttendanceProvider>
-          </LootProvider>
+            <LootProvider>
+              <AttendanceProvider>
+                <TeamProvider>
+                  <AppContent />
+                </TeamProvider>
+              </AttendanceProvider>
+            </LootProvider>
           </GuildSettingsProvider>
         </GuildProvider>
       </AuthProvider>

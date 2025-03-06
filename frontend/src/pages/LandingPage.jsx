@@ -1,0 +1,783 @@
+// src/pages/LandingPage.jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box, Typography, TextField, Button, CircularProgress,
+  Alert, Container, Dialog, DialogTitle, DialogContent, 
+  DialogActions, useMediaQuery, useTheme, Grid, Divider
+} from '@mui/material';
+import { Link as MuiLink } from '@mui/material';
+
+// Icons
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import axiosInstance from '../config/axios';
+
+const API_URL = process.env.NODE_ENV === 'development'
+  ? 'http://localhost:5000'
+  : process.env.REACT_APP_API_URL;
+
+const LandingPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { isAuthenticated, user, login } = useAuth();
+  const navigate = useNavigate();
+  
+  // Guild management state
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [joinCodeDialogOpen, setJoinCodeDialogOpen] = useState(false);
+  const [guilds, setGuilds] = useState([]);
+  const [newGuildName, setNewGuildName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [joinCode, setJoinCode] = useState('');
+  
+  // Guild join state
+  const [selectedGuildId, setSelectedGuildId] = useState(null);
+  const [selectedGuildName, setSelectedGuildName] = useState('');
+  
+  /**
+   * Fetch available guilds for joining
+   */
+  const fetchAvailableGuilds = useCallback(async () => {
+    if (!isAuthenticated) return;
+  
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await axiosInstance.get('/api/guilds/available');
+      setGuilds(response.data);
+    } catch (error) {
+      console.error('Failed to fetch guilds:', error);
+      setError('Unable to load available guilds. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch guilds when dialog opens
+  useEffect(() => {
+    if (joinDialogOpen && isAuthenticated) {
+      fetchAvailableGuilds();
+    }
+  }, [joinDialogOpen, isAuthenticated, fetchAvailableGuilds]);
+
+  /**
+   * Validate guild name
+   */
+  const validateGuildName = () => {
+    if (!newGuildName.trim()) {
+      setNameError('Guild name is required');
+      return false;
+    }
+    
+    if (newGuildName.length < 3) {
+      setNameError('Guild name must be at least 3 characters');
+      return false;
+    }
+    
+    if (newGuildName.length > 50) {
+      setNameError('Guild name must be less than 50 characters');
+      return false;
+    }
+    
+    setNameError('');
+    return true;
+  };
+
+  /**
+   * Handle guild creation
+   */
+  const handleCreateGuild = async () => {
+    if (!validateGuildName()) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await axiosInstance.post('/api/guilds/create', {
+        name: newGuildName.trim()
+      });
+      
+      setSuccess(`Guild "${response.data.name}" created successfully!`);
+      
+      // Store guild ID
+      try {
+        localStorage.setItem('guildId', response.data.id);
+      } catch (storageError) {
+        console.warn('Failed to update localStorage:', storageError);
+      }
+      
+      // Reset form
+      setNewGuildName('');
+      setCreateDialogOpen(false);
+      
+      // Show success message before redirecting
+      setTimeout(() => {
+        // Force a full page reload to update application state
+        window.location.href = '/dashboard';
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Guild creation failed:', error);
+      setError(error.response?.data?.error || 'Failed to create guild. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  /**
+   * Handle joining an existing guild
+   */
+  const handleJoinGuild = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await axiosInstance.post('/api/guilds/join-by-code', {
+        joinCode: joinCode
+      });
+      
+      setJoinCodeDialogOpen(false);
+      
+      try {
+        localStorage.setItem('guildId', response.data.guild.id);
+      } catch (e) {
+        console.warn('Failed to update localStorage:', e);
+      }
+      
+      // Redirect to dashboard
+      navigate(`/guilds/${response.data.guild.id}/dashboard`);
+    } catch (error) {
+      console.error('Failed to join guild:', error);
+      setError(error.response?.data?.error || 'Failed to join guild');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open join dialog
+  const openGuildJoinDialog = (guild) => {
+    setSelectedGuildId(guild.id);
+    setSelectedGuildName(guild.name);
+    setJoinCode('');
+    setJoinDialogOpen(true);
+  };
+  
+  const handleLoginClick = () => {
+    login();
+  };
+
+  // Animated background effect
+  const backgroundAnimation = {
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 179, 237, 0.1) 0%, rgba(13, 29, 45, 0) 60%)',
+      pointerEvents: 'none',
+      zIndex: 0,
+    }
+  };
+
+  return (
+    <Box 
+      sx={{ 
+        minHeight: '100vh', 
+        bgcolor: '#0f172a', 
+        position: 'relative',
+        overflow: 'hidden',
+        ...backgroundAnimation
+      }}
+    >
+      {/* Hero Section */}
+      <Box 
+        sx={{ 
+          pt: { xs: 12, md: 16 }, 
+          pb: { xs: 10, md: 14 },
+          px: 3,
+          textAlign: 'center',
+          background: 'linear-gradient(160deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.7) 100%)',
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage: 'url(/images/hero-bg.jpg)', // Add a background image for texture
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.15,
+            zIndex: -1,
+          }
+        }}
+      >
+        <Container maxWidth="lg">
+          <Typography 
+            variant="h1" 
+            component="h1"
+            sx={{ 
+              fontWeight: 800,
+              mb: 2,
+              color: 'white',
+              fontSize: { xs: '3rem', sm: '4rem', md: '5rem' },
+              lineHeight: 1.1,
+              textShadow: '0 0 30px rgba(120, 180, 255, 0.3)',
+              position: 'relative'
+            }}
+          >
+            Manage Your Guild
+            <Typography 
+              variant="h1"
+              component="span" 
+              sx={{ 
+                display: 'block',
+                background: 'linear-gradient(90deg, #60a5fa, #93c5fd)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                color: 'transparent',
+                fontWeight: 800,
+                fontSize: 'inherit',
+                my: 1
+              }}
+            >
+              With Precision
+            </Typography>
+          </Typography>
+          
+          <Typography 
+            variant="h5"
+            component="p"
+            sx={{ 
+              color: 'rgba(255, 255, 255, 0.85)',
+              maxWidth: '800px',
+              mx: 'auto',
+              mb: 6,
+              fontWeight: 400,
+              lineHeight: 1.5
+            }}
+          >
+            The ultimate tool for guild leaders to manage members, events, loot, and more.
+          </Typography>
+          
+          {/* Action Buttons */}
+          <Box sx={{ mt: 8, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'center', gap: 3 }}>
+            {!isAuthenticated ? (
+              <Button 
+                variant="contained" 
+                size="large"
+                onClick={handleLoginClick}
+                sx={{
+                  py: 2, 
+                  px: 6,
+                  fontSize: '1.25rem',
+                  fontWeight: 600,
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
+                  boxShadow: '0 10px 25px rgba(59, 130, 246, 0.5)',
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    boxShadow: '0 15px 30px rgba(59, 130, 246, 0.6)',
+                    transform: 'translateY(-3px)'
+                  }
+                }}
+              >
+                Get Started with Discord
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  variant="contained" 
+                  startIcon={<AddCircleIcon />}
+                  onClick={() => setCreateDialogOpen(true)}
+                  sx={{
+                    py: 2, 
+                    px: 4,
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
+                    boxShadow: '0 10px 25px rgba(59, 130, 246, 0.5)',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      boxShadow: '0 15px 30px rgba(59, 130, 246, 0.6)',
+                      transform: 'translateY(-3px)'
+                    }
+                  }}
+                >
+                  Create a Guild
+                </Button>
+                
+                <Button 
+                  variant="outlined"
+                  startIcon={<GroupAddIcon />}
+                  onClick={() => setJoinDialogOpen(true)}
+                  sx={{
+                    py: 2, 
+                    px: 4,
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    borderRadius: '12px',
+                    borderColor: '#60a5fa',
+                    borderWidth: 2,
+                    color: '#60a5fa',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      borderColor: '#3b82f6',
+                      boxShadow: '0 5px 15px rgba(59, 130, 246, 0.3)',
+                      transform: 'translateY(-3px)'
+                    }
+                  }}
+                >
+                  Join a Guild
+                </Button>
+                
+                <Button 
+                  variant="text"
+                  startIcon={<VpnKeyIcon />}
+                  onClick={() => setJoinCodeDialogOpen(true)}
+                  sx={{
+                    py: 2, 
+                    px: 4,
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    color: '#60a5fa',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      color: '#3b82f6',
+                      background: 'rgba(59, 130, 246, 0.1)'
+                    }
+                  }}
+                >
+                  Join with Code
+                </Button>
+              </>
+            )}
+          </Box>
+          
+          {/* Decorative Elements */}
+          <Box 
+            sx={{
+              position: 'absolute',
+              bottom: -120,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '600px',
+              height: '600px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(15, 23, 42, 0) 70%)',
+              filter: 'blur(40px)',
+              zIndex: -1
+            }}
+          />
+        </Container>
+      </Box>
+      
+      {/* Create Guild Dialog */}
+      <Dialog
+        open={createDialogOpen}
+        onClose={() => !loading && setCreateDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { 
+            bgcolor: '#1e293b', 
+            color: 'white',
+            borderRadius: '16px',
+            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          fontSize: '1.75rem', 
+          pt: 3,
+          fontWeight: 700,
+          color: '#f8fafc',
+          textAlign: 'center'
+        }}>
+          Create Your Guild
+        </DialogTitle>
+        
+        <DialogContent>
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3, 
+                bgcolor: 'rgba(239, 68, 68, 0.1)', 
+                color: '#fecaca',
+                '& .MuiAlert-icon': { color: '#ef4444' }
+              }}
+            >
+              {error}
+            </Alert>
+          )}
+          
+          {success && (
+            <Alert 
+              severity="success" 
+              sx={{ 
+                mb: 3, 
+                bgcolor: 'rgba(34, 197, 94, 0.1)', 
+                color: '#bbf7d0',
+                '& .MuiAlert-icon': { color: '#22c55e' }
+              }}
+            >
+              {success}
+            </Alert>
+          )}
+          
+          <Typography sx={{ mb: 3, color: '#cbd5e1', textAlign: 'center' }}>
+            Create a new guild and become its Guild Master. You'll be able to invite others to join.
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="Guild Name"
+            variant="outlined"
+            value={newGuildName}
+            onChange={(e) => setNewGuildName(e.target.value)}
+            error={!!nameError}
+            helperText={nameError}
+            autoFocus
+            sx={{
+              mb: 3,
+              '& .MuiOutlinedInput-root': {
+                color: 'white',
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.3)' },
+                '&:hover fieldset': { borderColor: 'rgba(96, 165, 250, 0.5)' },
+                '&.Mui-focused fieldset': { borderColor: '#60a5fa' }
+              },
+              '& .MuiInputLabel-root': { color: '#94a3b8' },
+              '& .MuiFormHelperText-root': { color: '#f87171' }
+            }}
+          />
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 3, justifyContent: 'center' }}>
+          <Button 
+            onClick={() => setCreateDialogOpen(false)}
+            disabled={loading}
+            sx={{ color: '#94a3b8' }}
+          >
+            Cancel
+          </Button>
+          
+          <Button
+            variant="contained"
+            onClick={handleCreateGuild}
+            disabled={loading}
+            sx={{
+              py: 1,
+              px: 4,
+              bgcolor: '#3b82f6',
+              '&:hover': { bgcolor: '#2563eb' },
+              fontWeight: 600,
+              color: 'white',
+              borderRadius: '8px'
+            }}
+          >
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Guild'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Join Guild Dialog */}
+      <Dialog
+        open={joinDialogOpen}
+        onClose={() => !loading && setJoinDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { 
+            bgcolor: '#1e293b', 
+            color: 'white',
+            borderRadius: '16px',
+            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          fontSize: '1.75rem', 
+          pt: 3,
+          fontWeight: 700,
+          color: '#f8fafc',
+          textAlign: 'center'
+        }}>
+          Join a Guild
+        </DialogTitle>
+        
+        <DialogContent sx={{ px: { xs: 2, md: 3 } }}>
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3, 
+                bgcolor: 'rgba(239, 68, 68, 0.1)', 
+                color: '#fecaca',
+                '& .MuiAlert-icon': { color: '#ef4444' }
+              }}
+            >
+              {error}
+            </Alert>
+          )}
+          
+          <Typography sx={{ mb: 3, color: '#cbd5e1', textAlign: 'center' }}>
+            Select a guild to join from the list below or use an invite code.
+          </Typography>
+          
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+              <CircularProgress sx={{ color: '#60a5fa' }} />
+            </Box>
+          ) : guilds.length > 0 ? (
+            <Grid container spacing={2}>
+              {guilds.map(guild => (
+                <Grid item xs={12} sm={6} md={4} key={guild.id}>
+                  <Box
+                    sx={{
+                      p: 3,
+                      borderRadius: '12px',
+                      bgcolor: 'rgba(30, 41, 59, 0.7)',
+                      border: '1px solid rgba(51, 65, 85, 0.8)',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                      transition: 'all 0.3s ease',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 10px 15px rgba(0, 0, 0, 0.2)',
+                        borderColor: 'rgba(96, 165, 250, 0.5)'
+                      }
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ color: '#f1f5f9', mb: 1, fontWeight: 600 }}>
+                      {guild.name}
+                    </Typography>
+                    
+                    <Typography variant="body2" sx={{ color: '#94a3b8', mb: 1 }}>
+                      Owner: {guild.ownerName}
+                    </Typography>
+                    
+                    <Typography variant="body2" sx={{ color: '#94a3b8', mb: 2 }}>
+                      Members: {guild.memberCount}
+                    </Typography>
+                    
+                    <Box sx={{ mt: 'auto', display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => navigate(`/applications?guildId=${guild.id}`)}
+                        sx={{
+                          flexGrow: 1,
+                          borderColor: '#64748b',
+                          color: '#cbd5e1'
+                        }}
+                      >
+                        Apply
+                      </Button>
+                      
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => openGuildJoinDialog(guild)}
+                        sx={{
+                          flexGrow: 1,
+                          bgcolor: '#3b82f6',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: '#2563eb'
+                          }
+                        }}
+                      >
+                        Join
+                      </Button>
+                    </Box>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Box sx={{ 
+              p: 4, 
+              textAlign: 'center', 
+              bgcolor: 'rgba(30, 41, 59, 0.4)', 
+              borderRadius: '12px',
+              border: '1px dashed rgba(100, 116, 139, 0.6)'
+            }}>
+              <Typography sx={{ color: '#94a3b8', fontSize: '1.1rem' }}>
+                No guilds available to join. Why not create your own?
+              </Typography>
+              
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setJoinDialogOpen(false);
+                  setCreateDialogOpen(true);
+                }}
+                sx={{
+                  mt: 2,
+                  borderColor: '#60a5fa',
+                  color: '#60a5fa',
+                  '&:hover': {
+                    borderColor: '#3b82f6',
+                    bgcolor: 'rgba(59, 130, 246, 0.1)'
+                  }
+                }}
+              >
+                Create a Guild
+              </Button>
+            </Box>
+          )}
+          
+          <Divider sx={{ my: 4, borderColor: 'rgba(100, 116, 139, 0.3)' }} />
+          
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="subtitle1" sx={{ color: '#cbd5e1', mb: 2, fontWeight: 600 }}>
+              Have a join code?
+            </Typography>
+            
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setJoinDialogOpen(false);
+                setJoinCodeDialogOpen(true);
+              }}
+              endIcon={<ArrowForwardIcon />}
+              sx={{
+                borderColor: '#60a5fa',
+                color: '#60a5fa',
+                '&:hover': {
+                  borderColor: '#3b82f6',
+                  bgcolor: 'rgba(59, 130, 246, 0.1)'
+                }
+              }}
+            >
+              Join with Code
+            </Button>
+          </Box>
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={() => setJoinDialogOpen(false)}
+            sx={{ color: '#94a3b8' }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Join with Code Dialog */}
+      <Dialog
+        open={joinCodeDialogOpen}
+        onClose={() => !loading && setJoinCodeDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { 
+            bgcolor: '#1e293b', 
+            color: 'white',
+            borderRadius: '16px',
+            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          fontSize: '1.75rem', 
+          pt: 3,
+          fontWeight: 700,
+          color: '#f8fafc',
+          textAlign: 'center'
+        }}>
+          Join with Code
+        </DialogTitle>
+        
+        <DialogContent>
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 3, 
+                bgcolor: 'rgba(239, 68, 68, 0.1)', 
+                color: '#fecaca',
+                '& .MuiAlert-icon': { color: '#ef4444' }
+              }}
+            >
+              {error}
+            </Alert>
+          )}
+          
+          <Typography sx={{ mb: 3, color: '#cbd5e1', textAlign: 'center' }}>
+            Enter a guild join code to become a member. You can get this code from a guild officer.
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="Guild Join Code"
+            variant="outlined"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            autoFocus
+            sx={{
+              mb: 3,
+              '& .MuiOutlinedInput-root': {
+                color: 'white',
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.3)' },
+                '&:hover fieldset': { borderColor: 'rgba(96, 165, 250, 0.5)' },
+                '&.Mui-focused fieldset': { borderColor: '#60a5fa' }
+              },
+              '& .MuiInputLabel-root': { color: '#94a3b8' }
+            }}
+          />
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 3, justifyContent: 'center' }}>
+          <Button 
+            onClick={() => setJoinCodeDialogOpen(false)}
+            disabled={loading}
+            sx={{ color: '#94a3b8' }}
+          >
+            Cancel
+          </Button>
+          
+          <Button
+            variant="contained"
+            onClick={handleJoinGuild}
+            disabled={!joinCode.trim() || loading}
+            sx={{
+              py: 1,
+              px: 4,
+              bgcolor: '#3b82f6',
+              '&:hover': { bgcolor: '#2563eb' },
+              fontWeight: 600,
+              color: 'white',
+              borderRadius: '8px'
+            }}
+          >
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Join Guild'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default LandingPage;

@@ -20,12 +20,19 @@ export const GuildSettingsProvider = ({ children }) => {
   useEffect(() => {
     // Try to get guild ID from multiple sources in order of preference
     const getGuildId = () => {
+      // Check if current route is a special route
+      const path = window.location.pathname;
+      if (path.includes('/guilds/setup') || path.includes('/login') || path.includes('/auth-error')) {
+        return null;
+      }
+    
       // 1. First try from URL
       const pathParts = window.location.pathname.split('/');
       const guildIdIndex = pathParts.indexOf('guilds') + 1;
       if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
         const urlGuildId = pathParts[guildIdIndex];
-        if (urlGuildId && urlGuildId !== 'undefined') {
+        // Skip special routes like 'setup'
+        if (urlGuildId && urlGuildId !== 'undefined' && urlGuildId !== 'setup') {
           console.log('GuildSettingsContext: Using guildId from URL path:', urlGuildId);
           return urlGuildId;
         }

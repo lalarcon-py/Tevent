@@ -11,6 +11,16 @@ const generateToken = (user) => {
   return jwt.sign({ userId: user.id }, jwtSecret, { expiresIn: '1h' });
 };
 
+// Middleware to check if a user is authenticated
+const authenticateJWT = (req, res, next) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  
+  res.status(401).json({ error: 'Authentication required' });
+};
+
 module.exports = {
   generateToken,
+  authenticateJWT  // Add this export
 };

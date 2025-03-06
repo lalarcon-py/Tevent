@@ -7,60 +7,109 @@ const schemaManager = require('../utils/schemaManager');
 const db = require('../models');
 const { sequelize } = require('../config/database');
 const guildController = require('../controllers/guildController');
+const { authenticateJWT } = require('../middleware/auth');
 
 
 // Create a new guild
 // backend/routes/guildRoutes.js
-router.post('/create', async (req, res) => {
-  const t = await sequelize.transaction();
-  
+router.post('/create', authenticateJWT, async (req, res) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { name } = req.body;
+    // Extract guild data from request body
+    const { name, join_code } = req.body;
     
     // Validate guild name
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      return res.status(400).json({ error: 'Guild name is required' });
+    if (!name || name.trim().length < 3) {
+      return res.status(400).json({ error: 'Guild name must be at least 3 characters' });
     }
     
-    // Additional validation if desired
-    if (name.length < 3 || name.length > 50) {
-      return res.status(400).json({ 
-        error: 'Guild name must be between 3 and 50 characters' 
+    if (name.trim().length > 50) {
+      return res.status(400).json({ error: 'Guild name must be less than 50 characters' });
+    }
+    
+    // Generate a random join code if not provided
+    const generateJoinCode = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+    
+    // Check if user already owns a guild
+    const existingGuild = await db.Guild.findOne({
+      where: {
+        owner_id: req.user.id,
+        status: 'ACTIVE'
+      }
+    });
+    
+    if (existingGuild) {
+      return res.status(400).json({
+        error: 'You already own an active guild. You must leave your current guild before creating a new one.'
       });
     }
     
-    const guildId = uuidv4();
-    
-    // Create new schema for the guild
-    await schemaManager.initializeGuildData(guildId);
-    
-    // Create guild record
-    const guild = await db.Guild.create({
-      id: guildId,
-      name: name.trim(), // Trim whitespace
-      owner_id: req.user.discord_id,
-      status: 'ACTIVE'
-    }, { transaction: t });
-
-    // Add user to guild members
-    await db.GuildMember.create({
-      guild_id: guildId,
-      user_id: req.user.id,
-      role: 'Guild Master'
-    }, { transaction: t });
-
-    await t.commit();
-
-    res.json({ 
-      guild,
-      inviteLink: `${process.env.CLIENT_BASE_URL}/join/${guildId}`
+    // Check if guild name is already taken
+    const nameExists = await db.Guild.findOne({
+      where: {
+        name: name.trim(),
+        status: 'ACTIVE'
+      }
     });
+    
+    if (nameExists) {
+      return res.status(400).json({ error: 'Guild name already taken' });
+    }
+    
+    // Begin transaction
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Create the guild
+      const guild = await db.Guild.create({
+        name: name.trim(),
+        owner_id: req.user.id,
+        status: 'ACTIVE',
+        join_code: join_code || generateJoinCode()
+      }, { transaction });
+      
+      // Add owner as a member with Guild Master role
+      await db.GuildMember.create({
+        user_id: req.user.id,
+        guild_id: guild.id,
+        role: 'Guild Master',
+        status: 'ACTIVE',
+        join_date: new Date()
+      }, { transaction });
+      
+      // Create default guild settings
+      await db.GuildSettings.create({
+        guild_id: guild.id,
+        dkp_enabled: true,
+        max_tanks: 10,
+        max_healers: 15,
+        max_dps: 45,
+        min_attendance_threshold: 60
+      }, { transaction });
+      
+      // Commit transaction
+      await transaction.commit();
+      
+      // Return success response
+      return res.status(201).json({
+        id: guild.id,
+        name: guild.name,
+        join_code: guild.join_code,
+        message: 'Guild created successfully'
+      });
+    } catch (error) {
+      // Rollback transaction on error
+      await transaction.rollback();
+      console.error('Guild creation error:', error);
+      throw error;
+    }
   } catch (error) {
-    await t.rollback();
     console.error('Guild creation error:', error);
     res.status(500).json({ error: 'Failed to create guild' });
   }

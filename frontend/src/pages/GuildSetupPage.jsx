@@ -24,7 +24,7 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -32,7 +32,8 @@ const API_URL = process.env.NODE_ENV === 'development'
 
 const GuildSetupPage = () => {
   // Auth context
-  const { isAuthenticated, user, login } = useAuth();
+  const { isAuthenticated, user, login, isLoading } = useAuth();
+  const location = useLocation();
   
   // Local state
   const [activeTab, setActiveTab] = useState(0);
@@ -44,12 +45,31 @@ const GuildSetupPage = () => {
   const [success, setSuccess] = useState(null);
   const [joinCode, setJoinCode] = useState('');
   const navigate = useNavigate();
+  
 
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [selectedGuildId, setSelectedGuildId] = useState(null);
   const [selectedGuildName, setSelectedGuildName] = useState('');
   
   // Clear any errors when tab changes
+
+  const { state } = useLocation();
+    useEffect(() => {
+    // Set active tab based on navigation state
+    if (state?.tab !== undefined) {
+        setActiveTab(state.tab);
+    }
+    }, [state]);
+
+  useEffect(() => {
+    // Only show a login button if not authenticated, don't auto-redirect
+    if (!isLoading && !isAuthenticated) {
+      // We'll handle this in the render method instead of redirecting
+      console.log("User not authenticated, showing login option");
+    }
+  }, [isAuthenticated, isLoading]);
+
+
   useEffect(() => {
     setError(null);
     setSuccess(null);
@@ -130,6 +150,16 @@ const GuildSetupPage = () => {
       setLoading(true);
       setError(null);
       
+      // Generate a random join code (6 alphanumeric characters)
+      const generateJoinCode = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = '';
+        for (let i = 0; i < 6; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+      
       const response = await fetch(`${API_URL}/api/guilds/create`, {
         method: 'POST',
         headers: {
@@ -137,7 +167,8 @@ const GuildSetupPage = () => {
         },
         credentials: 'include',
         body: JSON.stringify({
-          name: newGuildName.trim()
+          name: newGuildName.trim(),
+          join_code: generateJoinCode() // Add this line to generate a join code
         })
       });
       
@@ -244,19 +275,22 @@ const GuildSetupPage = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Paper
-        elevation={5}
-        sx={{
-          width: '100%',
-          maxWidth: 900,
-          mx: 'auto',
-          borderRadius: 2,
-          background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          overflow: 'hidden'
-        }}
-      >
+    <Container maxWidth="lg" sx={{ 
+        py: 4, 
+        mt: 8, // Add top margin to account for AppHeader
+      }}>
+        <Paper
+          elevation={5}
+          sx={{
+            width: '100%',
+            maxWidth: 900,
+            mx: 'auto',
+            borderRadius: 2,
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            overflow: 'hidden'
+          }}
+        >
         {!isAuthenticated ? (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <Typography variant="h4" sx={{ mb: 4, color: '#f0f0f0' }}>
