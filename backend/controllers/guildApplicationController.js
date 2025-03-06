@@ -26,15 +26,28 @@ const uploadScreenshot = (file) => {
 
 const guildApplicationController = {
   // Submit a new application
+  // Submit a new application
   submit: async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
-      const guildId = req.guildId;
+      const guildId = req.guildId || req.body.guildId;
       if (!guildId) {
         return res.status(400).json({ error: 'Guild ID is required' });
+      }
+      
+      // Check if user is already a member of this guild
+      const existingMembership = await GuildMember.findOne({
+        where: {
+          guild_id: guildId,
+          user_id: req.user.id
+        }
+      });
+      
+      if (existingMembership) {
+        return res.status(400).json({ error: 'You are already a member of this guild' });
       }
       
       // Process screenshot if provided
@@ -179,6 +192,8 @@ const guildApplicationController = {
       res.status(500).json({ error: 'Failed to fetch application' });
     }
   },
+
+  
   
   // Approve an application
   approveApplication: async (req, res) => {

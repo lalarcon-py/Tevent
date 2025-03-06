@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Tabs, Tab, Paper, CircularProgress } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams } from 'react-router-dom';
 import ApplicationForm from '../components/Applications/ApplicationForm';
 import ApplicationList from '../components/Applications/ApplicationList';
 import WaitList from '../components/Applications/WaitList';
@@ -14,6 +15,8 @@ const GuildApplications = () => {
   const [waitList, setWaitList] = useState([]);
   const [userApplication, setUserApplication] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const appliedGuildId = searchParams.get('guildId');
 
   // Check if user is Guild Master or Advisor
   const isAdminRole = user && (user.role === 'Guild Master' || user.role === 'Guild Advisor');
@@ -106,7 +109,10 @@ const GuildApplications = () => {
               <Typography variant="h6" gutterBottom>
                 Apply to Join the Guild
               </Typography>
-              <ApplicationForm setUserApplication={setUserApplication} />
+              <ApplicationForm 
+                setUserApplication={setUserApplication} 
+                guildId={appliedGuildId}
+              />
             </>
           )}
         </Paper>

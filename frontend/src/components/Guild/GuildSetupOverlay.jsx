@@ -372,44 +372,58 @@ const GuildSetupOverlay = () => {
                     
                     {guilds.map(guild => (
                       <Card 
-                        key={guild.id} 
-                        sx={{ 
-                          mb: 2, 
-                          bgcolor: 'rgba(30, 30, 30, 0.6)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          transition: 'transform 0.2s ease',
-                          '&:hover': {
-                            transform: 'translateY(-4px)',
-                            boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
-                          }
-                        }}
-                      >
-                        <CardContent>
-                          <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
-                            {guild.name}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
-                            Owner: {guild.ownerName}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: '#bbb' }}>
-                            Members: {guild.memberCount}
-                          </Typography>
-                        </CardContent>
-                        <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
-                          <Button 
-                            variant="contained" 
-                            onClick={() => handleJoinGuild(guild.id)}
-                            disabled={loading}
-                            sx={{
-                              bgcolor: '#90caf9',
-                              color: '#1a1a1a',
-                              '&:hover': { bgcolor: '#64b5f6' }
-                            }}
-                          >
-                            Join Guild
-                          </Button>
-                        </CardActions>
-                      </Card>
+                      key={guild.id} 
+                      sx={{ 
+                        mb: 2, 
+                        bgcolor: 'rgba(30, 30, 30, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        transition: 'transform 0.2s ease',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
+                        }
+                      }}
+                    >
+                      <CardContent>
+                        <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
+                          {guild.name}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
+                          Owner: {guild.ownerName}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#bbb' }}>
+                          Members: {guild.memberCount}
+                        </Typography>
+                      </CardContent>
+                      <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
+                        <Button 
+                          variant="outlined" 
+                          onClick={() => {
+                            window.location.href = `/applications?guildId=${guild.id}`;
+                          }}
+                          sx={{
+                            mr: 1,
+                            color: '#90caf9',
+                            borderColor: '#90caf9',
+                            '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
+                          }}
+                        >
+                          Apply
+                        </Button>
+                        <Button 
+                          variant="contained" 
+                          onClick={() => handleJoinGuild(guild.id)}
+                          disabled={loading}
+                          sx={{
+                            bgcolor: '#90caf9',
+                            color: '#1a1a1a',
+                            '&:hover': { bgcolor: '#64b5f6' }
+                          }}
+                        >
+                          Join Guild
+                        </Button>
+                      </CardActions>
+                    </Card>
                     ))}
                   </Box>
                 ) : (

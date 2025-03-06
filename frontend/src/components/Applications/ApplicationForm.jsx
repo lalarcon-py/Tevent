@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import axiosInstance from '../../config/axios';
 
-const ApplicationForm = ({ setUserApplication }) => {
+const ApplicationForm = ({ setUserApplication, guildId }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
     inGameName: user?.username || '',
@@ -89,6 +89,11 @@ const ApplicationForm = ({ setUserApplication }) => {
       formDataObj.append('previousGuilds', formData.previousGuilds);
       formDataObj.append('leaveReason', formData.leaveReason);
       formDataObj.append('combatPower', formData.combatPower);
+      
+      // Add guildId if provided
+      if (guildId) {
+        formDataObj.append('guildId', guildId);
+      }
       
       if (screenshot) {
         formDataObj.append('screenshot', screenshot);
