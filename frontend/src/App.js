@@ -24,6 +24,7 @@ import EventSummaries from './components/EventSummaries/EventSummaries';
 import GuildSettings from './components/GuildSettings/GuildSettings';
 import { GuildSettingsProvider } from './contexts/GuildSettingsContext';
 import GuildApplications from './pages/GuildApplications';
+import GuildSetupPage from './pages/GuildSetupPage';
   
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -231,8 +232,8 @@ function AppContent() {
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
           <Route path="/auth-error" element={<AuthError />} />
+          <Route path="/guilds/setup" element={<GuildSetupPage />} />
           <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/guilds/setup" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Box>
       </Router>

@@ -1,4 +1,4 @@
-// src/components/Guild/GuildSetupOverlay.jsx
+// src/pages/GuildSetupPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
@@ -14,6 +14,7 @@ import {
   Card,
   CardContent,
   CardActions,
+  Container,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -21,38 +22,38 @@ import {
 } from '@mui/material';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
-import { useAuth } from '../../contexts/AuthContext';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
   : process.env.REACT_APP_API_URL;
 
-const GuildSetupOverlay = () => {
+const GuildSetupPage = () => {
   // Auth context
   const { isAuthenticated, user, login } = useAuth();
   
   // Local state
-  const [tab, setTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(0);
   const [guilds, setGuilds] = useState([]);
   const [newGuildName, setNewGuildName] = useState('');
   const [nameError, setNameError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [joinGuildId, setJoinGuildId] = useState('');
+  const [joinCode, setJoinCode] = useState('');
   const navigate = useNavigate();
 
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [selectedGuildId, setSelectedGuildId] = useState(null);
   const [selectedGuildName, setSelectedGuildName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
   
   // Clear any errors when tab changes
   useEffect(() => {
     setError(null);
     setSuccess(null);
-  }, [tab]);
+  }, [activeTab]);
 
   const openJoinDialog = (guild) => {
     setSelectedGuildId(guild.id);
@@ -91,10 +92,10 @@ const GuildSetupOverlay = () => {
 
   // Fetch guilds when tab changes to join tab
   useEffect(() => {
-    if (tab === 1 && isAuthenticated) {
+    if (activeTab === 1 && isAuthenticated) {
       fetchAvailableGuilds();
     }
-  }, [tab, isAuthenticated, fetchAvailableGuilds]);
+  }, [activeTab, isAuthenticated, fetchAvailableGuilds]);
 
   /**
    * Validate guild name
@@ -160,7 +161,7 @@ const GuildSetupOverlay = () => {
       
       // Redirect after delay
       setTimeout(() => {
-        navigate('/dashboard');;
+        navigate('/dashboard');
       }, 1500);
       
     } catch (error) {
@@ -197,6 +198,7 @@ const GuildSetupOverlay = () => {
       }
       
       const data = await response.json();
+      setJoinDialogOpen(false);
       
       try {
         localStorage.setItem('guildId', data.guild.id);
@@ -214,12 +216,23 @@ const GuildSetupOverlay = () => {
     }
   };
 
-  /**
-   * Handle tab changes
-   */
-  const handleTabChange = (_, newValue) => {
-    setTab(newValue);
-    // fetchAvailableGuilds() will be called via useEffect
+  const handleJoinWithInviteCode = async () => {
+    if (!joinCode.trim()) {
+      setError('Join code is required');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Join by code only
+      await handleJoinGuild();
+    } catch (error) {
+      setError(error.message || 'Failed to join guild');
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -231,30 +244,17 @@ const GuildSetupOverlay = () => {
   };
 
   return (
-    <Box
-      sx={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 9999,
-        backdropFilter: 'blur(10px)',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)'
-      }}
-    >
+    <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper
         elevation={5}
         sx={{
           width: '100%',
-          maxWidth: 700,
-          p: 4,
+          maxWidth: 900,
+          mx: 'auto',
           borderRadius: 2,
           background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          overflow: 'hidden'
         }}
       >
         {!isAuthenticated ? (
@@ -285,31 +285,28 @@ const GuildSetupOverlay = () => {
           </Box>
         ) : (
           <Box>
-            <Typography variant="h4" sx={{ mb: 2, color: '#f0f0f0', textAlign: 'center' }}>
+            <Typography variant="h4" sx={{ p: 3, color: '#f0f0f0', textAlign: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
               Welcome, {user?.username || 'Adventurer'}!
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 4, color: '#bbb', textAlign: 'center' }}>
-              You need to create or join a guild to proceed.
             </Typography>
             
             {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
+              <Alert severity="error" sx={{ mx: 3, mt: 3 }}>
                 {error}
               </Alert>
             )}
             
             {success && (
-              <Alert severity="success" sx={{ mb: 3 }}>
+              <Alert severity="success" sx={{ mx: 3, mt: 3 }}>
                 {success}
               </Alert>
             )}
             
             <Tabs 
-              value={tab} 
-              onChange={handleTabChange}
+              value={activeTab} 
+              onChange={(_, newValue) => setActiveTab(newValue)}
               centered
               sx={{ 
-                mb: 4,
+                px: 2,
                 '& .MuiTab-root': { color: '#bbb' },
                 '& .Mui-selected': { color: '#90caf9' },
                 '& .MuiTabs-indicator': { backgroundColor: '#90caf9' }
@@ -325,161 +322,181 @@ const GuildSetupOverlay = () => {
                 icon={<GroupAddIcon />} 
                 iconPosition="start" 
               />
+              <Tab 
+                label="Join with Code" 
+                icon={<VpnKeyIcon />} 
+                iconPosition="start" 
+              />
             </Tabs>
             
-            {tab === 0 && (
-              <Box sx={{ p: 2 }}>
-                <TextField
-                  fullWidth
-                  label="Guild Name"
-                  variant="outlined"
-                  value={newGuildName}
-                  onChange={(e) => setNewGuildName(e.target.value)}
-                  error={!!nameError}
-                  helperText={nameError}
-                  sx={{
-                    mb: 3,
-                    '& .MuiOutlinedInput-root': {
-                      color: 'white',
-                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.3)' },
-                      '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' },
-                      '&.Mui-focused fieldset': { borderColor: '#90caf9' }
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb' },
-                    '& .MuiFormHelperText-root': { color: '#f44336' }
-                  }}
-                />
-                <Button
-                  fullWidth
-                  variant="contained"
-                  size="large"
-                  onClick={handleCreateGuild}
-                  disabled={loading}
-                  sx={{
-                    height: 48,
-                    bgcolor: '#90caf9',
-                    color: '#1a1a1a',
-                    fontWeight: 'bold',
-                    '&:hover': { bgcolor: '#64b5f6' }
-                  }}
-                >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Guild'}
-                </Button>
-              </Box>
-            )}
-            
-            {tab === 1 && (
-              <Box sx={{ p: 2 }}>
-                {loading ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-                    <CircularProgress />
-                  </Box>
-                ) : guilds.length > 0 ? (
-                  <Box>
-                    <Typography variant="h6" sx={{ mb: 2, color: '#f0f0f0' }}>
-                      Available Guilds
-                    </Typography>
-                    
-                    {guilds.map(guild => (
-                      <Card 
-                        key={guild.id} 
-                        sx={{ 
-                          mb: 2, 
-                          bgcolor: 'rgba(30, 30, 30, 0.6)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          transition: 'transform 0.2s ease',
-                          '&:hover': {
-                            transform: 'translateY(-4px)',
-                            boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
-                          }
-                        }}
-                      >
-                        <CardContent>
-                          <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
-                            {guild.name}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
-                            Owner: {guild.ownerName}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: '#bbb' }}>
-                            Members: {guild.memberCount}
-                          </Typography>
-                        </CardContent>
-                        <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
-                          <Button 
-                            variant="outlined" 
-                            onClick={() => {
-                              window.location.href = `/applications?guildId=${guild.id}`;
-                            }}
-                            sx={{
-                              mr: 1,
-                              color: '#90caf9',
-                              borderColor: '#90caf9',
-                              '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
-                            }}
-                          >
-                            Apply
-                          </Button>
-                          <Button 
-                            variant="contained" 
-                            onClick={() => openJoinDialog(guild)}
-                            disabled={loading}
-                            sx={{
-                              bgcolor: '#90caf9',
-                              color: '#1a1a1a',
-                              '&:hover': { bgcolor: '#64b5f6' }
-                            }}
-                          >
-                            Join Guild
-                          </Button>
-                        </CardActions>
-                      </Card>
-                    ))}
-                  </Box>
-                ) : (
-                  <Typography sx={{ textAlign: 'center', color: '#bbb' }}>
-                    No guilds available to join. Why not create your own?
+            <Box sx={{ p: 3, minHeight: '300px' }}>
+              {activeTab === 0 && (
+                <Box>
+                  <Typography variant="h6" sx={{ mb: 2, color: '#f0f0f0' }}>
+                    Create Your Guild
                   </Typography>
-                )}
-                
-                <Divider sx={{ my: 3, bgcolor: 'rgba(255, 255, 255, 0.1)' }} />
-                
-                <Typography variant="h6" sx={{ mb: 2, color: '#f0f0f0' }}>
-                  Join with Invitation Code
-                </Typography>
-                <TextField
-                  fullWidth
-                  label="Guild Invitation Code"
-                  variant="outlined"
-                  value={joinGuildId}
-                  onChange={(e) => setJoinGuildId(e.target.value)}
-                  sx={{
-                    mb: 3,
-                    '& .MuiOutlinedInput-root': {
-                      color: 'white',
-                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.3)' },
-                      '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' },
-                      '&.Mui-focused fieldset': { borderColor: '#90caf9' }
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb' }
-                  }}
-                />
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={() => handleJoinGuild(joinGuildId)}
-                  disabled={!joinGuildId.trim() || loading}
-                  sx={{
-                    height: 48,
-                    borderColor: '#90caf9',
-                    color: '#90caf9',
-                    '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
-                  }}
-                >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Join with Code'}
-                </Button>
-              </Box>
-            )}
+                  <Typography variant="body2" sx={{ mb: 3, color: '#bbb' }}>
+                    Create a new guild and become its Guild Master. You'll be able to invite others to join.
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Guild Name"
+                    variant="outlined"
+                    value={newGuildName}
+                    onChange={(e) => setNewGuildName(e.target.value)}
+                    error={!!nameError}
+                    helperText={nameError}
+                    sx={{
+                      mb: 3,
+                      '& .MuiOutlinedInput-root': {
+                        color: 'white',
+                        '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.3)' },
+                        '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' },
+                        '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+                      },
+                      '& .MuiInputLabel-root': { color: '#bbb' },
+                      '& .MuiFormHelperText-root': { color: '#f44336' }
+                    }}
+                  />
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    size="large"
+                    onClick={handleCreateGuild}
+                    disabled={loading}
+                    sx={{
+                      height: 48,
+                      bgcolor: '#90caf9',
+                      color: '#1a1a1a',
+                      fontWeight: 'bold',
+                      '&:hover': { bgcolor: '#64b5f6' }
+                    }}
+                  >
+                    {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Guild'}
+                  </Button>
+                </Box>
+              )}
+              
+              {activeTab === 1 && (
+                <Box>
+                  <Typography variant="h6" sx={{ mb: 2, color: '#f0f0f0' }}>
+                    Available Guilds
+                  </Typography>
+                  
+                  {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : guilds.length > 0 ? (
+                    <Box sx={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      {guilds.map(guild => (
+                        <Card 
+                          key={guild.id} 
+                          sx={{ 
+                            mb: 2, 
+                            bgcolor: 'rgba(30, 30, 30, 0.6)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            transition: 'transform 0.2s ease',
+                            '&:hover': {
+                              transform: 'translateY(-4px)',
+                              boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
+                            }
+                          }}
+                        >
+                          <CardContent>
+                            <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
+                              {guild.name}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
+                              Owner: {guild.ownerName}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#bbb' }}>
+                              Members: {guild.memberCount}
+                            </Typography>
+                          </CardContent>
+                          <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
+                            <Button 
+                              variant="outlined" 
+                              onClick={() => {
+                                window.location.href = `/applications?guildId=${guild.id}`;
+                              }}
+                              sx={{
+                                mr: 1,
+                                color: '#90caf9',
+                                borderColor: '#90caf9',
+                                '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
+                              }}
+                            >
+                              Apply
+                            </Button>
+                            <Button 
+                              variant="contained" 
+                              onClick={() => openJoinDialog(guild)}
+                              disabled={loading}
+                              sx={{
+                                bgcolor: '#90caf9',
+                                color: '#1a1a1a',
+                                '&:hover': { bgcolor: '#64b5f6' }
+                              }}
+                            >
+                              Join Guild
+                            </Button>
+                          </CardActions>
+                        </Card>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography sx={{ textAlign: 'center', color: '#bbb' }}>
+                      No guilds available to join. Why not create your own?
+                    </Typography>
+                  )}
+                </Box>
+              )}
+              
+              {activeTab === 2 && (
+                <Box>
+                  <Typography variant="h6" sx={{ mb: 2, color: '#f0f0f0' }}>
+                    Join with Invitation Code
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 3, color: '#bbb' }}>
+                    Enter a guild join code to become a member. You can get this code from a guild officer.
+                  </Typography>
+                  
+                  <TextField
+                    fullWidth
+                    label="Guild Join Code"
+                    variant="outlined"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    sx={{
+                      mb: 3,
+                      '& .MuiOutlinedInput-root': {
+                        color: 'white',
+                        '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.3)' },
+                        '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' },
+                        '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+                      },
+                      '& .MuiInputLabel-root': { color: '#bbb' }
+                    }}
+                  />
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleJoinWithInviteCode}
+                    disabled={!joinCode.trim() || loading}
+                    sx={{
+                      height: 48,
+                      bgcolor: '#90caf9',
+                      color: '#1a1a1a',
+                      fontWeight: 'bold',
+                      '&:hover': { bgcolor: '#64b5f6' }
+                    }}
+                  >
+                    {loading ? <CircularProgress size={24} color="inherit" /> : 'Join Guild'}
+                  </Button>
+                </Box>
+              )}
+            </Box>
           </Box>
         )}
       </Paper>
@@ -537,8 +554,8 @@ const GuildSetupOverlay = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   );
 };
 
-export default GuildSetupOverlay;
+export default GuildSetupPage;

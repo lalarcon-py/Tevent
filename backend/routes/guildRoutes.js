@@ -66,6 +66,70 @@ router.post('/create', async (req, res) => {
   }
 });
 
+router.post('/join-by-code', async (req, res) => {
+  const t = await sequelize.transaction();
+  
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { joinCode } = req.body;
+    
+    if (!joinCode) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Join code is required' });
+    }
+    
+    // Find guild by join code
+    const guild = await db.Guild.findOne({
+      where: { join_code: joinCode }
+    });
+    
+    if (!guild) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Guild not found. Invalid join code.' });
+    }
+
+    // Check if guild is active
+    if (guild.status !== 'ACTIVE') {
+      await t.rollback();
+      return res.status(400).json({ error: 'This guild is not active' });
+    }
+    
+    // Check if user is already a member
+    const existingMembership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guild.id,
+        user_id: req.user.id
+      }
+    });
+    
+    if (existingMembership) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Already a member of this guild' });
+    }
+    
+    // Add user to guild
+    await db.GuildMember.create({
+      guild_id: guild.id,
+      user_id: req.user.id,
+      role: 'Member'
+    }, { transaction: t });
+    
+    await t.commit();
+    
+    res.status(200).json({ 
+      message: 'Successfully joined guild',
+      guild
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Join guild error:', error);
+    res.status(500).json({ error: 'Failed to join guild' });
+  }
+});
+
 // Join an existing guild (backward compatibility - kept as GET)
 router.get('/join/:guildId', async (req, res) => {
   await joinGuild(req, res);
