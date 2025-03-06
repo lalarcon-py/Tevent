@@ -51,9 +51,9 @@ const guildSettingsController = {
         name: guild.name,
         lastNameChange: guild.last_name_change || null,
         dkpEnabled: dkpEnabledValue,
-        maxTanks: guild.max_tanks || 10,
+        maxTanks: guild.max_tanks || 25,
         maxHealers: guild.max_healers || 15,
-        maxDps: guild.max_dps || 75,
+        maxDps: guild.max_dps || 30,
         minAttendanceThreshold: guild.min_attendance_threshold || 60,
         attendanceWarningMessage: guild.attendance_warning_message || 
           "You are at risk of falling below the minimum attendance threshold and may be removed if improvements are not shown.",

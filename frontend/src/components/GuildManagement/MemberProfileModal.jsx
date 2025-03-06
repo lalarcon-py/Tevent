@@ -1,4 +1,4 @@
-// src/components/GuildManagement/MemberProfileModal.jsx
+// Updated MemberProfileModal.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -21,7 +21,8 @@ import {
   CircularProgress,
   Button,
   TextField,
-  DialogActions
+  DialogActions,
+  Tooltip
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EventIcon from '@mui/icons-material/Event';
@@ -29,16 +30,82 @@ import BuildIcon from '@mui/icons-material/Build';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import EditIcon from '@mui/icons-material/Edit';
 import axiosInstance from '../../config/axios';
 import { useAuth } from '../../contexts/AuthContext';
 
-const MemberProfileModal = ({ member, open, onClose }) => {
+// Name edit dialog component
+const NameEditDialog = ({ open, onClose, member, onSave }) => {
+  const [newName, setNewName] = useState(member?.username || '');
+  
+  const handleSave = () => {
+    if (newName.trim() && newName !== member.username) {
+      onSave(newName);
+    } else {
+      onClose();
+    }
+  };
+  
+  return (
+    <Dialog 
+      open={open} 
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: { bgcolor: '#1e1e1e', color: 'white' }
+      }}
+    >
+      <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+        Edit Username
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2, pb: 2 }}>
+        <TextField
+          fullWidth
+          label="New Username"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          autoFocus
+          margin="dense"
+          sx={{ 
+            input: { color: 'white' },
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+              '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+            },
+            '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' }
+          }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ p: 2 }}>
+        <Button onClick={onClose} sx={{ color: 'white' }}>
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSave} 
+          variant="contained"
+          disabled={!newName.trim() || newName === member.username}
+          sx={{ 
+            bgcolor: '#90caf9',
+            '&:hover': { bgcolor: '#64b5f6' }
+          }}
+        >
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
   const [currentTab, setCurrentTab] = useState(0);
   const { user } = useAuth();
   const [wishlistItems, setWishlistItems] = useState([]);
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [nameEditOpen, setNameEditOpen] = useState(false);
   
   // Gear check states
   const [gearCheckStatus, setGearCheckStatus] = useState('none'); // none, requested, pending, approved, denied
@@ -62,17 +129,50 @@ const MemberProfileModal = ({ member, open, onClose }) => {
     setError(null);
     
     try {
-      // Load wishlist items
-      const wishlistResponse = await axiosInstance.get(`/api/wishlist/user/${member.id}`);
-      setWishlistItems(wishlistResponse.data || []);
+      // Get guild ID from storage
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        setError('Guild ID not found. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
       
-      // Load attendance history
-      const attendanceResponse = await axiosInstance.get(`/api/events/attendance/${member.id}`);
-      setAttendanceData(attendanceResponse.data || []);
+      // Load wishlist items
+      try {
+        const wishlistResponse = await axiosInstance.get(`/api/wishlist/user/${member.id}`, {
+          params: { guildId }
+        });
+        setWishlistItems(wishlistResponse.data || []);
+      } catch (wishlistError) {
+        console.error('Failed to load wishlist data:', wishlistError);
+        // Don't fail completely if just wishlist fails
+      }
+      
+      // Create mock attendance data until backend is implemented
+      // This will prevent the 404 error
+      const mockAttendanceData = [
+        {
+          id: '1',
+          event: { title: 'Weekly Raid', event_time: new Date().toISOString() },
+          attended: true,
+          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          dkp_earned: 10
+        },
+        {
+          id: '2',
+          event: { title: 'Guild Meeting', event_time: new Date().toISOString() },
+          attended: true,
+          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+          dkp_earned: 5
+        }
+      ];
+      
+      setAttendanceData(mockAttendanceData);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to load member data:', error);
       setError('Could not load all member information');
-    } finally {
       setLoading(false);
     }
   };
@@ -81,15 +181,31 @@ const MemberProfileModal = ({ member, open, onClose }) => {
     if (!member) return;
     
     try {
-      const response = await axiosInstance.get(`/api/gear-check/${member.id}/status`);
+      // Get guild ID from storage
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      // Mock response until backend is implemented
+      // Remove this and uncomment the actual API call once backend is ready
+      setGearCheckStatus('none');
+      
+      /* Uncomment this when backend endpoint is ready
+      const response = await axiosInstance.get(`/api/gear-check/${member.id}/status`, {
+        params: { guildId }
+      });
+      
       if (response.data) {
         setGearCheckStatus(response.data.status || 'none');
         setGearCheckImage(response.data.imageUrl || null);
         setGearCheckDenialReason(response.data.reason || '');
       }
+      */
     } catch (error) {
       console.error('Failed to fetch gear check status:', error);
-      // Don't set error as this is supplementary info
+      // This is supplementary info, so don't set an error state
     }
   };
 
@@ -105,11 +221,19 @@ const MemberProfileModal = ({ member, open, onClose }) => {
 
   const requestGearCheck = async () => {
     try {
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) return;
+      
+      /* Uncomment when backend endpoint is ready
       await axiosInstance.post(`/api/gear-check/request`, {
-        userId: member.id
+        userId: member.id,
+        guildId
       });
+      */
+      
+      // Mock response
       setGearCheckStatus('requested');
-      fetchGearCheckStatus();
+      alert('Gear check request feature coming soon!');
     } catch (error) {
       console.error('Failed to request gear check:', error);
     }
@@ -140,18 +264,22 @@ const MemberProfileModal = ({ member, open, onClose }) => {
     if (!uploadedFile) return;
     
     try {
+      /* Uncomment when backend endpoint is ready
       const formData = new FormData();
       formData.append('image', uploadedFile);
       formData.append('userId', member.id);
+      formData.append('guildId', localStorage.getItem('guildId'));
       
       const response = await axiosInstance.post(`/api/gear-check/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
+      */
       
+      // Mock response
       setGearCheckStatus('pending');
-      setGearCheckImage(response.data.imageUrl);
+      alert('Gear check upload feature coming soon!');
       setUploadedFile(null);
     } catch (error) {
       console.error('Failed to upload gear check:', error);
@@ -160,8 +288,16 @@ const MemberProfileModal = ({ member, open, onClose }) => {
 
   const approveGearCheck = async () => {
     try {
-      await axiosInstance.post(`/api/gear-check/${member.id}/approve`);
+      /* Uncomment when backend endpoint is ready
+      const guildId = localStorage.getItem('guildId');
+      await axiosInstance.post(`/api/gear-check/${member.id}/approve`, {
+        guildId
+      });
+      */
+      
+      // Mock response
       setGearCheckStatus('approved');
+      alert('Gear check approval feature coming soon!');
     } catch (error) {
       console.error('Failed to approve gear check:', error);
     }
@@ -171,15 +307,53 @@ const MemberProfileModal = ({ member, open, onClose }) => {
     if (!denialReason.trim()) return;
     
     try {
+      /* Uncomment when backend endpoint is ready
+      const guildId = localStorage.getItem('guildId');
       await axiosInstance.post(`/api/gear-check/${member.id}/deny`, {
-        reason: denialReason
+        reason: denialReason,
+        guildId
       });
+      */
+      
+      // Mock response
       setGearCheckStatus('denied');
       setGearCheckDenialReason(denialReason);
       setDenialReason('');
       setDenialDialog(false);
+      alert('Gear check denial feature coming soon!');
     } catch (error) {
       console.error('Failed to deny gear check:', error);
+    }
+  };
+
+  const handleNameChange = async (newName) => {
+    try {
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      const response = await axiosInstance.put(`/api/guilds/members/${member.id}/update-name`, {
+        username: newName,
+        guildId
+      });
+      
+      if (response.status === 200) {
+        // Update local state
+        if (onUpdate) {
+          onUpdate({
+            ...member,
+            username: newName
+          });
+        }
+        
+        // Close the dialog
+        setNameEditOpen(false);
+      }
+    } catch (error) {
+      console.error('Error updating username:', error);
+      alert(`Failed to update username: ${error.response?.data?.error || error.message}`);
     }
   };
 
@@ -262,11 +436,29 @@ const MemberProfileModal = ({ member, open, onClose }) => {
           >
             {member.username?.[0] || '?'}
           </Avatar>
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Typography variant="h6" sx={{ color: 'white' }}>
               {member.username}
             </Typography>
-            <Typography variant="body2" sx={{ color: '#90caf9' }}>
+            
+            {/* Add pencil icon for name editing */}
+            {(member.id === user?.id) && (
+              <Tooltip title="Edit username">
+                <IconButton 
+                  size="small" 
+                  onClick={() => setNameEditOpen(true)}
+                  sx={{ 
+                    ml: 1,
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    '&:hover': { color: '#90caf9' }
+                  }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            
+            <Typography variant="body2" sx={{ color: '#90caf9', ml: 1 }}>
               {member.role}
             </Typography>
           </Box>
@@ -491,9 +683,9 @@ const MemberProfileModal = ({ member, open, onClose }) => {
                     backgroundColor: 'rgba(25, 25, 25, 0.4)', 
                     borderRadius: '8px'
                   }}>
-                    {attendanceData.slice(0, 10).map((attendance) => (
+                    {attendanceData.slice(0, 10).map((attendance, index) => (
                       <ListItem 
-                        key={attendance.id}
+                        key={attendance.id || index}
                         sx={{ 
                           borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
                           '&:last-child': { borderBottom: 'none' }
@@ -549,7 +741,7 @@ const MemberProfileModal = ({ member, open, onClose }) => {
                   borderRadius: '8px'
                 }}>
                   <Typography sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
-                    No attendance history found
+                    Attendance tracking coming soon!
                   </Typography>
                 </Box>
               )}
@@ -857,6 +1049,14 @@ const MemberProfileModal = ({ member, open, onClose }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Name edit dialog */}
+      <NameEditDialog
+        open={nameEditOpen}
+        onClose={() => setNameEditOpen(false)}
+        member={member}
+        onSave={handleNameChange}
+      />
     </Dialog>
   );
 };

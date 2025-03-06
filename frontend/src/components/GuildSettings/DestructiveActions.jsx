@@ -26,14 +26,33 @@ const DestructiveActions = ({ guildData, guildId }) => {
     setIsDeleting(true);
     
     try {
-      await axiosInstance.delete(`/api/guilds/${guildId}`);
+      // Configure axios with timeout and better error handling
+      await axiosInstance.delete(`/api/guilds/${guildId}`, {
+        timeout: 30000, // 30 second timeout
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      // Clear guild ID from localStorage
+      try {
+        localStorage.removeItem('guildId');
+      } catch (e) {
+        console.warn('Failed to clear localStorage:', e);
+      }
+      
       setDeleteDialogOpen(false);
       
-      // Redirect to guilds setup page after successful deletion
-      navigate('/guilds/setup');
+      // Use window.location instead of navigate to ensure a full page reload
+      window.location.href = '/guilds/setup';
     } catch (error) {
-      setDeleteError('Failed to delete guild. Please try again.');
+      console.error('Delete guild error:', error);
       setIsDeleting(false);
+      
+      // Provide more detailed error message
+      const errorMessage = error.response?.data?.error || 
+                          'Failed to delete guild. Please try again.';
+      setDeleteError(errorMessage);
     }
   };
   

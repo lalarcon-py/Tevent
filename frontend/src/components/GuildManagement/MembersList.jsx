@@ -9,6 +9,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
 import { useAuth } from '../../contexts/AuthContext';
 import MemberProfileModal from './MemberProfileModal';
+import axiosInstance from '../../config/axios';
 
 
 const API_URL = process.env.NODE_ENV === 'development' 
@@ -82,6 +83,8 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
       setUsername(member.username);
     }
   }, [member]);
+
+  
 
   const handleRoleChange = async (newRole) => {
     setError(null);
@@ -612,11 +615,13 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
             id: updatedMember.id,
             guildId,
             role: updatedMember.role,
-            username: updatedMember.username,
-            // Include required fields with fallbacks
-            discord_id: memberData.discord_id || '',  // Add empty string as fallback
-            status: 'Active',  // Always set to Active
-            avatar_url: memberData.avatar_url || '',
+            username: updatedMember.username || memberData.username,
+            // Include all required fields with proper fallbacks
+            discord_id: memberData.discord_id || memberData.discordId || '',
+            status: memberData.status || 'Active',
+            avatar_url: memberData.avatar_url || memberData.avatarUrl || '',
+            avatarUrl: memberData.avatar_url || memberData.avatarUrl || '',
+            combat_power: memberData.combat_power || 0,
             builds: memberData.builds || []
           };
       
@@ -656,22 +661,11 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         return;
       }
       
-      const response = await fetch(`${API_URL}/api/guilds/members/${nameEditMember.id}/update-name`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          username: newName,
-          guildId
-        })
+      // Use axios instead of fetch for consistency and better error handling
+      const response = await axiosInstance.put(`/api/guilds/members/${nameEditMember.id}/update-name`, {
+        username: newName,
+        guildId
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update username');
-      }
       
       // Update the local state
       setMembers(prevMembers => 
@@ -691,7 +685,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       
     } catch (error) {
       console.error('Error updating username:', error);
-      // You could add error handling here
+      alert(`Failed to update username: ${error.response?.data?.error || error.message}`);
     }
   };
   
