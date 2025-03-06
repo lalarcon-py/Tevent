@@ -1,7 +1,6 @@
-// EventPlanner/EventDetails.jsx
+// EventDetails.jsx
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -18,23 +17,27 @@ import {
   Alert,
   Snackbar,
   Paper,
-  Pagination
+  Pagination,
+  DialogActions
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import { format } from 'date-fns';
 import EventForm from './EventForm';
+import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 
 const PARTICIPANTS_PER_PAGE = 10;
 const API_URL = process.env.REACT_APP_API_URL;
 
 const EventDetails = ({ event, onEventUpdate, onClose }) => {
-  const navigate = useNavigate();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [guildId, setGuildId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { settings } = useGuildSettings();
+  const isDkpEnabled = settings?.dkpEnabled === true;
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -201,6 +204,36 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       setError(error.message);
     }
   };
+  
+  const handleDeleteEvent = async () => {
+    if (!event) return;
+  
+    if (!window.confirm('Are you sure you want to delete this event?')) return;
+    setIsDeleting(true);
+  
+    try {
+      const response = await fetch(
+        `${API_URL}/api/events/${event.id}?guildId=${guildId}`,
+        {
+          method: 'DELETE',
+          credentials: 'include'
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete event');
+      }
+
+      onEventUpdate();
+      onClose();
+    } catch (error) {
+      console.error('Delete error:', error);
+      setError(error.message || 'Failed to delete event');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const ParticipantsList = () => (
     <Paper 
@@ -284,7 +317,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         <Typography variant="h5">{event.title}</Typography>
         <Box>
           <Link 
-            to={`/events/${event.id}/team-planner`}  // Changed from /team-planner/${event.id}
+            to={`/events/${event.id}/team-planner`}
             style={{ textDecoration: 'none' }}
           >
             <Button variant="contained" color="primary">
@@ -315,6 +348,16 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             <Typography variant="subtitle1" color="grey.400">Description</Typography>
             <Typography>{event.description}</Typography>
           </Box>
+          
+          {/* Display DKP value only if DKP is enabled */}
+          {isDkpEnabled && event.dkp_value > 0 && (
+            <Box mt={2}>
+              <Typography variant="subtitle1" color="grey.400">DKP Value</Typography>
+              <Typography sx={{ color: '#ffd700', fontWeight: 'bold' }}>
+                {event.dkp_value} DKP
+              </Typography>
+            </Box>
+          )}
         </Grid>
 
         <Grid item xs={12} md={6}>
@@ -397,7 +440,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         <EventForm 
             initialData={{
               ...event,
-              eventTime: event.event_time
+              eventTime: event.event_time,
+              dkpValue: event.dkp_value
             }}
             onSubmit={async (updatedData) => {
               try {
@@ -410,7 +454,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                   body: JSON.stringify({
                     ...updatedData,
                     event_time: updatedData.eventTime,
-                    guildId: guildId // Add this line
+                    dkp_value: updatedData.dkpValue,
+                    guildId: guildId
                   })
                 });
                 
@@ -425,6 +470,18 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             onClose={() => setIsEditDialogOpen(false)}
           />
       </Dialog>
+
+      {/* Delete event button */}
+      <DialogActions>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={handleDeleteEvent}
+          disabled={isDeleting}
+        >
+          {isDeleting ? 'Deleting...' : 'Delete Event'}
+        </Button>
+      </DialogActions>
 
       <Snackbar 
         open={!!error} 

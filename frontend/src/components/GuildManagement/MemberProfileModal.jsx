@@ -106,6 +106,7 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [nameEditOpen, setNameEditOpen] = useState(false);
+  const [isDkpEnabled, setIsDkpEnabled] = useState(false);
   
   // Gear check states
   const [gearCheckStatus, setGearCheckStatus] = useState('none'); // none, requested, pending, approved, denied
@@ -149,26 +150,51 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
         // Don't fail completely if just wishlist fails
       }
       
-      // Create mock attendance data until backend is implemented
-      // This will prevent the 404 error
-      const mockAttendanceData = [
-        {
-          id: '1',
-          event: { title: 'Weekly Raid', event_time: new Date().toISOString() },
-          attended: true,
-          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          dkp_earned: 10
-        },
-        {
-          id: '2',
-          event: { title: 'Guild Meeting', event_time: new Date().toISOString() },
-          attended: true,
-          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          dkp_earned: 5
+      // Load attendance data
+      try {
+        const attendanceResponse = await axiosInstance.get(`/api/stats/user/${member.id}/attendance`, {
+          params: { guildId }
+        });
+
+        const isDkpEnabled = attendanceResponse.data.dkp_enabled;
+        const attendanceData = attendanceResponse.data.attendance || [];
+        
+        setAttendanceData(attendanceData);
+        setIsDkpEnabled(isDkpEnabled);
+      } catch (attendanceError) {
+        console.error('Failed to load attendance data:', attendanceError);
+        setAttendanceData([]);
+        setIsDkpEnabled(false);
+        
+        // Use mock data as a fallback until the endpoint is implemented
+        const mockAttendanceData = [
+          {
+            id: '1',
+            event: { title: 'Weekly Raid', event_time: new Date().toISOString() },
+            attended: true,
+            date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+            dkp_earned: 10
+          },
+          {
+            id: '2',
+            event: { title: 'Guild Meeting', event_time: new Date().toISOString() },
+            attended: true,
+            date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+            dkp_earned: 5
+          }
+        ];
+        
+        // Use mock data if the endpoint returns 404 (not implemented yet)
+        // This is temporary until the API endpoint is implemented
+        if (attendanceError.response && attendanceError.response.status === 404) {
+          console.log('Using mock attendance data until endpoint is implemented');
+          setAttendanceData(mockAttendanceData);
+        } else {
+          // For other errors, just set an empty array
+          setAttendanceData([]);
         }
-      ];
+      }
       
-      setAttendanceData(mockAttendanceData);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load member data:', error);
@@ -340,7 +366,7 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
       });
       
       if (response.status === 200) {
-        // Update local state
+        // If provided, call the onUpdate prop to update the parent component
         if (onUpdate) {
           onUpdate({
             ...member,
@@ -348,8 +374,16 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
           });
         }
         
-        // Close the dialog
+        // Update the local member object to show the updated name
+        // Change starts here
+        member.username = newName; // Directly update the member object (which is passed by reference)
+        
+        // Close the name edit dialog
         setNameEditOpen(false);
+        
+        // Force a refresh of the component's data from the server
+        // This ensures everything is in sync
+        loadMemberData();
       }
     } catch (error) {
       console.error('Error updating username:', error);
@@ -713,16 +747,16 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                             </Typography>
                           }
                         />
-                        {attendance.attended && attendance.dkp_earned > 0 && (
-                          <Chip 
-                            label={`+${attendance.dkp_earned} DKP`} 
-                            size="small"
-                            sx={{ 
-                              bgcolor: 'rgba(255, 215, 0, 0.2)',
-                              color: '#ffd700'
-                            }}
-                          />
-                        )}
+                        {attendance.attended && isDkpEnabled && attendance.dkp_earned > 0 && (
+                            <Chip 
+                              label={`+${attendance.dkp_earned} DKP`} 
+                              size="small"
+                              sx={{ 
+                                bgcolor: 'rgba(255, 215, 0, 0.2)',
+                                color: '#ffd700'
+                              }}
+                            />
+                          )}
                       </ListItem>
                     ))}
                   </List>

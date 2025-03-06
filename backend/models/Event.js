@@ -30,6 +30,10 @@ module.exports = (sequelize, DataTypes) => {
     description: {
       type: DataTypes.TEXT
     },
+    dkp_value: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
     event_time: {
       type: DataTypes.DATE,
       allowNull: false

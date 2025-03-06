@@ -1,4 +1,4 @@
-// EventPlanner/EventForm.jsx
+// EventForm.jsx
 import { useState } from 'react';
 import {
   Box,
@@ -9,8 +9,12 @@ import {
   DialogActions,
   Grid
 } from '@mui/material';
+import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 
 const EventForm = ({ onSubmit, onClose, initialData }) => {
+  const { settings } = useGuildSettings(); // Import and use the GuildSettings context
+  const isDkpEnabled = settings?.dkpEnabled === true;
+  
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     description: initialData?.description || '',
@@ -21,7 +25,8 @@ const EventForm = ({ onSubmit, onClose, initialData }) => {
     tanks: initialData?.tanks || 2,
     healers: initialData?.healers || 4,
     dps: initialData?.dps || 24,
-    requirements: initialData?.requirements || ''
+    requirements: initialData?.requirements || '',
+    dkpValue: initialData?.dkp_value || 0
   });
 
   const handleSubmit = () => {
@@ -156,6 +161,30 @@ const EventForm = ({ onSubmit, onClose, initialData }) => {
               }}
             />
           </Grid>
+
+          {/* Only show DKP field if enabled */}
+          {isDkpEnabled && (
+            <Grid item xs={12} md={6}>
+              <TextField
+                type="number"
+                fullWidth
+                label="DKP Value"
+                value={formData.dkpValue}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  dkpValue: parseInt(e.target.value) || 0
+                })}
+                sx={{ 
+                  '& .MuiInputLabel-root': { color: 'grey.300' },
+                  '& .MuiOutlinedInput-root': { 
+                    color: 'white',
+                    '& fieldset': { borderColor: 'grey.500' }
+                  }
+                }}
+              />
+            </Grid>
+          )}
+
         </Grid>
       </DialogContent>
       <DialogActions sx={{ bgcolor: '#1e1e1e', p: 2 }}>

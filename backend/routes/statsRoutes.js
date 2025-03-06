@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
+const db = require('../models');
 
 // Authentication middleware
 const isAuthenticated = (req, res, next) => {
@@ -9,6 +10,59 @@ const isAuthenticated = (req, res, next) => {
   }
   next();
 };
+
+router.get('/user/:userId/attendance', isAuthenticated, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const guildId = req.guildId || req.query.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // First, check if DKP is enabled for this guild
+    const guild = await db.Guild.findByPk(guildId);
+    const isDkpEnabled = guild?.dkp_enabled === true;
+    
+    // Get events the user has participated in
+    const eventParticipation = await db.EventParticipant.findAll({
+      where: { 
+        user_id: userId,
+        guild_id: guildId
+      },
+      include: [{
+        model: db.Event,
+        attributes: ['id', 'title', 'event_time', 'description', 'dkp_value']
+      }],
+      order: [['created_at', 'DESC']],
+      limit: 20 // Limit to recent events
+    });
+    
+    // Format the response
+    const attendanceData = eventParticipation.map(participation => ({
+      id: participation.id,
+      event: {
+        id: participation.Event?.id,
+        title: participation.Event?.title || 'Unknown Event',
+        event_time: participation.Event?.event_time
+      },
+      attended: true, // Since these are participation records
+      date: participation.Event?.event_time || participation.created_at,
+      role: participation.role,
+      // Only include DKP if the feature is enabled
+      ...(isDkpEnabled && { dkp_earned: participation.Event?.dkp_value || 10 })
+    }));
+    
+    // Add DKP status to the response
+    res.json({
+      dkp_enabled: isDkpEnabled,
+      attendance: attendanceData
+    });
+  } catch (error) {
+    console.error('Error fetching user attendance:', error);
+    res.status(500).json({ error: 'Failed to fetch attendance data' });
+  }
+});
 
 
 const getMemberStats = async (req, res) => {

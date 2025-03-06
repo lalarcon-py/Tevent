@@ -704,27 +704,13 @@ router.put('/members/:userId/update-name', async (req, res) => {
     // Ensure we're in the public schema
     await sequelize.query(`SET search_path TO public`, { transaction: t });
     
-    // Update the user record
+    // Update the user record in the public schema
     await db.User.update({ 
       username 
     }, { 
       where: { id: userId },
       transaction: t 
     });
-    
-    // Also update in the guild-specific schema if needed
-    if (guildId) {
-      const guildSchema = `guild_${guildId}`;
-      await sequelize.query(
-        `SET search_path TO "${guildSchema}";
-         UPDATE users SET username = :username WHERE id = :userId;
-         SET search_path TO public;`,
-        { 
-          replacements: { username, userId },
-          transaction: t 
-        }
-      );
-    }
     
     await t.commit();
     
