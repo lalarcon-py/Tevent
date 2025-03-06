@@ -302,61 +302,16 @@ app.get('/api/members', async (req, res) => {
 
 // PUT endpoint for updating members with proper validation
 app.put('/api/members/:id', async (req, res) => {
-  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Not authenticated' });
-
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { id: _, guildId, ...updateData } = req.body;
-
-    // Require a guild ID parameter
-    if (!guildId) {
-      await t.rollback();
-      return res.status(400).json({ error: 'Guild ID is required' });
-    }
-
-    // Check if user has permission in this guild
-    const userMembership = await db.GuildMember.findOne({
-      where: {
-        guild_id: guildId,
-        user_id: req.user.id
-      }
-    });
-
-    if (!userMembership) {
-      await t.rollback();
-      return res.status(403).json({ error: 'Not authorized in this guild' });
-    }
-
-    // Find the member's record to update
-    const memberRecord = await db.GuildMember.findOne({
-      where: {
-        guild_id: guildId,
-        user_id: id
-      }
-    });
-
-    if (!memberRecord) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Member not found in this guild' });
-    }
-
-    // Find the user
-    const user = await db.User.findByPk(id);
-    if (!user) {
-      await t.rollback();
-      return res.status(404).json({ error: 'Member not found' });
-    }
-
-    // Format the builds for PostgreSQL
-    const buildsJson = JSON.stringify(updateData.builds);
-
-    // Use raw query to ensure proper array handling
+    const { id: _, guildId, role, ...updateData } = req.body;
+    
+    // First update the User table (as it's currently doing)
     await sequelize.query(
       `UPDATE users SET 
         discord_id = :discord_id,
         username = :username,
-        role = :role,
         status = :status,
         avatar_url = :avatar_url,
         builds = :builds::jsonb,
@@ -366,11 +321,10 @@ app.put('/api/members/:id', async (req, res) => {
       {
         replacements: { 
           id,
-          discord_id: updateData.discordId || updateData.discord_id, // Handle both naming formats
+          discord_id: updateData.discordId || updateData.discord_id,
           username: updateData.username,
-          role: updateData.role,
           status: updateData.status || 'Active',
-          avatar_url: updateData.avatarUrl || updateData.avatar_url, // Handle both naming formats
+          avatar_url: updateData.avatarUrl || updateData.avatar_url,
           builds: JSON.stringify(updateData.builds),
           combat_power: updateData.combat_power || null
         },
@@ -378,28 +332,48 @@ app.put('/api/members/:id', async (req, res) => {
         transaction: t
       }
     );
-
+    
+    // IMPORTANT: Add this code to update the GuildMember table's role
+    if (role) {
+      await sequelize.query(
+        `UPDATE guild_members SET 
+          role = :role,
+          updated_at = NOW()
+         WHERE user_id = :id AND guild_id = :guildId`,
+        {
+          replacements: { 
+            id,
+            guildId,
+            role
+          },
+          type: sequelize.QueryTypes.UPDATE,
+          transaction: t
+        }
+      );
+    }
+    
+    // Commit and return updated user
     await t.commit();
-
-    // Fetch and return the updated record
-    const updatedUser = await db.User.findByPk(id, {
-      attributes: ['id', 'discord_id', 'username', 'role', 'status', 'avatar_url', 'builds', 'combat_power']
+    
+    // Fetch user with current role from GuildMember
+    const memberData = await db.GuildMember.findOne({
+      where: {
+        user_id: id,
+        guild_id: guildId
+      },
+      attributes: ['role']
     });
-
-    console.log('Updated user:', JSON.stringify(updatedUser.toJSON(), null, 2));
-    res.json(updatedUser);
-   
+    
+    const userData = await db.User.findByPk(id);
+    
+    res.json({
+      ...userData.toJSON(),
+      role: memberData.role
+    });
   } catch (error) {
-    console.error('Update error:', {
-      message: error.message,
-      stack: error.stack,
-      sql: error.sql
-    });
     if (!t.finished) await t.rollback();
-    res.status(500).json({ 
-      error: 'Update failed',
-      details: error.original?.message || error.message 
-    });
+    console.error('Update error:', error);
+    res.status(500).json({ error: 'Update failed' });
   }
 });
 
