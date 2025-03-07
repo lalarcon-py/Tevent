@@ -18,6 +18,9 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import GroupIcon from '@mui/icons-material/Group';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { format, parseISO, isPast } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -26,6 +29,8 @@ const EventSummaries = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const [successMessage, setSuccessMessage] = useState(null);
+  const { user: currentUser } = useAuth();
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -40,9 +45,14 @@ const EventSummaries = () => {
         }
         
         const data = await response.json();
-        // Sort events by date (soonest first) and filter out past events
+        
+        // Ensure we're properly filtering upcoming events
         const upcomingEvents = data
-          .filter(event => !isPast(new Date(event.event_time)))
+          .filter(event => {
+            const eventDate = new Date(event.event_time);
+            const now = new Date();
+            return eventDate > now; // This ensures we only get future events
+          })
           .sort((a, b) => new Date(a.event_time) - new Date(b.event_time));
         
         setEvents(upcomingEvents);
@@ -56,6 +66,159 @@ const EventSummaries = () => {
     
     fetchEvents();
   }, []);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/api/events`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch events');
+      }
+      
+      const data = await response.json();
+      
+      // Filter for upcoming events only
+      const upcomingEvents = data
+        .filter(event => {
+          const eventDate = new Date(event.event_time);
+          const now = new Date();
+          return eventDate > now;
+        })
+        .sort((a, b) => new Date(a.event_time) - new Date(b.event_time));
+      
+      setEvents(upcomingEvents);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setError('Failed to load events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signUpWithPrimaryBuild = async (eventId) => {
+    try {
+      setLoading(true);
+      
+      // Get current user data to determine primary build
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Check if user has builds
+      if (!userData.builds || userData.builds.length === 0) {
+        throw new Error("No primary build found. Please set up your builds first.");
+      }
+      
+      // Get the primary build
+      const primaryBuild = userData.builds[0];
+      
+      // Determine role based on spec
+      let role;
+      if (primaryBuild.spec === 'Tank') {
+        role = 'TANK';
+      } else if (primaryBuild.spec === 'Healer') {
+        role = 'HEALER';
+      } else {
+        role = 'DPS';
+      }
+      
+      // Send the signup request
+      const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          role,
+          guildId: localStorage.getItem('guildId')
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to sign up');
+      }
+      
+      // Refresh the events data
+      fetchEvents();
+      
+      // Show success message
+      setSuccessMessage(`Successfully signed up as ${role} for the event`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
+    } catch (error) {
+      console.error('Error signing up:', error);
+      setError(error.message || 'Failed to sign up for event');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveParticipant = async (userId, eventId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          userId,
+          guildId: localStorage.getItem('guildId')
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove participant');
+      }
+    } catch (error) {
+      console.error('Error removing participant:', error);
+      throw error;
+    }
+  };
+
+
+  const markAsAbsent = async (eventId) => {
+    try {
+      // Directly mark as absent without checking participation
+      const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          role: 'ABSENT',
+          guildId: localStorage.getItem('guildId')
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to mark as absent');
+      }
+      
+      // Refresh the events data
+      await fetchEvents();
+      
+      setSuccessMessage("You've been marked as absent for this event");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Error marking as absent:', error);
+      setError(error.message || 'Failed to mark as absent');
+    }
+  };
 
   const navigateToTeamPlanner = (eventId) => {
     navigate(`/events/${eventId}/team-planner`);
@@ -86,7 +249,25 @@ const EventSummaries = () => {
         </Typography>
       </Box>
       
-      {events.length === 0 ? (
+      {/* Success message */}
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {successMessage}
+        </Alert>
+      )}
+      
+      {/* Error message */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : events.length === 0 ? (
         <Box sx={{ textAlign: 'center', p: 4, bgcolor: '#1e1e1e', borderRadius: 2 }}>
           <Typography variant="h6" color="text.secondary">
             No upcoming events
@@ -266,22 +447,44 @@ const EventSummaries = () => {
                   
                   <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.12)' }} />
                   
-                  <CardActions sx={{ p: 2 }}>
+                  <CardActions sx={{ p: 2, flexDirection: 'column', alignItems: 'stretch' }}>
                     <Button 
                       variant="contained" 
                       fullWidth
-                      onClick={() => navigateToTeamPlanner(event.id)}
+                      onClick={() => signUpWithPrimaryBuild(event.id)}
+                      startIcon={<PersonAddIcon />}
                       sx={{
                         bgcolor: '#90caf9',
                         color: '#212121',
                         fontWeight: 500,
+                        mb: 1,
                         '&:hover': {
                           bgcolor: '#64b5f6'
                         }
                       }}
                     >
-                      View Teams & Sign Up
+                      Sign Up with Primary Build
                     </Button>
+                    
+                    <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
+                      <Button 
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DoNotDisturbIcon />}
+                        onClick={() => markAsAbsent(event.id)}
+                        sx={{ flex: 1 }}
+                      >
+                        Mark as Absent
+                      </Button>
+                      
+                      <Button 
+                        variant="outlined"
+                        onClick={() => navigateToTeamPlanner(event.id)}
+                        sx={{ flex: 1 }}
+                      >
+                        View Teams
+                      </Button>
+                    </Box>
                   </CardActions>
                 </Card>
               </Grid>

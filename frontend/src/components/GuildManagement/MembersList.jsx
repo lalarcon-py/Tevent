@@ -313,11 +313,31 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
   ];
 
   const handleAddBuild = () => {
+    // Check if there are already 2 builds
+    if (editedMember.builds.length >= 2) {
+      alert("You can only have a maximum of 2 builds.");
+      return;
+    }
+    
+    // Default new build
+    const newBuild = { primary: 'Greatsword', secondary: 'Crossbow', spec: 'DPS' };
+    
+    // Check if this build is unique (prevent duplicates)
+    const isDuplicate = editedMember.builds.some(build => 
+      (build.primary === newBuild.primary && build.secondary === newBuild.secondary) ||
+      (build.primary === newBuild.secondary && build.secondary === newBuild.primary)
+    );
+    
+    if (isDuplicate) {
+      alert("This weapon combination already exists. Please choose a different combination.");
+      return;
+    }
+    
     setEditedMember({
       ...editedMember,
       builds: [
         ...editedMember.builds,
-        { primary: 'Greatsword', secondary: 'Crossbow', spec: 'DPS' }
+        newBuild
       ]
     });
   };
@@ -332,12 +352,44 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
 
   const handlePrimaryWeaponChange = (buildIndex, value) => {
     const updatedBuilds = [...editedMember.builds];
+    
+    // Check if changing this would create a duplicate
+    const isDuplicate = editedMember.builds.some((build, index) => {
+      if (index === buildIndex) return false; // Skip current build
+      
+      return (
+        (build.primary === value && build.secondary === updatedBuilds[buildIndex].secondary) ||
+        (build.primary === updatedBuilds[buildIndex].secondary && build.secondary === value)
+      );
+    });
+    
+    if (isDuplicate) {
+      alert("This would create a duplicate build. Please choose a different weapon.");
+      return;
+    }
+    
     updatedBuilds[buildIndex].primary = value;
     setEditedMember({ ...editedMember, builds: updatedBuilds });
   };
 
   const handleSecondaryWeaponChange = (buildIndex, value) => {
     const updatedBuilds = [...editedMember.builds];
+    
+    // Check if changing this would create a duplicate
+    const isDuplicate = editedMember.builds.some((build, index) => {
+      if (index === buildIndex) return false; // Skip current build
+      
+      return (
+        (build.secondary === value && build.primary === updatedBuilds[buildIndex].primary) ||
+        (build.secondary === updatedBuilds[buildIndex].primary && build.primary === value)
+      );
+    });
+    
+    if (isDuplicate) {
+      alert("This would create a duplicate build. Please choose a different weapon.");
+      return;
+    }
+    
     updatedBuilds[buildIndex].secondary = value;
     setEditedMember({ ...editedMember, builds: updatedBuilds });
   };

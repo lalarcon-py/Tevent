@@ -25,6 +25,8 @@ import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import { format } from 'date-fns';
 import EventForm from './EventForm';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 
 const PARTICIPANTS_PER_PAGE = 10;
 const API_URL = process.env.REACT_APP_API_URL;
@@ -38,6 +40,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const { settings } = useGuildSettings();
   const isDkpEnabled = settings?.dkpEnabled === true;
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -102,6 +106,57 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     } catch (error) {
       console.error('Error formatting date:', error);
       return 'Invalid date';
+    }
+  };
+
+  const signUpWithPrimaryBuild = async () => {
+    try {
+      setLoading(true); // Now properly defined
+      if (!currentUser) {
+        setError('You must be logged in to sign up');
+        return;
+      }
+  
+      // Get current user data to determine primary build
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Check if user has builds
+      if (!userData.builds || userData.builds.length === 0) {
+        setError("Could not find your primary build. Please set up your builds first.");
+        return;
+      }
+      
+      // Get the primary build (first build)
+      const primaryBuild = userData.builds[0];
+      
+      // Determine role based on the build's spec
+      let role;
+      if (primaryBuild.spec === 'Tank') {
+        role = 'TANK';
+      } else if (primaryBuild.spec === 'Healer') {
+        role = 'HEALER';
+      } else {
+        role = 'DPS';
+      }
+      
+      // Sign up with the determined role
+      await handleSignUp(role);
+      setSuccessMessage(`Successfully signed up as ${role}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
+    } catch (error) {
+      console.error('Error signing up with primary build:', error);
+      setError(error.message || 'Failed to sign up with primary build');
+    } finally {
+      setLoading(false); // Now properly defined
     }
   };
 
@@ -202,6 +257,71 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     } catch (error) {
       console.error('Error removing participant:', error);
       setError(error.message);
+    }
+  };
+
+  const markAsAbsent = async (eventId) => {
+    try {
+      // Directly mark as absent without checking participation first
+      const response = await fetch(`${API_URL}/api/events/${eventId || event.id}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          role: 'ABSENT',
+          guildId: localStorage.getItem('guildId')
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to mark as absent');
+      }
+      
+      // Refresh event data
+      if (onEventUpdate) {
+        await onEventUpdate();
+      }
+      
+      setSuccessMessage("You've been marked as absent for this event");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Error marking as absent:', error);
+      setError(error.message || 'Failed to mark as absent');
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/api/events`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch events');
+      }
+      
+      const data = await response.json();
+      
+      // Filter for upcoming events only
+      const upcomingEvents = data
+        .filter(event => {
+          const eventDate = new Date(event.event_time);
+          const now = new Date();
+          return eventDate > now;
+        })
+        .sort((a, b) => new Date(a.event_time) - new Date(b.event_time));
+      
+      // Call onEventUpdate instead of using setEvents
+      onEventUpdate();
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setError('Failed to load events');
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -320,7 +440,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             to={`/events/${event.id}/team-planner`}
             style={{ textDecoration: 'none' }}
           >
-            <Button variant="contained" color="primary">
+            <Button variant="contained" color="primary" sx={{ mr: 1 }}>
               Team Planner
             </Button>
           </Link>
@@ -333,7 +453,27 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           </Button>
         </Box>
       </Box>
-
+  
+      {/* Success message */}
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {successMessage}
+        </Alert>
+      )}
+      
+      {/* Error message */}
+      {error && (
+        <Snackbar 
+          open={!!error} 
+          autoHideDuration={6000} 
+          onClose={() => setError(null)}
+        >
+          <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+            {error}
+          </Alert>
+        </Snackbar>
+      )}
+  
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Typography variant="subtitle1" color="grey.400">Time</Typography>
@@ -343,7 +483,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             <Typography variant="subtitle1" color="grey.400">Location</Typography>
             <Typography>{event.location}</Typography>
           </Box>
-
+  
           <Box mt={2}>
             <Typography variant="subtitle1" color="grey.400">Description</Typography>
             <Typography>{event.description}</Typography>
@@ -359,53 +499,82 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             </Box>
           )}
         </Grid>
-
+  
         <Grid item xs={12} md={6}>
           <Box mb={3}>
             <Typography variant="h6" mb={2}>Roles Summary</Typography>
-            <Grid container spacing={2}>
+            <Grid container spacing={2} direction="column">
+              <Grid item container spacing={1}>
+                <Grid item>
+                  <Chip 
+                    label={`Tanks: ${participantsByRole.TANK}`}
+                    color="primary"
+                    onClick={() => handleSignUp('TANK')}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'primary.dark'
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item>
+                  <Chip 
+                    label={`Healers: ${participantsByRole.HEALER}`}
+                    color="success"
+                    onClick={() => handleSignUp('HEALER')}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'success.dark'
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item>
+                  <Chip 
+                    label={`DPS: ${participantsByRole.DPS}`}
+                    color="error"
+                    onClick={() => handleSignUp('DPS')}
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'error.dark'
+                      }
+                    }}
+                  />
+                </Grid>
+              </Grid>
+              
+              {/* New Sign Up with Primary Build Button */}
               <Grid item>
-                <Chip 
-                  label={`Tanks: ${participantsByRole.TANK}`}
+                <Button
+                  variant="contained"
                   color="primary"
-                  onClick={() => handleSignUp('TANK')}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: 'primary.dark'
-                    }
-                  }}
-                />
+                  fullWidth
+                  onClick={signUpWithPrimaryBuild}
+                  startIcon={<PersonAddIcon />}
+                  sx={{ mb: 1 }}
+                >
+                  Sign Up with Primary Build
+                </Button>
               </Grid>
+              
+              {/* New Mark as Absent Button */}
               <Grid item>
-                <Chip 
-                  label={`Healers: ${participantsByRole.HEALER}`}
-                  color="success"
-                  onClick={() => handleSignUp('HEALER')}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: 'success.dark'
-                    }
-                  }}
-                />
-              </Grid>
-              <Grid item>
-                <Chip 
-                  label={`DPS: ${participantsByRole.DPS}`}
+                <Button
+                  variant="outlined"
                   color="error"
-                  onClick={() => handleSignUp('DPS')}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: 'error.dark'
-                    }
-                  }}
-                />
+                  fullWidth
+                  onClick={markAsAbsent}
+                  startIcon={<DoNotDisturbIcon />}
+                >
+                  Mark as Absent
+                </Button>
               </Grid>
             </Grid>
           </Box>
-
+  
           <Box>
             <Typography variant="h6" mb={2}>
               Participants ({event.participants?.length || 0})
@@ -430,7 +599,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           </Box>
         </Grid>
       </Grid>
-
+  
       <Dialog 
         open={isEditDialogOpen} 
         onClose={() => setIsEditDialogOpen(false)}
@@ -438,39 +607,39 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         fullWidth
       >
         <EventForm 
-            initialData={{
-              ...event,
-              eventTime: event.event_time,
-              dkpValue: event.dkp_value
-            }}
-            onSubmit={async (updatedData) => {
-              try {
-                const response = await fetch(`${API_URL}/api/events/${event.id}`, {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  credentials: 'include',
-                  body: JSON.stringify({
-                    ...updatedData,
-                    event_time: updatedData.eventTime,
-                    dkp_value: updatedData.dkpValue,
-                    guildId: guildId
-                  })
-                });
-                
-                if (!response.ok) throw new Error('Failed to update event');
-                await onEventUpdate();
-                setIsEditDialogOpen(false);
-              } catch (error) {
-                console.error('Error updating event:', error);
-                setError(error.message);
-              }
-            }}
-            onClose={() => setIsEditDialogOpen(false)}
-          />
+          initialData={{
+            ...event,
+            eventTime: event.event_time,
+            dkpValue: event.dkp_value
+          }}
+          onSubmit={async (updatedData) => {
+            try {
+              const response = await fetch(`${API_URL}/api/events/${event.id}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  ...updatedData,
+                  event_time: updatedData.eventTime,
+                  dkp_value: updatedData.dkpValue,
+                  guildId: guildId
+                })
+              });
+              
+              if (!response.ok) throw new Error('Failed to update event');
+              await onEventUpdate();
+              setIsEditDialogOpen(false);
+            } catch (error) {
+              console.error('Error updating event:', error);
+              setError(error.message);
+            }
+          }}
+          onClose={() => setIsEditDialogOpen(false)}
+        />
       </Dialog>
-
+  
       {/* Delete event button */}
       <DialogActions>
         <Button
@@ -482,16 +651,6 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           {isDeleting ? 'Deleting...' : 'Delete Event'}
         </Button>
       </DialogActions>
-
-      <Snackbar 
-        open={!!error} 
-        autoHideDuration={6000} 
-        onClose={() => setError(null)}
-      >
-        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-          {error}
-        </Alert>
-      </Snackbar>
     </DialogContent>
   );
 };

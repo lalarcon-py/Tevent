@@ -4,12 +4,13 @@ import {
   Box, 
   Grid, 
   Typography, 
-  IconButton
+  IconButton,
+  Button
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
-const CalendarView = ({ events, onEventClick }) => {
+const CalendarView = ({ events, onEventClick, onSignUp, onMarkAbsent }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const getDaysInMonth = (date) => {
@@ -126,25 +127,82 @@ const CalendarView = ({ events, onEventClick }) => {
             ))}
           </Box>
         )}
-
+    
         {hasEvents && (
-          <Typography
-            sx={{
-              color: 'rgba(255, 255, 255, 0.6)',
-              fontSize: '0.875rem',
-              mt: 1,
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              transition: 'color 0.2s ease',
-              '.MuiBox-root:hover &': {
-                color: 'rgba(255, 255, 255, 0.87)'
-              }
-            }}
-          >
-            {dayEvents[0].title}
-          </Typography>
+          <>
+            <Typography
+              sx={{
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: '0.875rem',
+                mt: 1,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                transition: 'color 0.2s ease',
+                '.MuiBox-root:hover &': {
+                  color: 'rgba(255, 255, 255, 0.87)'
+                }
+              }}
+            >
+              {dayEvents[0].title}
+            </Typography>
+            
+            <Box sx={{ display: 'flex', gap: '4px', mt: 1, justifyContent: 'space-between' }}>
+              <Button
+                variant="outlined"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (onSignUp) {
+                    console.log("Sign up clicked for event:", dayEvents[0].id);
+                    onSignUp(dayEvents[0].id);
+                  }
+                }}
+                sx={{
+                  fontSize: '0.75rem',
+                  padding: '1px 4px',
+                  color: '#90caf9',
+                  borderColor: '#90caf9',
+                  minWidth: 0,
+                  height: '20px',
+                  textTransform: 'none',
+                  '&:hover': {
+                    backgroundColor: 'rgba(144, 202, 249, 0.1)',
+                    borderColor: '#90caf9'
+                  }
+                }}
+              >
+                Sign Up
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (onMarkAbsent) {
+                    console.log("Absent clicked for event:", dayEvents[0].id);
+                    onMarkAbsent(dayEvents[0].id);
+                  }
+                }}
+                sx={{
+                  fontSize: '0.75rem',
+                  padding: '1px 4px',
+                  color: '#f44336',
+                  borderColor: '#f44336',
+                  minWidth: 0,
+                  height: '20px',
+                  textTransform: 'none',
+                  '&:hover': {
+                    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                    borderColor: '#f44336'
+                  }
+                }}
+              >
+                Absent
+              </Button>
+            </Box>
+          </>
         )}
       </Box>
     );
