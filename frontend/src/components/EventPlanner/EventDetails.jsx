@@ -18,7 +18,8 @@ import {
   Snackbar,
   Paper,
   Pagination,
-  DialogActions
+  DialogActions,
+  Avatar
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
@@ -42,6 +43,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const isDkpEnabled = settings?.dkpEnabled === true;
   const [successMessage, setSuccessMessage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [absentees, setAbsentees] = useState([]);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -82,6 +84,35 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     fetchGuildId();
   }, []);
 
+  const fetchAbsentees = async () => {
+    try {
+      if (!event?.id) return;
+      
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) return;
+      
+      console.log('Fetching absentees for event:', event.id);
+      
+      const response = await fetch(`${API_URL}/api/events/${event.id}/absentees?guildId=${guildId}`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Absentees data:', data);
+        setAbsentees(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching absentees:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (event?.id) {
+      fetchAbsentees();
+    }
+  }, [event]);
+
   const totalPages = Math.ceil((event.participants?.length || 0) / PARTICIPANTS_PER_PAGE);
   const paginatedParticipants = event.participants?.slice(
     (page - 1) * PARTICIPANTS_PER_PAGE,
@@ -111,7 +142,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const signUpWithPrimaryBuild = async () => {
     try {
-      setLoading(true); // Now properly defined
+      setLoading(true);
       if (!currentUser) {
         setError('You must be logged in to sign up');
         return;
@@ -156,7 +187,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       console.error('Error signing up with primary build:', error);
       setError(error.message || 'Failed to sign up with primary build');
     } finally {
-      setLoading(false); // Now properly defined
+      setLoading(false);
     }
   };
 
@@ -260,23 +291,103 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     }
   };
 
-  const markAsAbsent = async (eventId) => {
+  const markAsAbsent = async (eventIdParam) => {
     try {
-      // Directly mark as absent without checking participation first
-      const response = await fetch(`${API_URL}/api/events/${eventId || event.id}/signup`, {
+      // Use the parameter directly if provided, otherwise use event.id
+      const eventIdString = eventIdParam || event.id;
+      
+      if (!eventIdString) {
+        throw new Error('Invalid event ID');
+      }
+      
+      console.log('Marking absence for event ID:', eventIdString);
+      
+      // Get current user data
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Get guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        throw new Error('Guild ID not found. Please reload the page.');
+      }
+      
+      // Check if user has builds
+      if (!userData.builds || userData.builds.length === 0) {
+        throw new Error("Could not find your primary build. Please set up your builds first.");
+      }
+      
+      // Determine role based on build spec
+      let role;
+      const primaryBuild = userData.builds[0];
+      if (primaryBuild.spec === 'Tank') {
+        role = 'TANK';
+      } else if (primaryBuild.spec === 'Healer') {
+        role = 'HEALER';
+      } else {
+        role = 'DPS';
+      }
+      
+      // First, remove existing participation if any
+      try {
+        const deleteResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            userId: userData.id,
+            guildId: guildId
+          })
+        });
+      } catch (error) {
+        console.warn('Error removing existing participation:', error);
+        // Continue anyway - they might not be signed up yet
+      }
+      
+      // Sign up with the role
+      const signupResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({ 
-          role: 'ABSENT',
-          guildId: localStorage.getItem('guildId')
+          role,
+          guildId: guildId
         })
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
+      if (!signupResponse.ok) {
+        const errorData = await signupResponse.json();
+        console.error('Signup response error:', errorData);
+        throw new Error(errorData.error || 'Failed to process signup');
+      }
+      
+      // Then immediately delete to mark as absent
+      const absentResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          userId: userData.id,
+          guildId: guildId,
+          markAsAbsent: true  // Add this flag
+        })
+      });
+      
+      if (!absentResponse.ok) {
+        const errorData = await absentResponse.json();
         throw new Error(errorData.error || 'Failed to mark as absent');
       }
       
@@ -284,6 +395,9 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       if (onEventUpdate) {
         await onEventUpdate();
       }
+      
+      // Fetch absentees
+      await fetchAbsentees();
       
       setSuccessMessage("You've been marked as absent for this event");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -546,7 +660,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                 </Grid>
                 <Grid item>
                   <Chip 
-                    label={`Absent: ${event.absentees?.length || 0}`}
+                    label={`Absent: ${absentees?.length || 0}`}
                     color="default"
                     sx={{
                       bgcolor: '#555',
@@ -574,11 +688,11 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
               
               {/* New Mark as Absent Button */}
               <Grid item>
-                <Button
+              <Button
                   variant="outlined"
                   color="error"
                   fullWidth
-                  onClick={markAsAbsent}
+                  onClick={() => markAsAbsent(event.id)}  // Use arrow function to pass event ID directly
                   startIcon={<DoNotDisturbIcon />}
                 >
                   Mark as Absent
@@ -587,7 +701,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             </Grid>
           </Box>
   
-          <Box>
+          <Box mb={3}>
             <Typography variant="h6" mb={2}>
               Participants ({event.participants?.length || 0})
             </Typography>
@@ -607,6 +721,28 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                   }}
                 />
               </Box>
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="h6" mb={2}>
+              Absents ({absentees?.length || 0})
+            </Typography>
+            {absentees && absentees.length > 0 ? (
+              <Box>
+                {absentees.map(user => (
+                  <Chip
+                    key={user.id || user.User?.id}
+                    avatar={<Avatar src={user.avatar_url || user.User?.avatar_url} />}
+                    label={user.username || user.User?.username}
+                    sx={{ m: 0.5 }}
+                  />
+                ))}
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No absents recorded
+              </Typography>
             )}
           </Box>
         </Grid>

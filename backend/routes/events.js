@@ -69,7 +69,6 @@ router.get('/:eventId/absentees', async (req, res) => {
     }
     
     // Query for users who have explicitly marked themselves as absent
-    // This would require tracking absences in your database
     const absentees = await db.EventAbsentee.findAll({
       where: { 
         event_id: eventId,
@@ -144,7 +143,7 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const eventId = req.params.id;
-    const userId = req.body.userId || req.user.id; // Allow removing self or specified user
+    const userId = req.body.userId || req.user.id;
     
     // Try to get guildId from multiple places
     let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
@@ -158,7 +157,6 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
       
       if (guildMember) {
         guildId = guildMember.guild_id;
-        console.log(`Found user guild: ${guildId}`);
       }
     }
     
@@ -167,6 +165,10 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
       return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
     }
 
+    // Check if removal is part of marking as absent
+    const isMarkingAbsent = req.body.markAsAbsent === true;
+
+    // Remove the participant
     const deletionCount = await EventParticipant.destroy({
       where: {
         event_id: eventId,
@@ -179,6 +181,15 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
     if (deletionCount === 0) {
       await t.rollback();
       return res.status(404).json({ error: 'Participant not found' });
+    }
+
+    // If marking as absent, create an absentee record
+    if (isMarkingAbsent) {
+      await db.EventAbsentee.create({
+        event_id: eventId,
+        user_id: userId,
+        guild_id: guildId
+      }, { transaction: t });
     }
 
     await t.commit();
