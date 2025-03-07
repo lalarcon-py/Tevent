@@ -7,16 +7,34 @@ import {
   Grid,
   Typography,
   FormHelperText,
-  CircularProgress
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import { CardElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
-// Initialize Stripe
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
+// Initialize Stripe with proper error handling
+const getStripePromise = () => {
+  const key = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+  if (!key) {
+    console.error("Stripe publishable key is missing!");
+    return null;
+  }
+  return loadStripe(key);
+};
+
+const stripePromise = getStripePromise();
 
 // Wrapper component to provide Stripe context
 export default function PaymentMethodFormWrapper(props) {
+  if (!stripePromise) {
+    return (
+      <Alert severity="error" sx={{ mb: 3 }}>
+        Payment system configuration error. Please contact support.
+      </Alert>
+    );
+  }
+  
   return (
     <Elements stripe={stripePromise}>
       <PaymentMethodForm {...props} />
@@ -66,6 +84,11 @@ function PaymentMethodForm({ onSubmit, isProcessing }) {
     
     // Create payment method
     const cardElement = elements.getElement(CardElement);
+    
+    if (!cardElement) {
+      setCardError('Card element not found. Please refresh and try again.');
+      return;
+    }
     
     const { error, paymentMethod } = await stripe.createPaymentMethod({
       type: 'card',
