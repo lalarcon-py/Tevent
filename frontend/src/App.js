@@ -1,6 +1,6 @@
 // frontend/src/App.js
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import AppHeader from './components/AppHeader';
@@ -25,6 +25,9 @@ import { GuildSettingsProvider } from './contexts/GuildSettingsContext';
 import GuildApplications from './pages/GuildApplications';
 import GuildSetupPage from './pages/GuildSetupPage';
 import LandingPage from './pages/LandingPage';
+import { BillingProvider, useBilling } from './contexts/BillingContext';
+import BillingPage from './pages/BillingPage';
+import InactiveGuildOverlay from './components/Billing/InactiveGuildOverlay';
   
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -62,6 +65,32 @@ function AppContent() {
     
     return () => clearInterval(interval);
   }, [checkAuth]);
+
+  const InactiveGuildOverlayWrapper = () => {
+    const { isGuildActive, subscriptionStatus, subscriptionData } = useBilling();
+    const location = useLocation();
+    
+    // Don't show overlay on billing page or non-guild pages
+    const excludedPaths = ['/billing', '/login', '/guilds/setup', '/applications', '/auth-error'];
+    const shouldExclude = excludedPaths.some(path => location.pathname.includes(path));
+    
+    if (shouldExclude || isGuildActive()) {
+      return null;
+    }
+    
+    // Calculate days remaining until guild deletion
+    let daysRemaining = 0;
+    if (subscriptionData?.lastActiveDate) {
+      const lastActiveDate = new Date(subscriptionData.lastActiveDate);
+      const deletionDate = new Date(lastActiveDate);
+      deletionDate.setDate(deletionDate.getDate() + 14);
+      
+      const now = new Date();
+      daysRemaining = Math.max(0, Math.ceil((deletionDate - now) / (1000 * 60 * 60 * 24)));
+    }
+    
+    return <InactiveGuildOverlay daysRemaining={daysRemaining} />;
+  };
 
   // Check guild membership when auth state changes
   useEffect(() => {
@@ -225,6 +254,7 @@ function AppContent() {
           <Route path="/auth-error" element={<AuthError />} />
           <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
           <Route path="/gear-check" element={<GearCheck />} />
+          <Route path="/billing" element={<BillingPage />} />
         </Routes>
       </Box>
     </Router>
@@ -235,6 +265,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <AuthProvider>
+        <BillingProvider>
         <GuildProvider>
           <GuildSettingsProvider>
             <LootProvider>
@@ -246,6 +277,7 @@ function App() {
             </LootProvider>
           </GuildSettingsProvider>
         </GuildProvider>
+        </BillingProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -18,6 +18,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../../contexts/AuthContext';
 import LogoutButton from '../Auth/LogoutButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 
 const Navigation = ({ guildId }) => {
   const location = useLocation();
@@ -73,6 +74,11 @@ const Navigation = ({ guildId }) => {
       text: 'Gear Check',
       icon: <FormatListBulletedIcon />,
       path: '/gear-check'
+    },
+    {
+      text: 'Billing',
+      icon: <ReceiptIcon />,
+      path: '/billing'
     },
     
   ];

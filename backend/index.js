@@ -159,21 +159,28 @@ if (!validateGuildMembership) {
 // Non-guild specific routes
 app.delete('/api/user/delete', userController.deleteUser);
 
+// Billing routes
+const billingRoutes = require('./routes/billingRoutes');
+app.use('/api/billing', billingRoutes);
+app.use(guildActivityMiddleware);
+
+// User support
 app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 
+// General use routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/api/gear-checks', guildScopeMiddleware, validateGuildMembership, gearCheckRoutes);
-app.use('/api/wishlist', guildScopeMiddleware, validateGuildMembership, wishlistRoutes);
-app.use('/api/stats', guildScopeMiddleware, validateGuildMembership, statsRoutes);
-app.use('/api/guild-storage', guildScopeMiddleware, validateGuildMembership, guildStorageRouter);
-app.use('/api/waitlist', guildScopeMiddleware, validateGuildMembership, waitlistRouter);
-app.use('/api/items', guildScopeMiddleware, validateGuildMembership, itemsRouter);
-app.use('/api/events', guildScopeMiddleware, validateGuildMembership, eventsRouter);
-app.use('/api/teams', guildScopeMiddleware, validateGuildMembership, teamsRouter);
-app.use('/api/team-presets', guildScopeMiddleware, validateGuildMembership, teamPresetsRouter);
-app.use('/api/dashboard', guildScopeMiddleware, validateGuildMembership, dashboardRouter);
-app.use('/api/guild-applications', guildScopeMiddleware, validateGuildMembership, require('./routes/guildApplicationRoutes'));
+app.use('/api/gear-checks', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, gearCheckRoutes);
+app.use('/api/wishlist', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, wishlistRoutes);
+app.use('/api/stats', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, statsRoutes);
+app.use('/api/guild-storage', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, guildStorageRouter);
+app.use('/api/waitlist', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, waitlistRouter);
+app.use('/api/items', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, itemsRouter);
+app.use('/api/events', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, eventsRouter);
+app.use('/api/teams', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, teamsRouter);
+app.use('/api/team-presets', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, teamPresetsRouter);
+app.use('/api/dashboard', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware, dashboardRouter);
+app.use('/api/guild-applications', guildScopeMiddleware, validateGuildMembership, guildActivityMiddleware,  require('./routes/guildApplicationRoutes'));
 
 const guildSettingsController = require('./controllers/guildSettingsController');
 
