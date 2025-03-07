@@ -169,6 +169,176 @@ const EventPlanner = () => {
     }
   };
 
+  const handleSignUp = async (eventId) => {
+    try {
+      // Find the event in our events array
+      const event = events.find(e => e.id === eventId);
+      if (!event) {
+        setError("Event not found");
+        return;
+      }
+      
+      // Get user data to determine primary build
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Check if user has builds
+      if (!userData.builds || userData.builds.length === 0) {
+        setError("Could not find your primary build. Please set up your builds first.");
+        return;
+      }
+      
+      // Determine role based on the build's spec
+      let role;
+      const primaryBuild = userData.builds[0];
+      if (primaryBuild.spec === 'Tank') {
+        role = 'TANK';
+      } else if (primaryBuild.spec === 'Healer') {
+        role = 'HEALER';
+      } else {
+        role = 'DPS';
+      }
+      
+      // Sign up for the event
+      const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          role,
+          guildId
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to sign up');
+      }
+      
+      // Refresh events data
+      await fetchEvents();
+      
+    } catch (error) {
+      console.error('Error signing up for event:', error);
+      setError(error.message || 'Failed to sign up for event');
+    }
+  };
+
+  const handleMarkAbsent = async (eventId) => {
+    try {
+      // Find the event
+      const event = events.find(e => e.id === eventId);
+      if (!event) {
+        setError("Event not found");
+        return;
+      }
+  
+      // Get current user data 
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Check if user is already signed up for this event
+      const isAlreadySignedUp = event.participants && 
+                                event.participants.some(p => p.User?.id === userData.id);
+  
+      if (isAlreadySignedUp) {
+        // If already signed up, remove them from the event
+        const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            userId: userData.id,
+            guildId
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to mark as absent');
+        }
+      } else {
+        // If not signed up, we need to sign up first with a valid role
+        // Check if user has builds
+        if (!userData.builds || userData.builds.length === 0) {
+          setError("Could not find your primary build. Please set up your builds first.");
+          return;
+        }
+        
+        // Determine role based on the build's spec
+        let role;
+        const primaryBuild = userData.builds[0];
+        if (primaryBuild.spec === 'Tank') {
+          role = 'TANK';
+        } else if (primaryBuild.spec === 'Healer') {
+          role = 'HEALER';
+        } else {
+          role = 'DPS';
+        }
+        
+        // Sign up with a valid role
+        const signupResponse = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            role,
+            guildId
+          })
+        });
+        
+        if (!signupResponse.ok) {
+          const errorData = await signupResponse.json();
+          throw new Error(errorData.error || 'Failed to sign up for event');
+        }
+        
+        // Then immediately remove them (this marks them as "absent")
+        const deleteResponse = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            userId: userData.id,
+            guildId
+          })
+        });
+        
+        if (!deleteResponse.ok) {
+          const errorData = await deleteResponse.json();
+          throw new Error(errorData.error || 'Failed to mark as absent');
+        }
+      }
+      
+      // Refresh events data
+      await fetchEvents();
+      
+    } catch (error) {
+      console.error('Error marking as absent:', error);
+      setError(error.message || 'Failed to mark as absent');
+    }
+  };
 
   return (
     <Box>
@@ -204,6 +374,8 @@ const EventPlanner = () => {
           <CalendarView 
             events={events} 
             onEventClick={handleEventClick}
+            onSignUp={handleSignUp}
+            onMarkAbsent={handleMarkAbsent}
           />
 
           <Dialog 

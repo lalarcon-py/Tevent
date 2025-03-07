@@ -59,6 +59,35 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/:eventId/absentees', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const guildId = req.guildId || req.query.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Query for users who have explicitly marked themselves as absent
+    // This would require tracking absences in your database
+    const absentees = await db.EventAbsentee.findAll({
+      where: { 
+        event_id: eventId,
+        guild_id: guildId 
+      },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username', 'avatar_url']
+      }]
+    });
+    
+    res.json(absentees);
+  } catch (error) {
+    console.error('Error fetching absentees:', error);
+    res.status(500).json({ error: 'Failed to fetch absentees' });
+  }
+});
+
 // Event signup
 router.post('/:id/signup', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();

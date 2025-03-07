@@ -331,6 +331,7 @@ const TeamPlanner = () => {
   const [openPresetDialog, setOpenPresetDialog] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [guildId, setGuildId] = useState(null);
+  const [absentees, setAbsentees] = useState([]);
 
   // First useEffect for fetching initial data
   useEffect(() => {
@@ -374,6 +375,19 @@ const TeamPlanner = () => {
         }
     
         console.log('Found event data:', eventData);
+
+        try {
+          const absenteesResponse = await fetch(`${API_URL}/api/events/${eventId}/absentees?guildId=${guildId}`, {
+            credentials: 'include'
+          });
+          
+          if (absenteesResponse.ok) {
+            const absenteesData = await absenteesResponse.json();
+            setAbsentees(absenteesData);
+          }
+        } catch (error) {
+          console.error('Error fetching absentees:', error);
+        }
         
         // Extract participants from event data
         const participantsData = eventData.participants || [];
@@ -425,6 +439,39 @@ const TeamPlanner = () => {
     
     fetchGuildId();
   }, []);
+
+  const handleSignUpAbsentee = async (memberId, role) => {
+    try {
+      const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          userId: memberId,
+          role,
+          guildId
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to sign up member');
+      }
+      
+      // Update local state
+      const member = absentees.find(m => m.id === memberId);
+      if (member) {
+        setAbsentees(prev => prev.filter(m => m.id !== memberId));
+        setParticipants(prev => [...prev, {...member, role}]);
+      }
+      
+    } catch (error) {
+      console.error('Error signing up absentee:', error);
+      setError(error.message || 'Failed to sign up member');
+    }
+  };
 
   const handleEditTeam = async (updatedTeam) => {
     try {
@@ -892,6 +939,67 @@ const TeamPlanner = () => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={3}>
           <ParticipantPool participants={participants} />
+          
+          {/* Absentees Section */}
+          <Paper sx={{ p: 2, mt: 2, bgcolor: '#1e1e1e' }}>
+            <Typography variant="h6" sx={{ 
+              color: 'white', 
+              mb: 1,
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              pb: 0.5
+            }}>
+              Absent Members ({absentees?.length || 0})
+            </Typography>
+            {absentees && absentees.length > 0 ? (
+              <Box sx={{ ml: 1 }}>
+                {absentees.map(member => (
+                  <Box
+                    key={member.id || member.user_id}
+                    sx={{
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: 1,
+                      p: 0.5,
+                      mb: 0.5,
+                      bgcolor: '#555',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <Typography 
+                      variant="body2"
+                      sx={{
+                        fontSize: '0.85rem',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {member.User?.username || member.username}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        minWidth: '60px',
+                        fontSize: '0.7rem',
+                        ml: 1,
+                        color: '#90caf9',
+                        borderColor: '#90caf9'
+                      }}
+                      onClick={() => handleSignUpAbsentee(member.id || member.user_id, 'DPS')}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center' }}>
+                No absent members
+              </Typography>
+            )}
+          </Paper>
         </Grid>
   
         <Grid item xs={12} md={9}>

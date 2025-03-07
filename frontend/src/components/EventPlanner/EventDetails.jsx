@@ -544,6 +544,18 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                     }}
                   />
                 </Grid>
+                <Grid item>
+                  <Chip 
+                    label={`Absent: ${event.absentees?.length || 0}`}
+                    color="default"
+                    sx={{
+                      bgcolor: '#555',
+                      '&:hover': {
+                        bgcolor: '#666'
+                      }
+                    }}
+                  />
+                </Grid>
               </Grid>
               
               {/* New Sign Up with Primary Build Button */}
