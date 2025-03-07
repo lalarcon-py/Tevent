@@ -33,7 +33,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSONB,
       defaultValue: [] 
     },
-    combat_power: { type: DataTypes.INTEGER }
+    combat_power: { type: DataTypes.INTEGER },
+    // Added new fields
+    email: { type: DataTypes.STRING(255), allowNull: true },
+    gear_screenshot_url: { type: DataTypes.STRING(255), allowNull: true }
   }, {
     sequelize,
     modelName: 'User',

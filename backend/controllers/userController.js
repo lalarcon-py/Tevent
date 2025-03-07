@@ -1,6 +1,9 @@
 // backend/controllers/userController.js
 const db = require('../models');
 const { sequelize } = require('../config/database');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 
 const userController = {
   deleteUser: async (req, res) => {

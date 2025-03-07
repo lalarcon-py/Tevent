@@ -13,6 +13,8 @@ const pgSession = require('connect-pg-simple')(session);
 const crypto = require('crypto');
 const supportRoutes = require('./routes/supportRoutes');
 const userRoutes = require('./routes/userRoutes');
+const gearCheckRoutes = require('./routes/gearCheckRoutes');
+
 
 
 // Middleware imports
@@ -48,6 +50,8 @@ const frontendURL = process.env.NODE_ENV === 'production'
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+
 
 // Database connection check
 sequelize.authenticate()
@@ -158,6 +162,8 @@ app.delete('/api/user/delete', userController.deleteUser);
 app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/gear-checks', guildScopeMiddleware, validateGuildMembership, gearCheckRoutes);
 app.use('/api/wishlist', guildScopeMiddleware, validateGuildMembership, wishlistRoutes);
 app.use('/api/stats', guildScopeMiddleware, validateGuildMembership, statsRoutes);
 app.use('/api/guild-storage', guildScopeMiddleware, validateGuildMembership, guildStorageRouter);

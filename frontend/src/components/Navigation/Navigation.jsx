@@ -69,6 +69,11 @@ const Navigation = ({ guildId }) => {
       icon: <FormatListBulletedIcon />,
       path: '/event-summaries'
     },
+    {
+      text: 'Gear Check',
+      icon: <FormatListBulletedIcon />,
+      path: '/gear-check'
+    },
     
   ];
 

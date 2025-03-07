@@ -224,6 +224,7 @@ function AppContent() {
           <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
           <Route path="/auth-error" element={<AuthError />} />
           <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/gear-check" element={<GearCheck />} />
         </Routes>
       </Box>
     </Router>
