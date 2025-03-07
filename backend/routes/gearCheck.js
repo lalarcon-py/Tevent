@@ -233,13 +233,13 @@ router.post('/:userId/deny', async (req, res) => {
     
     // Update gear check status
     await gearCheck.update({
-      status: 'denied',
+      status: 'Denied',
       denial_reason: reason,
       reviewed_by: req.user.id
     });
     
     res.json({
-      status: 'denied'
+      status: 'Denied'
     });
   } catch (error) {
     console.error('Error denying gear check:', error);

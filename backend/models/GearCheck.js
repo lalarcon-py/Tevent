@@ -44,7 +44,15 @@ module.exports = (sequelize, DataTypes) => {
     requested_by: {
       type: DataTypes.UUID,
       allowNull: true
-    }
+    },
+    guild_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+          model: 'guilds',
+          key: 'id'
+        }
+      },
   }, {
     sequelize,
     modelName: 'GearCheck',

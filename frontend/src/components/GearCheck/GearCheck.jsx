@@ -88,25 +88,28 @@ const GearCheck = () => {
       const formData = new FormData();
       formData.append('image', selectedFile);
       
+      // Get guildId from localStorage instead of using undefined currentGuildId
       const guildId = localStorage.getItem('guildId');
       formData.append('guildId', guildId);
       
+      // Use the imported axiosInstance instead of axios
       const response = await axiosInstance.post('/api/gear-checks/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
       
-      setStatus('pending');
+      // Update state with new data
+      setStatus(response.data.status);
       setImageUrl(response.data.url);
+      setSuccess('Gear check uploaded successfully!');
       setSelectedFile(null);
-      setSuccess('Gear check uploaded successfully');
       
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
       console.error('Failed to upload gear check:', err);
-      setError('Failed to upload gear check');
+      setError(err.response?.data?.error || 'Failed to upload gear check');
     } finally {
       setLoading(false);
     }
@@ -256,14 +259,24 @@ const GearCheck = () => {
               {imageUrl && (
                 <Box sx={{ textAlign: 'center', mt: 3 }}>
                   <img
-                    src={imageUrl}
+                    src={imageUrl.startsWith('http') 
+                      ? imageUrl 
+                      : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imageUrl}`}
                     alt="Gear Check"
                     style={{ 
                       maxWidth: '100%', 
                       maxHeight: '400px',
                       border: '1px solid #ccc'
                     }}
+                    onError={(e) => {
+                      console.error('Image failed to load:', imageUrl);
+                      e.target.style.border = '1px dashed red';
+                    }}
                   />
+                  {/* Add this for debugging */}
+                  <Typography variant="caption" color="text.secondary">
+                    Image path: {imageUrl}
+                  </Typography>
                 </Box>
               )}
             </Box>

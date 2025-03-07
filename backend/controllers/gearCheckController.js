@@ -99,78 +99,71 @@ const gearCheckController = {
   },
   
   // Upload a gear check screenshot
+  // In backend/controllers/gearCheckController.js
+
   uploadGearCheck: async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
+      // Debug the incoming request
+      console.log('Upload request received:', { 
+        hasFile: !!req.file, 
+        guildId: req.guildId,
+        body: req.body
+      });
+      
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
       
-      const guildId = req.guildId;
+      const guildId = req.guildId || req.body.guildId;
       
       if (!guildId) {
         return res.status(400).json({ error: 'Guild ID is required' });
       }
       
-      // Find active request for this user
-      const gearCheck = await GearCheck.findOne({
-        where: {
+      // Check if user exists
+      const user = await User.findByPk(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Process the upload
+      try {
+        const uploadsDir = ensureUploadDir();
+        const fileName = `${uuidv4()}${path.extname(req.file.originalname || '.jpg')}`;
+        const filePath = path.join(uploadsDir, fileName);
+        const fileUrl = `/uploads/gear/${fileName}`;
+        
+        // Write file to disk
+        fs.writeFileSync(filePath, req.file.buffer);
+        console.log(`File saved to ${filePath}`);
+        
+        // Create a new submission regardless of previous state
+        // This is a temporary workaround until the database is fully migrated
+        const newGearCheck = await GearCheck.create({
           user_id: req.user.id,
           guild_id: guildId,
-          status: {
-            [Op.in]: ['requested', 'denied']
-          }
-        },
-        order: [['created_at', 'DESC']]
-      });
-      
-      // Process the upload either way
-      const uploadsDir = ensureUploadDir();
-      const fileName = `${uuidv4()}${path.extname(req.file.originalname)}`;
-      const filePath = path.join(uploadsDir, fileName);
-      const fileUrl = `/uploads/gear/${fileName}`;
-      
-      // Write file to disk
-      fs.writeFileSync(filePath, req.file.buffer);
-      
-      // If there's an active request, update it
-      if (gearCheck) {
-        await gearCheck.update({
           image_url: fileUrl,
-          status: 'pending',
-          denial_reason: null // Clear any previous denial reason
+          status: 'pending'
         });
         
-        return res.json({
+        res.status(201).json({
           success: true,
-          message: 'Gear check uploaded successfully',
-          id: gearCheck.id,
+          message: 'Gear check submitted successfully',
+          id: newGearCheck.id,
           status: 'pending',
           url: fileUrl
         });
+      } catch (saveError) {
+        console.error('Error saving file:', saveError);
+        return res.status(500).json({ error: 'Failed to save uploaded file', details: saveError.message });
       }
-      
-      // Otherwise create a new submission
-      const newGearCheck = await GearCheck.create({
-        user_id: req.user.id,
-        guild_id: guildId,
-        image_url: fileUrl,
-        status: 'pending'
-      });
-      
-      res.status(201).json({
-        success: true,
-        message: 'Gear check submitted successfully',
-        id: newGearCheck.id,
-        status: 'pending',
-        url: fileUrl
-      });
     } catch (error) {
       console.error('Error uploading gear check:', error);
-      res.status(500).json({ error: 'Failed to upload gear check' });
+      res.status(500).json({ error: 'Failed to upload gear check', details: error.message });
     }
   },
   
@@ -269,7 +262,7 @@ const gearCheckController = {
       
       // Update gear check status
       await gearCheck.update({
-        status: 'denied',
+        status: 'Denied',
         denial_reason: reason,
         reviewed_by: req.user.id
       });
@@ -277,7 +270,7 @@ const gearCheckController = {
       res.json({
         success: true,
         message: 'Gear check denied successfully',
-        status: 'denied'
+        status: 'Denied'
       });
     } catch (error) {
       console.error('Error denying gear check:', error);

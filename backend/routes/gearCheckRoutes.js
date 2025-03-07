@@ -7,9 +7,17 @@ const { GearCheck, User, GuildMember } = require('../models');
 
 // Configure multer for memory storage
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
-});
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      // Accept any image file
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files are allowed'), false);
+      }
+    }
+  });
 
 // Request a gear check (admin only)
 router.post('/request', gearCheckController.requestGearCheck);
