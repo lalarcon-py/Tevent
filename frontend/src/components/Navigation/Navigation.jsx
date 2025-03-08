@@ -5,7 +5,7 @@ import {
   Divider, IconButton, Box, useMediaQuery, useTheme,
   AppBar, Toolbar, Typography, Button
 } from '@mui/material';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Navigate } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -19,13 +19,58 @@ import { useAuth } from '../../contexts/AuthContext';
 import LogoutButton from '../Auth/LogoutButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import axiosInstance from '../../config/axios';
 
 const Navigation = ({ guildId }) => {
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const [guildRole, setGuildRole] = useState('');
+  const [loading, setLoading] = useState(true);
+  
+  // Fetch the user's guild-specific role
+  useEffect(() => {
+    const fetchGuildRole = async () => {
+      if (!user) return;
+      
+      try {
+        setLoading(true);
+        
+        // Get guild ID - try from props first, then localStorage
+        const currentGuildId = guildId || localStorage.getItem('guildId');
+        
+        if (!currentGuildId) {
+          console.log('No guild ID available');
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Fetching members for guild:', currentGuildId);
+        
+        // Fetch guild members
+        const response = await axiosInstance.get(`/api/guilds/${currentGuildId}/members`);
+        
+        // Find current user in members list
+        const currentMember = response.data.find(member => member.id === user.id);
+        
+        if (currentMember) {
+          console.log('Found guild role:', currentMember.role);
+          setGuildRole(currentMember.role);
+        } else {
+          console.log('User not found in guild members');
+          setGuildRole('');
+        }
+      } catch (error) {
+        console.error('Failed to fetch guild role:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchGuildRole();
+  }, [user, guildId]);
   
   // Close mobile drawer when route changes
   useEffect(() => {
@@ -38,22 +83,29 @@ const Navigation = ({ guildId }) => {
     setMobileOpen(!mobileOpen);
   };
 
-  const menuItems = [
-    {
+  // Check role permissions
+  const isGuildMaster = guildRole === 'Guild Master';
+  const isAdvisorOrMaster = ['Guild Master', 'Guild Advisor'].includes(guildRole);
+  const hasDashboardAccess = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(guildRole);
+
+  // Create base menu items - start with an empty array
+  const baseMenuItems = [];
+  
+  // Add Dashboard only for those with access
+  if (hasDashboardAccess) {
+    baseMenuItems.push({
       text: 'Dashboard',
       icon: <DashboardIcon />,
       path: '/dashboard'
-    },
+    });
+  }
+  
+  // Add other menu items that are available to all guild members
+  baseMenuItems.push(
     {
       text: 'Guild Management',
       icon: <GroupIcon />,
       path: '/guild-management'
-    },
-    {
-      text: 'Guild Applications',
-      icon: <PersonAddIcon />,
-      path: '/applications',
-      condition: user => !user || ['Guild Master', 'Guild Advisor'].includes(user.role)
     },
     {
       text: 'Loot Management',
@@ -74,14 +126,26 @@ const Navigation = ({ guildId }) => {
       text: 'Gear Check',
       icon: <FormatListBulletedIcon />,
       path: '/gear-check'
-    },
-    {
+    }
+  );
+  
+  // Add conditional menu items
+  if (isAdvisorOrMaster) {
+    baseMenuItems.push({
+      text: 'Guild Applications',
+      icon: <PersonAddIcon />,
+      path: '/applications'
+    });
+  }
+  
+  // Add billing for Guild Master only
+  if (isGuildMaster) {
+    baseMenuItems.push({
       text: 'Billing',
       icon: <ReceiptIcon />,
       path: '/billing'
-    },
-    
-  ];
+    });
+  }
 
   const drawer = (
     <>
@@ -103,9 +167,16 @@ const Navigation = ({ guildId }) => {
       </Box>
       <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.12)' }} />
       
+      {/* Debug info - You can remove this later */}
+      <Box sx={{ px: 2, py: 1, bgcolor: 'rgba(0,0,0,0.2)' }}>
+        <Typography variant="caption" color="text.secondary">
+          Guild Role: {loading ? 'Loading...' : (guildRole || 'None')}
+        </Typography>
+      </Box>
+      
       {/* Main menu items */}
       <List sx={{ py: 2 }}>
-        {menuItems.map((item) => (
+        {baseMenuItems.map((item) => (
           <ListItem 
             button 
             component={Link} 
@@ -215,7 +286,7 @@ const Navigation = ({ guildId }) => {
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-around', minHeight: '56px', px: 1 }}>
-        {menuItems.slice(0, 4).map((item) => (
+        {baseMenuItems.slice(0, 4).map((item) => (
           <IconButton
             key={item.text}
             component={Link}
@@ -257,9 +328,6 @@ const Navigation = ({ guildId }) => {
 
   return (
     <>
-      {/* Mobile hamburger menu - moved inside the drawer */}
-      {/* We don't need a separate button since we have one in mobile nav bar */}
-      
       {/* Main navigation drawer */}
       <Drawer
         variant={isMobile ? "temporary" : "permanent"}

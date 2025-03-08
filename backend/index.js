@@ -226,6 +226,7 @@ app.use('/api/guilds/:guildId/members', guildScopeMiddleware, validateGuildMembe
 
 app.use('/api/guilds', guildScopeMiddleware, guildRouter);
 
+// Debug routes
 
 app.enable('trust proxy');
 
@@ -377,6 +378,7 @@ passport.use(new DiscordStrategy({
     let user = await db.User.findOne({ where: { discord_id: profile.id } });
     
     if (!user) {
+      console.log('Creating new user');
       const defaultBuilds = [];
       user = await db.User.create({
         discord_id: profile.id,
