@@ -103,12 +103,12 @@ const Navigation = ({ guildId }) => {
   // Add other menu items that are available to all guild members
   baseMenuItems.push(
     {
-      text: 'Guild Management',
+      text: 'Guild Members',
       icon: <GroupIcon />,
       path: '/guild-management'
     },
     {
-      text: 'Loot Management',
+      text: 'Guild Storage',
       icon: <StorageIcon />,
       path: '/loot-management'
     },
