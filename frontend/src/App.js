@@ -28,6 +28,7 @@ import LandingPage from './pages/LandingPage';
 import { BillingProvider, useBilling } from './contexts/BillingContext';
 import BillingPage from './pages/BillingPage';
 import InactiveGuildOverlay from './components/Billing/InactiveGuildOverlay';
+import ApplyToGuildPage from './pages/ApplyToGuildPage';
   
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
