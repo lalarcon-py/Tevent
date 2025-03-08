@@ -211,6 +211,12 @@ const GuildSetupPage = () => {
     setError(null);
     
     try {
+      if (!joinCode.trim()) {
+        setError('Join code is required');
+        setLoading(false);
+        return;
+      }
+      
       // Use the new endpoint that doesn't require a guild ID
       const response = await fetch(`${API_URL}/api/guilds/join-by-code`, {
         method: 'POST',
@@ -237,8 +243,7 @@ const GuildSetupPage = () => {
         console.warn('Failed to update localStorage:', e);
       }
       
-      // Redirect to dashboard
-      window.location.href = `/guilds/${data.guild.id}/dashboard`;
+      navigate(`/guilds/${data.guild.id}/dashboard`);
     } catch (error) {
       console.error('Failed to join guild:', error);
       setError(error.message || 'Failed to join guild');
@@ -449,20 +454,21 @@ const GuildSetupPage = () => {
                             </Typography>
                           </CardContent>
                           <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
-                            <Button 
-                              variant="outlined" 
-                              onClick={() => {
-                                window.location.href = `/applications?guildId=${guild.id}`;
-                              }}
-                              sx={{
-                                mr: 1,
-                                color: '#90caf9',
-                                borderColor: '#90caf9',
-                                '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
-                              }}
-                            >
-                              Apply
-                            </Button>
+                          <Button 
+                                variant="outlined" 
+                                onClick={() => {
+                                  // Replace direct browser navigation with React Router's navigation
+                                  navigate(`/applications?guildId=${guild.id}`);
+                                }}
+                                sx={{
+                                  mr: 1,
+                                  color: '#90caf9',
+                                  borderColor: '#90caf9',
+                                  '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
+                                }}
+                              >
+                                Apply
+                              </Button>
                             <Button 
                               variant="contained" 
                               onClick={() => openJoinDialog(guild)}
