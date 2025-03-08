@@ -304,24 +304,6 @@ const Navigation = ({ guildId }) => {
             </Typography>
           </IconButton>
         ))}
-        
-        {/* Add the hamburger menu to show full navigation */}
-        <IconButton
-          color="inherit"
-          aria-label="open drawer"
-          edge="end"
-          onClick={handleDrawerToggle}
-          sx={{ 
-            display: 'flex',
-            flexDirection: 'column',
-            fontSize: '0.6rem'
-          }}
-        >
-          <MenuIcon />
-          <Typography variant="caption" sx={{ mt: 0.5, fontSize: '0.6rem' }}>
-            Menu
-          </Typography>
-        </IconButton>
       </Toolbar>
     </AppBar>
   );
