@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const supportRoutes = require('./routes/supportRoutes');
 const userRoutes = require('./routes/userRoutes');
 const gearCheckRoutes = require('./routes/gearCheckRoutes');
+const billingRoutes = require('./routes/billingRoutes');
 
 // Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
@@ -161,6 +162,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 
 // Add guildActivityMiddleware without the problematic billing routes
+app.use('/api/billing', billingRoutes);
 app.use(guildActivityMiddleware);
 
 // General use routes

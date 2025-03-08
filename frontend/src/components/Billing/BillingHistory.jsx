@@ -105,7 +105,8 @@ const BillingHistory = () => {
                 {new Date(transaction.date).toLocaleDateString()}
               </TableCell>
               <TableCell>{transaction.description}</TableCell>
-              <TableCell>${transaction.amount.toFixed(2)}</TableCell>
+              <TableCell>
+                    ${Number(transaction.amount || 0).toFixed(2)}</TableCell>
               <TableCell>
                 <Box sx={{ 
                   display: 'inline-block', 

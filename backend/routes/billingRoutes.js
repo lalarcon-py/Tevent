@@ -21,4 +21,11 @@ router.post('/cancel', billingController.cancelSubscription);
 // Update payment method
 router.post('/update-payment', billingController.updatePaymentMethod);
 
+
+router.get('/config', (req, res) => {
+    res.json({
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+    });
+  });
+
 module.exports = router;

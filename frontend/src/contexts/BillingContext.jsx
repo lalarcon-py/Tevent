@@ -1,21 +1,37 @@
 // src/contexts/BillingContext.jsx
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axiosInstance from '../config/axios';
 import { useAuth } from './AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
 
 // Initialize Stripe with your publishable key
-const stripeKey = process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_51NjQaxDOgA9CgRuxU6i14aq7vKnf25X0xbsN0RWbUjO7cCMXO5BvFEPexUfOJXVvPb6zoyrlxbEHIuCBD1h1iaxq00vGCNqeqX';
+const stripeKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '';
 const stripePromise = loadStripe(stripeKey);
 
 const BillingContext = createContext();
 
 export const BillingProvider = ({ children }) => {
-  const [subscriptionStatus, setSubscriptionStatus] = useState(null); // 'none', 'trial', 'active', 'expired'
-  const [subscriptionData, setSubscriptionData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const { user } = useAuth();
+    const [subscriptionStatus, setSubscriptionStatus] = useState(null); // 'none', 'trial', 'active', 'expired'
+    const [subscriptionData, setSubscriptionData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [stripe, setStripe] = useState(stripePromise);
+    const { user } = useAuth();
+
+
+  useEffect(() => {
+    const getStripeConfig = async () => {
+      try {
+        const response = await axiosInstance.get('/api/billing/config');
+        const stripePromise = loadStripe(response.data.publishableKey);
+        setStripe(stripePromise);
+      } catch (error) {
+        console.error('Failed to load Stripe configuration');
+      }
+    };
+    
+    getStripeConfig();
+  }, []);
 
   // Load subscription details
   const loadSubscriptionDetails = useCallback(async () => {

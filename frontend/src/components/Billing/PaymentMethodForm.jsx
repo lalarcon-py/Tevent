@@ -15,19 +15,11 @@ import { loadStripe } from '@stripe/stripe-js';
 
 // Initialize Stripe with proper error handling
 const getStripePromise = () => {
-    // Look for both environment variable formats to be flexible
-    const key = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 
-                process.env.STRIPE_PUBLISHABLE_KEY || 
-                window.STRIPE_PUBLISHABLE_KEY;
-                
-    if (!key) {
-      console.error("Stripe publishable key is missing!");
-      return null;
-    }
+    const key = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
     return loadStripe(key);
   };
-
-const stripePromise = getStripePromise();
+  
+  const stripePromise = getStripePromise();
 
 // Wrapper component to provide Stripe context
 export default function PaymentMethodFormWrapper(props) {
