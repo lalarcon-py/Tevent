@@ -165,15 +165,14 @@ class MembershipStats extends React.Component {
         
         // Process combat roles (DPS, Tank, Healer)
         const combatRoles = {};
-        
+    
         guildMembers.forEach(member => {
-          if (member.builds && Array.isArray(member.builds)) {
-            member.builds.forEach(build => {
-              // Add combat role if available
-              if (build.spec) {
-                combatRoles[build.spec] = (combatRoles[build.spec] || 0) + 1;
-              }
-            });
+          if (member.builds && Array.isArray(member.builds) && member.builds.length > 0) {
+            // Only count primary build (first one)
+            const primaryBuild = member.builds[0];
+            if (primaryBuild.spec) {
+              combatRoles[primaryBuild.spec] = (combatRoles[primaryBuild.spec] || 0) + 1;
+            }
           }
         });
         

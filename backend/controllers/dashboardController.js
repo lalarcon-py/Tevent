@@ -127,10 +127,24 @@ const dashboardController = {
       if (!guildId) {
         return res.status(400).json({ error: 'Guild ID is required' });
       }
-
+  
+      // Get total member count for the guild
+      const totalUsers = await User.count({
+        where: { guild_id: guildId }
+      });
+      
+      if (totalUsers === 0) {
+        return res.json({
+          total_events: 0,
+          average_attendance_rate: 0,
+          attendance_history: []
+        });
+      }
+  
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
+  
+      // Get all events in period with participants
       const events = await Event.findAll({
         where: {
           guild_id: guildId,
@@ -141,27 +155,42 @@ const dashboardController = {
         include: [{
           model: EventParticipant,
           as: 'participants',
-          where: { guild_id: guildId },
           required: false
-        }]
+        }],
+        order: [['event_time', 'DESC']]
       });
-
-      const totalUsers = await User.count({
-        where: { guild_id: guildId }
+  
+      // Process each event into standardized format
+      const attendanceHistory = events.map(event => {
+        const participantCount = event.participants ? event.participants.length : 0;
+        // Calculate actual percentage - make sure division results in 0 when nobody attended
+        const attendanceRate = totalUsers > 0 ? (participantCount / totalUsers) * 100 : 0;
+        
+        return {
+          id: event.id,
+          title: event.title,
+          date: event.event_time,
+          attendance_count: participantCount,
+          attendance_rate: attendanceRate, // Actual percentage, not defaulted
+          total_members: totalUsers
+        };
       });
       
-      const stats = {
+      // Calculate overall attendance rate
+      const averageAttendanceRate = events.length > 0 ? 
+        attendanceHistory.reduce((sum, event) => sum + event.attendance_rate, 0) / events.length : 0;
+  
+      // Clear response structure with exactly the fields frontend expects
+      const response = {
         total_events: events.length,
-        average_attendance_rate: events.length ? 
-          (events.reduce((sum, event) => sum + event.participants.length, 0) / (events.length * totalUsers)) * 100 : 0,
-        attendance_history: events.map(event => ({
-          date: event.event_time,
-          attendance_count: event.participants.length,
-          attendance_rate: (event.participants.length / totalUsers) * 100
-        }))
+        average_attendance_rate: averageAttendanceRate,
+        attendance_history: attendanceHistory
       };
-
-      res.json(stats);
+  
+      // Log the output for debugging
+      console.log("Attendance data being sent:", JSON.stringify(response, null, 2));
+      
+      res.json(response);
     } catch (error) {
       console.error('Error in getAttendanceStats:', error);
       res.status(500).json({ error: 'Failed to fetch attendance stats', details: error.message });

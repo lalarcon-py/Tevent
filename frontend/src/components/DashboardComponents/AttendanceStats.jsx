@@ -47,47 +47,69 @@ class AttendanceStats extends React.Component {
       
       if (!data) return;
       
-      // Check if data structure is what we expect
-      console.log("Processing attendance data:", JSON.stringify(data, null, 2));
+      // Log full data received for debugging
+      console.log("Raw attendance data received:", JSON.stringify(data, null, 2));
       
-      // Calculate attendance metrics
+      // Initialize with zero values as default
       let totalEvents = 0;
       let averageAttendance = 0;
       let filteredHistory = [];
       
-      // Extract values from data
-      if (data.events && Array.isArray(data.events)) {
-        totalEvents = data.events.length;
-        filteredHistory = data.events.map(event => ({
-          date: event.date || event.event_time,
-          attendance_rate: event.attendance_rate || 100, // Default to 100% if not specified
-          attendance_count: event.attendance_count || (event.participants ? event.participants.length : 0)
-        }));
-      }
-      
-      // Check for attendance_history
+      // First check if we have attendance_history directly in the data
       if (data.attendance_history && Array.isArray(data.attendance_history)) {
-        filteredHistory = data.attendance_history;
+        console.log("Using attendance_history from data");
+        filteredHistory = data.attendance_history.map(event => ({
+          date: event.date,
+          attendance_rate: event.attendance_rate || 0, // Default to 0%, not 100%
+          attendance_count: event.attendance_count || 0,
+          title: event.title || "Event"
+        }));
+      } 
+      // Fallback to events array if available
+      else if (data.events && Array.isArray(data.events)) {
+        console.log("Using events array for attendance");
+        filteredHistory = data.events.map(event => {
+          // Calculate the actual rate - default to 0% if not available
+          const participantCount = event.participants ? event.participants.length : 0;
+          const totalMembers = data.total_members || 1; // Prevent division by zero
+          const attendanceRate = event.attendance_rate || (participantCount / totalMembers * 100) || 0;
+          
+          return {
+            date: event.date || event.event_time,
+            attendance_rate: attendanceRate, // Use calculated rate or 0
+            attendance_count: participantCount,
+            title: event.title || "Event"
+          };
+        });
       }
       
-      // Get average attendance directly or calculate it
+      // Set total events
+      totalEvents = data.total_events !== undefined ? data.total_events : filteredHistory.length;
+      
+      // Use the average attendance rate from data if available
       if (typeof data.average_attendance_rate === 'number') {
+        console.log("Using average_attendance_rate from data:", data.average_attendance_rate);
         averageAttendance = data.average_attendance_rate;
-      } else if (filteredHistory.length > 0) {
+      } 
+      // Otherwise calculate it from filteredHistory
+      else if (filteredHistory.length > 0) {
+        console.log("Calculating average from history items");
         const sum = filteredHistory.reduce((acc, event) => 
-          acc + (typeof event.attendance_rate === 'number' ? event.attendance_rate : 100), 0);
+          acc + (typeof event.attendance_rate === 'number' ? event.attendance_rate : 0), 0);
         averageAttendance = Math.round(sum / filteredHistory.length);
-      } else {
-        // Fallback value
-        averageAttendance = 100;
+      } 
+      // Absolute fallback
+      else {
+        console.log("No attendance data found, defaulting to 0%");
+        averageAttendance = 0; // Default to 0%, not 100%
       }
       
-      // Set total events from data or from filtered history
-      if (typeof data.total_events === 'number') {
-        totalEvents = data.total_events;
-      } else {
-        totalEvents = filteredHistory.length;
-      }
+      console.log("Processed attendance data:", {
+        totalEvents,
+        averageAttendance,
+        filteredHistoryLength: filteredHistory.length,
+        sampleEntry: filteredHistory[0]
+      });
       
       this.setState({
         totalEvents,
@@ -235,10 +257,10 @@ class AttendanceStats extends React.Component {
                       variant="h6" 
                       sx={{ 
                         fontWeight: 'bold',
-                        color: this.getAttendanceColor(event.attendance_rate || 100)
+                        color: this.getAttendanceColor(event.attendance_rate || 0)
                       }}
                     >
-                      {Math.round(event.attendance_rate || 100)}%
+                      {Math.round(event.attendance_rate || 0)}%
                     </Typography>
                   </Box>
                 </Grid>
@@ -289,13 +311,13 @@ class AttendanceStats extends React.Component {
                           </Typography>
                         </Box>
                         <Chip 
-                          label={`${Math.round(event.attendance_rate || 100)}%`}
+                          label={`${Math.round(event.attendance_rate || 0)}%`}
                           size="small"
                           sx={{ 
                             ml: 1.5,
                             height: 22,
                             fontSize: '0.8rem',
-                            bgcolor: this.getAttendanceColor(event.attendance_rate || 100),
+                            bgcolor: this.getAttendanceColor(event.attendance_rate || 0),
                             color: 'white',
                             fontWeight: 'bold'
                           }}
