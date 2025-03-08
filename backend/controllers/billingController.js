@@ -5,9 +5,9 @@ const { Op } = require('sequelize');
 
 // Mapping of plan IDs to Stripe price IDs
 const PLAN_PRICE_MAP = {
-  monthly: 'price_monthly_plan_id', // Replace with your actual Stripe price IDs
-  biannual: 'price_biannual_plan_id',
-  annual: 'price_annual_plan_id'
+  monthly: 'price_1R0B3SQAPdENNwPpNuypRR5c', // Replace with your actual Stripe price IDs
+  biannual: 'price_1R0B5ZQAPdENNwPpQSJaEc5Q',
+  annual: 'price_1R0B75QAPdENNwPpNbTn2WMq'
 };
 
 // Plan details for reference

@@ -5,7 +5,7 @@ import { useAuth } from './AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
 
 // Initialize Stripe with your publishable key
-const stripeKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51NjQaxDOgA9CgRuxU6i14aq7vKnf25X0xbsN0RWbUjO7cCMXO5BvFEPexUfOJXVvPb6zoyrlxbEHIuCBD1h1iaxq00vGCNqeqX';
+const stripeKey = process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_51NjQaxDOgA9CgRuxU6i14aq7vKnf25X0xbsN0RWbUjO7cCMXO5BvFEPexUfOJXVvPb6zoyrlxbEHIuCBD1h1iaxq00vGCNqeqX';
 const stripePromise = loadStripe(stripeKey);
 
 const BillingContext = createContext();
