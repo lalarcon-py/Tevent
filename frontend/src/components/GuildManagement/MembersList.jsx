@@ -67,7 +67,7 @@ const getWeaponIcon = (weaponName) => {
   return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
 };
 
-const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
+const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, onSave }) => {
   const [selectedRole, setSelectedRole] = useState(member.role);
   const [confirmTransfer, setConfirmTransfer] = useState(false);
   const [username, setUsername] = useState(member.username);
@@ -83,6 +83,14 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
       setUsername(member.username);
     }
   }, [member]);
+
+  useEffect(() => {
+    // If trying to edit someone else's profile and not an admin, close the dialog
+    if (member && currentUser && member.id !== currentUser.id && 
+       !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser.role)) {
+      onClose();
+    }
+  }, [member, currentUser, onClose]);
 
   
 
@@ -122,8 +130,8 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
   };
 
   const getAvailableRoles = () => {
-    // If not Guild Master, don't allow changing roles at all
-    if (currentUserRole !== 'Guild Master') {
+    // Allow role changing for Guild Masters and Guild Advisors
+    if (currentUserRole !== 'Guild Master' && currentUserRole !== 'Guild Advisor') {
       return [];
     }
     
@@ -131,6 +139,11 @@ const RoleManagementDialog = ({ member, currentUserRole, onClose, onSave }) => {
       // Filter out duplicate "Member" if "Guild Member" exists
       if ((role === 'Member' && GUILD_ROLES['Guild Member']) || 
           (role === 'Guild Member' && GUILD_ROLES['Member'] && role !== member.role)) {
+        return false;
+      }
+      
+      // Guild Advisors can't promote to Guild Master
+      if (currentUserRole === 'Guild Advisor' && role === 'Guild Master') {
         return false;
       }
       
@@ -284,8 +297,8 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
   useEffect(() => {
     if (member) {
       const isCurrentUser = member.id === currentUser?.id;
-      const hasSpecialRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(member.role);
-      setShowCombatPower(isCurrentUser || hasSpecialRole);
+      const currentUserHasAdminRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser?.role);
+      setShowCombatPower(isCurrentUser || currentUserHasAdminRole);
       
       setEditedMember({
         ...member,
@@ -1137,8 +1150,9 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
-                    {/* Only show edit icon if it's the current user's own profile OR if the current user is Guild Master */}
-                    {(member.id === effectiveCurrentUser?.id || currentUserRole === 'Guild Master') && (
+                    {/* Show edit icon if it's the current user's own profile OR if the current user has admin privileges */}
+                    {(member.id === effectiveCurrentUser?.id || 
+                      ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUserRole)) && (
                       <IconButton 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1157,8 +1171,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                       </IconButton>
                     )}
                     
-                    {/* ONLY show role management icon for Guild Masters */}
-                    {currentUserRole === 'Guild Master' && (
+                    {/* ONLY show role management icon for Guild Masters and Guild Advisors */}
+                    {(currentUserRole === 'Guild Master' || currentUserRole === 'Guild Advisor') && (
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1193,10 +1207,11 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         />
       )}
   
-      {roleManagementMember && (
+        {roleManagementMember && (
         <RoleManagementDialog
           member={roleManagementMember}
           currentUserRole={currentUserRole}
+          currentUser={effectiveCurrentUser}
           onClose={() => setRoleManagementMember(null)}
           onSave={handleRoleSave}
         />

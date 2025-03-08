@@ -4,9 +4,16 @@ import axiosInstance from '../config/axios';
 import { useAuth } from './AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
 
-// Initialize Stripe with your publishable key
-const stripeKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '';
-const stripePromise = loadStripe(stripeKey);
+// Initialize Stripe with your publishable key - with better error handling
+let stripePromise = null;
+try {
+  const stripeKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+  if (stripeKey && typeof stripeKey === 'string' && stripeKey.trim() !== '') {
+    stripePromise = loadStripe(stripeKey);
+  }
+} catch (error) {
+  console.error('Failed to initialize Stripe:', error);
+}
 
 const BillingContext = createContext();
 
@@ -18,15 +25,21 @@ export const BillingProvider = ({ children }) => {
     const [stripe, setStripe] = useState(stripePromise);
     const { user } = useAuth();
 
-
   useEffect(() => {
     const getStripeConfig = async () => {
       try {
         const response = await axiosInstance.get('/api/billing/config');
-        const stripePromise = loadStripe(response.data.publishableKey);
-        setStripe(stripePromise);
+        // Add validation before trying to load Stripe
+        if (response.data && response.data.publishableKey && 
+            typeof response.data.publishableKey === 'string' && 
+            response.data.publishableKey.trim() !== '') {
+          const loadedStripe = await loadStripe(response.data.publishableKey);
+          setStripe(loadedStripe);
+        } else {
+          console.warn('Invalid Stripe publishable key received from server');
+        }
       } catch (error) {
-        console.error('Failed to load Stripe configuration');
+        console.error('Failed to load Stripe configuration:', error);
       }
     };
     
@@ -68,8 +81,12 @@ export const BillingProvider = ({ children }) => {
       
       // Handle client-side confirmation if required by your payment processor
       if (response.data.requiresAction) {
-        const stripe = await stripePromise;
-        const { error: confirmError } = await stripe.confirmCardPayment(
+        const stripeInstance = await stripePromise;
+        if (!stripeInstance) {
+          throw new Error('Stripe failed to initialize');
+        }
+        
+        const { error: confirmError } = await stripeInstance.confirmCardPayment(
           response.data.clientSecret
         );
         
@@ -140,6 +157,7 @@ export const BillingProvider = ({ children }) => {
     subscriptionData,
     loading,
     error,
+    stripe,
     subscribe,
     cancelSubscription,
     updatePaymentMethod,
