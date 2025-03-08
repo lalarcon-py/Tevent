@@ -251,6 +251,7 @@ function AppContent() {
           <Route path="/events/:eventId/team-planner" element={<TeamPlanner />} />
           <Route path="/event-summaries" element={<EventSummaries />} />
           <Route path="/applications" element={<GuildApplications />} />
+          <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
           <Route path="/auth-error" element={<AuthError />} />
           <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
