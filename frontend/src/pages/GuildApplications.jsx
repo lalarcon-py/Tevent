@@ -1,8 +1,8 @@
 // src/pages/GuildApplications.jsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Tabs, Tab, Paper, CircularProgress } from '@mui/material';
+import { Box, Typography, Tabs, Tab, Paper, CircularProgress, Alert } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import ApplicationForm from '../components/Applications/ApplicationForm';
 import ApplicationList from '../components/Applications/ApplicationList';
 import WaitList from '../components/Applications/WaitList';
@@ -15,11 +15,35 @@ const GuildApplications = () => {
   const [waitList, setWaitList] = useState([]);
   const [userApplication, setUserApplication] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedGuild, setSelectedGuild] = useState(null);
   const [searchParams] = useSearchParams();
-  const appliedGuildId = searchParams.get('guildId');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get guild ID from URL params or state
+  const appliedGuildId = searchParams.get('guildId') || location.state?.guildId;
 
   // Check if user is Guild Master or Advisor
   const isAdminRole = user && (user.role === 'Guild Master' || user.role === 'Guild Advisor');
+
+  useEffect(() => {
+    // Fetch guild info if applying to a guild
+    const fetchGuildInfo = async () => {
+      if (appliedGuildId && !isAdminRole) {
+        try {
+          const response = await axiosInstance.get('/api/guilds/available');
+          const guild = response.data.find(g => g.id === appliedGuildId);
+          if (guild) {
+            setSelectedGuild(guild);
+          }
+        } catch (err) {
+          console.error('Error fetching guild info:', err);
+        }
+      }
+    };
+    fetchGuildInfo();
+  }, [appliedGuildId, isAdminRole]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,7 +57,7 @@ const GuildApplications = () => {
           // Fetch waitlist
           const waitResponse = await axiosInstance.get('/api/guild-applications/waitlist');
           setWaitList(waitResponse.data);
-        } else {
+        } else if (appliedGuildId) {
           // For regular users, check if they have a pending application
           try {
             const userAppResponse = await axiosInstance.get('/api/guild-applications/my-application');
@@ -46,13 +70,14 @@ const GuildApplications = () => {
         }
       } catch (error) {
         console.error('Error fetching applications:', error);
+        setError('Failed to load application data');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [isAdminRole]);
+  }, [isAdminRole, appliedGuildId]);
 
   if (loading) {
     return (
@@ -62,10 +87,17 @@ const GuildApplications = () => {
     );
   }
 
+  // For non-admin users without a guild ID, redirect to guild setup
+  if (!isAdminRole && !appliedGuildId) {
+    navigate('/guilds/setup', { replace: true });
+    return null;
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Guild Applications
+        {isAdminRole ? 'Guild Applications' : 
+          selectedGuild ? `Apply to ${selectedGuild.name}` : 'Guild Application'}
       </Typography>
       
       {isAdminRole ? (
@@ -107,7 +139,7 @@ const GuildApplications = () => {
           ) : (
             <>
               <Typography variant="h6" gutterBottom>
-                Apply to Join the Guild
+                Apply to Join {selectedGuild?.name || 'the Guild'}
               </Typography>
               <ApplicationForm 
                 setUserApplication={setUserApplication} 

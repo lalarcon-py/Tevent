@@ -457,8 +457,9 @@ const GuildSetupPage = () => {
                           <Button 
                                 variant="outlined" 
                                 onClick={() => {
-                                  navigate(`/guild-apply`, {
-                                    state: { guildId: guild.id }
+                                  navigate(`/applications`, {
+                                    state: { guildId: guild.id },
+                                    search: `?guildId=${guild.id}`
                                   });
                                 }}
                                 sx={{
