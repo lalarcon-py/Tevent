@@ -457,10 +457,12 @@ const GuildSetupPage = () => {
                           <Button 
                                 variant="outlined" 
                                 onClick={() => {
-                                  navigate(`/applications`, {
-                                    state: { guildId: guild.id },
-                                    search: `?guildId=${guild.id}`
+                                  console.log("Apply button clicked for guild:", guild.id);
+                                  // Use both state and query parameters for maximum compatibility
+                                  navigate(`/applications?guildId=${guild.id}`, {
+                                    state: { guildId: guild.id }
                                   });
+                                  console.log("Navigation triggered");
                                 }}
                                 sx={{
                                   mr: 1,
