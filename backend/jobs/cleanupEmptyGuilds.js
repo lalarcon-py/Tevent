@@ -7,7 +7,6 @@ const { sequelize } = require('../config/database');
 
 // Run once a day at midnight
 cron.schedule('0 0 * * *', async () => {
-  console.log('Running empty guild cleanup job');
   
   try {
     // Find guilds marked for deletion
@@ -20,7 +19,6 @@ cron.schedule('0 0 * * *', async () => {
       }
     });
     
-    console.log(`Found ${guildsToDelete.length} guilds marked for deletion`);
     
     // Find completely empty guilds
     const allGuilds = await Guild.findAll();
@@ -32,18 +30,16 @@ cron.schedule('0 0 * * *', async () => {
       });
       
       if (memberCount === 0) {
-        console.log(`Found empty guild: ${guild.id} (${guild.name})`);
         emptyGuilds.push(guild);
       }
     }
     
-    console.log(`Found ${emptyGuilds.length} additional empty guilds that weren't marked for deletion`);
     
     // Process each guild separately
     const allGuildsToProcess = [...guildsToDelete, ...emptyGuilds];
     
     for (const guild of allGuildsToProcess) {
-      console.log(`Processing guild: ${guild.id} (${guild.name})`);
+
       const t = await sequelize.transaction();
       
       try {
@@ -61,7 +57,6 @@ cron.schedule('0 0 * * *', async () => {
         if (!dropResult) {
           console.error(`Failed to drop schema for guild ${guild.id}, but record was deleted`);
         } else {
-          console.log(`Successfully deleted guild ${guild.id} and its schema`);
         }
       } catch (error) {
         await t.rollback();
@@ -69,7 +64,6 @@ cron.schedule('0 0 * * *', async () => {
       }
     }
     
-    console.log(`Processed ${allGuildsToProcess.length} guilds in cleanup job`);
   } catch (error) {
     console.error('Guild cleanup job error:', error);
   }

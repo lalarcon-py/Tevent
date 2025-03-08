@@ -15,7 +15,6 @@ const userController = {
     const t = await sequelize.transaction();
     
     try {
-      console.log(`Starting deletion process for user ${userId}...`);
       
       // 1. Get all guilds the user is a member of
       const userGuilds = await db.GuildMember.findAll({
@@ -31,7 +30,6 @@ const userController = {
         where: { user_id: userId },
         transaction: t
       });
-      console.log(`Removed user ${userId} from all guilds`);
       
       // 3. Delete user's data in each guild context
       for (const guildId of guildIds) {
@@ -140,8 +138,6 @@ const userController = {
         },
         transaction: t
       });
-      
-      console.log(`User ${userId} account completely deleted`);
       
       await t.commit();
       

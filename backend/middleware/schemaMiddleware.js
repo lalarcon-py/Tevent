@@ -11,7 +11,6 @@ const schemaMiddleware = (req, res, next) => {
     if (guildId) {
       // Store guild ID in request for controllers to use
       req.guildId = guildId;
-      console.log(`Schema middleware: set request guildId to ${guildId}`);
     }
   
     // Continue to next middleware - no schema switching needed

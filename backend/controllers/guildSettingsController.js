@@ -12,19 +12,12 @@ const guildSettingsController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
 
-      // Log the request parameters for debugging
-      console.log("Request params:", req.params);
-      console.log("Request query:", req.query);
-      console.log("Request path:", req.path);
-
-      // Try to get guildId from multiple places
       const { guildId } = req.params;
       
       if (!guildId) {
         return res.status(400).json({ error: 'Guild ID is required' });
       }
 
-      // Ensure we're using the public schema for guild operations
       await sequelize.query(`SET search_path TO public`);
       
       const guild = await db.Guild.findByPk(guildId);
@@ -33,21 +26,9 @@ const guildSettingsController = {
         return res.status(404).json({ error: 'Guild not found' });
       }
 
-      // Debug the raw value
-      console.log('DKP DEBUG - Database value:', {
-        raw: guild.dkp_enabled,
-        type: typeof guild.dkp_enabled
-      });
 
-      // Make it explicitly true/false by forcing a boolean comparison
       const dkpEnabledValue = guild.dkp_enabled === true;
-      
-      console.log('DKP DEBUG - Sending to frontend:', {
-        value: dkpEnabledValue,
-        type: typeof dkpEnabledValue
-      });
 
-      // Return the settings as a plain object with explicit boolean
       res.json({
         name: guild.name,
         lastNameChange: guild.last_name_change || null,
@@ -89,8 +70,6 @@ const guildSettingsController = {
         }
       );
       
-      // Log and return the direct value
-      console.log('DIRECT DKP CHECK:', results);
       
       res.json({
         dkpEnabled: results.dkp_enabled === true,
@@ -162,7 +141,6 @@ const guildSettingsController = {
           if (settings.dkpEnabled !== undefined) {
             // Ensure we're storing a boolean
             updateData.dkp_enabled = settings.dkpEnabled === true;
-            console.log('Updating dkp_enabled to:', updateData.dkp_enabled, 'from input:', settings.dkpEnabled);
           }
           break;
           

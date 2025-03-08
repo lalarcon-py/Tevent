@@ -38,11 +38,6 @@ const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
 
-console.log('Environment Variables Check:', {
-  DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
-  DISCORD_REDIRECT_URI: process.env.DISCORD_REDIRECT_URI,
-  NODE_ENV: process.env.NODE_ENV
-});
 
 const frontendURL = process.env.NODE_ENV === 'production' 
   ? process.env.FRONTEND_URL 
@@ -54,7 +49,6 @@ const PORT = process.env.PORT || 8080;
 // Database connection check
 sequelize.authenticate()
  .then(async () => {
-   console.log('Database connected');
    // Verify builds column schema
    const [schemaCheck] = await sequelize.query(`
      SELECT column_name, data_type, udt_name, column_default 
@@ -62,15 +56,12 @@ sequelize.authenticate()
      WHERE table_name = 'users' 
      AND column_name = 'builds'
    `);
-   console.log('Builds column schema:', schemaCheck[0]);
  })
  .then(() => {
    app.listen(PORT, () => {
-     console.log(`Server is running on port ${PORT}`);
    });
  })
  .catch((error) => {
-   console.error('Database connection failed:', error);
  });
 
 // CORS Middleware
@@ -235,17 +226,6 @@ app.use('/api/guilds/:guildId/members', guildScopeMiddleware, validateGuildMembe
 
 app.use('/api/guilds', guildScopeMiddleware, guildRouter);
 
-// Debug routes
-app.use((req, res, next) => {
- if (req.method === 'PUT') {
-   console.log('Incoming PUT request:', {
-     url: req.url,
-     body: req.body,
-     params: req.params
-   });
- }
- next();
-});
 
 app.enable('trust proxy');
 
@@ -397,7 +377,6 @@ passport.use(new DiscordStrategy({
     let user = await db.User.findOne({ where: { discord_id: profile.id } });
     
     if (!user) {
-      console.log('Creating new user');
       const defaultBuilds = [];
       user = await db.User.create({
         discord_id: profile.id,

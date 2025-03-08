@@ -53,23 +53,14 @@ router.get('/stats/members', isAuthenticated, async (req, res) => {
 
 router.get('/combat', isAuthenticated, async (req, res) => {
   try {
-    console.log('Starting combat stats query');
     
     // First, let's check what we get from a basic query
     const userCheck = await db.User.findOne();
-    console.log('Sample user data:', {
-      id: userCheck.id,
-      buildsType: typeof userCheck.builds,
-      buildsValue: userCheck.builds
-    });
 
     const users = await db.User.findAll({
       attributes: ['id', 'builds'],
       raw: true  // Add this to get plain objects
     });
-
-    console.log('Found users:', users.length);
-    console.log('First few users builds:', users.slice(0, 2));
 
     const stats = {
       roles: {},
@@ -106,7 +97,6 @@ router.get('/combat', isAuthenticated, async (req, res) => {
       }
     });
 
-    console.log('Computed stats:', stats);
     res.json(stats);
 
   } catch (error) {

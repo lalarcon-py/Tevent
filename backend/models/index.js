@@ -9,7 +9,6 @@ const db = {};
 
 const sequelize = config.sequelize;
 
-console.log('🔎 Scanning models directory for valid model files...');
 
 fs.readdirSync(__dirname)
   .filter(file => {
@@ -18,12 +17,10 @@ fs.readdirSync(__dirname)
       file.endsWith('.js') &&
       !file.includes('.test.js') // Exclude test files
     );
-    console.log(`📁 ${file} - ${isValidModel ? 'VALID' : 'IGNORED'}`);
     return isValidModel;
   })
   .forEach(file => {
     try {
-      console.log(`🔄 Attempting to load model from: ${file}`);
       const modelPath = path.join(__dirname, file);
       const modelModule = require(modelPath);
       
@@ -35,7 +32,6 @@ fs.readdirSync(__dirname)
       // Initialize the model
       const model = modelModule(sequelize, Sequelize.DataTypes);
       db[model.name] = model;
-      console.log(`✅ Successfully loaded model: ${model.name}`);
     } catch (error) {
       console.error(`💥 Critical error loading ${file}:`, error.message);
       console.error('🛑 Shutting down due to invalid model configuration');
@@ -43,18 +39,13 @@ fs.readdirSync(__dirname)
     }
   });
 
-console.log('🔗 Setting up model associations...');
 Object.keys(db).forEach(modelName => {
   if (typeof db[modelName].associate === 'function') {
     db[modelName].associate(db);
-    console.log(`➡️  Associated model: ${modelName}`);
   }
 });
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
-
-console.log('🎉 All models loaded successfully!');
-console.log('📦 Exported models:', Object.keys(db));
 
 module.exports = db;

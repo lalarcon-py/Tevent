@@ -9,7 +9,6 @@ const getGuildStorageItems = async (req, res) => {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
     
-    console.log(`Fetching storage items for guild: ${guildId}`);
     
     if (req.isAuthenticated()) {
       const isMember = await db.GuildMember.findOne({
@@ -57,8 +56,6 @@ const addItemToStorage = async (req, res) => {
     if (!item_id) {
       return res.status(400).json({ error: 'Item ID is required' });
     }
-    
-    console.log(`Adding item ${item_id} to storage for guild: ${guildId}`);
     
     // Verify membership
     const isMember = await db.GuildMember.findOne({

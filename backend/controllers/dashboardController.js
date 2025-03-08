@@ -57,7 +57,6 @@ const dashboardController = {
         raw: true
       });
 
-      console.log('Found users:', users.length);
       
       const stats = {
         roles: {},
@@ -101,13 +100,6 @@ const dashboardController = {
             error: error.message
           });
         }
-      });
-
-      console.log('Stats prepared with counts:', {
-        rolesCount: Object.keys(stats.roles).length,
-        specsCount: Object.keys(stats.specs).length,
-        primaryWeaponsCount: Object.keys(stats.weapons.primary).length,
-        secondaryWeaponsCount: Object.keys(stats.weapons.secondary).length
       });
 
       res.json(stats);

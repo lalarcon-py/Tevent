@@ -9,7 +9,6 @@ const guildScopeMiddleware = async (req, res, next) => {
     if (guildId) {
       // Store guild ID in request for controllers to use
       req.guildId = guildId;
-      console.log(`Setting request guildId to ${guildId} from parameters`);
     } 
     // If no guildId in request params but user is authenticated, try to get default guild
     else if (req.isAuthenticated() && req.path.includes('/events')) { // Only for events-related endpoints
@@ -20,7 +19,6 @@ const guildScopeMiddleware = async (req, res, next) => {
       
       if (userGuild) {
         req.guildId = userGuild.guild_id;
-        console.log(`Setting default guildId to ${userGuild.guild_id} from user membership`);
       }
     }
     

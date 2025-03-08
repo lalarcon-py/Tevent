@@ -28,7 +28,6 @@ for (const file of commandFiles) {
 
 // Ready event
 client.once(Events.ClientReady, () => {
-  console.log(`Discord bot logged in as ${client.user.tag}`);
   // Initialize schedulers for events, attendance reports
   require('./utils/scheduler')(client);
 });

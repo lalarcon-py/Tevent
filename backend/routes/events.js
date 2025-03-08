@@ -20,7 +20,6 @@ router.get('/', async (req, res) => {
     
     // If no guildId explicitly provided, try to get user's primary guild
     if (!guildId && req.isAuthenticated()) {
-      console.log('No explicit guildId provided, trying to find user guild...');
       const guildMember = await db.GuildMember.findOne({
         where: { user_id: req.user.id },
         order: [['created_at', 'DESC']]
@@ -28,7 +27,6 @@ router.get('/', async (req, res) => {
       
       if (guildMember) {
         guildId = guildMember.guild_id;
-        console.log(`Found user guild: ${guildId}`);
       } else {
         return res.status(400).json({ 
           error: 'Guild ID is required and no default guild found for user'
@@ -38,7 +36,6 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    console.log(`Fetching events for guild: ${guildId}`);
     
     const events = await Event.findAll({
       where: { guild_id: guildId },
@@ -99,7 +96,6 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
     
     // If no guildId explicitly provided, try to get user's primary guild
     if (!guildId && req.isAuthenticated()) {
-      console.log('No explicit guildId provided, trying to find user guild...');
       const guildMember = await db.GuildMember.findOne({
         where: { user_id: req.user.id },
         order: [['created_at', 'DESC']]
@@ -107,7 +103,6 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
       
       if (guildMember) {
         guildId = guildMember.guild_id;
-        console.log(`Found user guild: ${guildId}`);
       }
     }
     
@@ -218,7 +213,6 @@ router.put('/:id', isAuthenticated, async (req, res) => {
       
       if (guildMember) {
         guildId = guildMember.guild_id;
-        console.log(`Found user guild: ${guildId}`);
       }
     }
     
@@ -290,7 +284,6 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
       
       if (guildMember) {
         guildId = guildMember.guild_id;
-        console.log(`Found user guild: ${guildId}`);
       }
     }
     
@@ -363,14 +356,12 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
 router.post('/', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    console.log('Creating event with data:', req.body);
 
     // Try to get guildId from multiple places
     let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
     
     // If no guildId explicitly provided, try to get user's primary guild
     if (!guildId && req.isAuthenticated()) {
-      console.log('No explicit guildId provided, trying to find user guild...');
       const guildMember = await db.GuildMember.findOne({
         where: { user_id: req.user.id },
         order: [['created_at', 'DESC']]
@@ -378,7 +369,6 @@ router.post('/', isAuthenticated, async (req, res) => {
       
       if (guildMember) {
         guildId = guildMember.guild_id;
-        console.log(`Found user guild: ${guildId}`);
       }
     }
     
@@ -386,9 +376,6 @@ router.post('/', isAuthenticated, async (req, res) => {
       await t.rollback();
       return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
     }
-
-    console.log(`Using guildId: ${guildId} for event creation`);
-
     const event = await Event.create({
       guild_id: guildId,
       title: req.body.title,

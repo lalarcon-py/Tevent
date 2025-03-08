@@ -107,12 +107,6 @@ const gearCheckController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
-      // Debug the incoming request
-      console.log('Upload request received:', { 
-        hasFile: !!req.file, 
-        guildId: req.guildId,
-        body: req.body
-      });
       
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -139,7 +133,6 @@ const gearCheckController = {
         
         // Write file to disk
         fs.writeFileSync(filePath, req.file.buffer);
-        console.log(`File saved to ${filePath}`);
         
         // Create a new submission regardless of previous state
         // This is a temporary workaround until the database is fully migrated
@@ -393,8 +386,6 @@ const gearCheckController = {
   // Cleanup old gear checks (to be called by a cron job)
   cleanupOldGearChecks: async () => {
     try {
-      console.log('Running gear check cleanup job...');
-      
       // Calculate date threshold (14 days ago)
       const fourteenDaysAgo = new Date();
       fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
@@ -409,8 +400,6 @@ const gearCheckController = {
         attributes: ['id', 'image_url', 'created_at']
       });
       
-      console.log(`Found ${oldGearChecks.length} gear checks older than 14 days`);
-      
       // Delete files and records
       for (const check of oldGearChecks) {
         try {
@@ -422,13 +411,11 @@ const gearCheckController = {
             // Delete physical file if it exists
             if (fs.existsSync(filePath)) {
               fs.unlinkSync(filePath);
-              console.log(`Deleted file: ${filePath}`);
             }
           }
           
           // Delete record
           await check.destroy();
-          console.log(`Deleted gear check record ID: ${check.id}`);
         } catch (err) {
           console.error(`Error deleting gear check ${check.id}:`, err);
         }

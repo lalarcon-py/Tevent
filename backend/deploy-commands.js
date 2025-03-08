@@ -14,10 +14,4 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
 
 // For guild-specific commands (instant updates)
 rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands })
-    .then(() => console.log('Successfully registered guild commands.'))
     .catch(console.error);
-
-// For global commands (uncomment if needed - 1hr delay)
-// rest.put(Routes.applicationCommands(clientId), { body: commands })
-//     .then(() => console.log('Successfully registered global commands.'))
-//     .catch(console.error);

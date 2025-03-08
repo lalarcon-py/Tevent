@@ -73,7 +73,6 @@ const createGuild = async (req, res) => {
       });
     }
     
-    console.log(`Creating guild "${name}" for user ${req.user.id}`);
     
     // Create guild record with status field
     const guild = await db.Guild.create({
@@ -83,7 +82,6 @@ const createGuild = async (req, res) => {
       join_code: generateRandomCode()
     }, { transaction: t });
     
-    console.log(`Guild created with ID: ${guild.id}`);
     
     // Add creator as guild master
     await db.GuildMember.create({
@@ -173,7 +171,6 @@ const joinGuild = async (req, res) => {
     
     // CRITICAL: Create user record with guild_id
     try {
-      console.log(`Creating user ${req.user.id} record for guild ${guildId}`);
       
       // Get user data from public users table
       const [userData] = await sequelize.query(`
@@ -194,7 +191,6 @@ const joinGuild = async (req, res) => {
           status: 'Active'
         }, { transaction: t });
         
-        console.log(`Successfully created user ${req.user.id} record for guild ${guildId}`);
       }
     } catch (copyError) {
       console.error(`Failed to create user data with guild_id:`, copyError);
@@ -227,7 +223,6 @@ const leaveGuild = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    console.log(`User ${req.user.id} attempting to leave guild ${guildId}`);
     
     // Check if guild exists
     const guild = await Guild.findByPk(guildId);
@@ -249,7 +244,6 @@ const leaveGuild = async (req, res) => {
     
     // Check if user is the guild master
     if (membership.role === 'Guild Master') {
-      console.log(`Guild Master ${req.user.id} is leaving guild ${guildId}`);
       
       // Find another member to transfer ownership to
       const newOwner = await GuildMember.findOne({
@@ -268,7 +262,6 @@ const leaveGuild = async (req, res) => {
       });
       
       if (newOwner) {
-        console.log(`Transferring Guild Master role to member ${newOwner.user_id}`);
         // Transfer ownership
         await newOwner.update({ role: 'Guild Master' }, { transaction: t });
         
@@ -282,17 +275,14 @@ const leaveGuild = async (req, res) => {
           }, { transaction: t });
         }
       } else {
-        console.log(`No members to transfer ownership to. Guild will be deleted after the user leaves.`);
       }
     }
     
     // Remove the user from the guild
     await membership.destroy({ transaction: t });
-    console.log(`User ${req.user.id} has left guild ${guildId}`);
     
     // Delete user data from this guild
     try {
-      console.log(`Deleting user ${req.user.id} data for guild ${guildId}`);
       
       // Delete by guild_id filter
       await db.User.destroy({
@@ -330,7 +320,6 @@ const leaveGuild = async (req, res) => {
         });
       }
       
-      console.log(`Successfully deleted user ${req.user.id} data for guild ${guildId}`);
     } catch (userDeleteError) {
       // Log but continue - we don't want to prevent leaving if this fails
       console.error(`Failed to delete user data for guild:`, userDeleteError);
@@ -341,14 +330,11 @@ const leaveGuild = async (req, res) => {
       where: { guild_id: guildId },
       transaction: t  // Use the same transaction to see the updated state
     });
-    
-    console.log(`Guild ${guildId} has ${remainingMembers} remaining members`);
+
     
     if (remainingMembers === 0) {
-      console.log(`Guild ${guildId} has no remaining members. Deleting immediately...`);
-      // Delete the guild and its data
+
       await deleteEmptyGuild(guildId, t);
-      console.log(`Guild ${guildId} and its database have been deleted successfully`);
     }
     
     await t.commit();
@@ -361,12 +347,8 @@ const leaveGuild = async (req, res) => {
   }
 };
 
-/**
- * Helper function to delete empty guilds
- */
 const deleteEmptyGuild = async (guildId, transaction) => {
   try {
-    console.log(`Starting deletion process for empty guild ${guildId}...`);
     
     // Delete guild record
     const deleteResult = await db.Guild.destroy({
@@ -426,7 +408,6 @@ const deleteEmptyGuild = async (guildId, transaction) => {
       });
     }
     
-    console.log(`Guild record and all associated data deleted for guild ${guildId}`);
     
     return true;
   } catch (error) {
@@ -816,7 +797,6 @@ const getAvailableGuilds = async (req, res) => {
       attributes: ['guild_id']
     }).then(memberships => memberships.map(m => m.guild_id));
     
-    console.log('User is member of guilds:', userGuildIds);
     
     // Ensure we handle the case of empty userGuildIds array
     // Without this, if userGuildIds is empty, the query would exclude ALL guilds
@@ -829,8 +809,6 @@ const getAvailableGuilds = async (req, res) => {
       },
       attributes: ['id', 'name', 'created_at']
     });
-    
-    console.log('Found available guilds:', availableGuilds.length);
     
     // Get owner names and member counts
     const guildsWithDetails = await Promise.all(availableGuilds.map(async guild => {
