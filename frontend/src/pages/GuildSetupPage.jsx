@@ -457,8 +457,9 @@ const GuildSetupPage = () => {
                           <Button 
                                 variant="outlined" 
                                 onClick={() => {
-                                  // Replace direct browser navigation with React Router's navigation
-                                  navigate(`/applications?guildId=${guild.id}`);
+                                  navigate(`/applications?guildId=${guild.id}`, {
+                                    state: { guildId: guild.id }
+                                  });
                                 }}
                                 sx={{
                                   mr: 1,

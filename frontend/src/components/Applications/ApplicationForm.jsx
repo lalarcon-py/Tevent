@@ -1,5 +1,6 @@
 // src/components/Applications/ApplicationForm.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
   TextField, 
@@ -26,6 +27,8 @@ const ApplicationForm = ({ setUserApplication, guildId }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const navigate = useNavigate();
+  const [success, setSuccess] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -71,9 +74,10 @@ const ApplicationForm = ({ setUserApplication, guildId }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     
+    // Use the existing validateForm function instead of manual validation
     if (!validateForm()) {
       return;
     }
@@ -81,27 +85,24 @@ const ApplicationForm = ({ setUserApplication, guildId }) => {
     setLoading(true);
     setSubmitError('');
     
+    // Create form data for file upload support
+    const submitFormData = new FormData(); // Rename to avoid conflict with state variable
+    submitFormData.append('inGameName', formData.inGameName);
+    submitFormData.append('questlogLink', formData.questlogLink);
+    submitFormData.append('previousGuilds', formData.previousGuilds);
+    submitFormData.append('leaveReason', formData.leaveReason);
+    submitFormData.append('combatPower', formData.combatPower);
+    submitFormData.append('guildId', guildId);
+    
+    if (screenshot) {
+      submitFormData.append('screenshot', screenshot);
+    }
+    
     try {
-      // Create form data for file upload
-      const formDataObj = new FormData();
-      formDataObj.append('inGameName', formData.inGameName);
-      formDataObj.append('questlogLink', formData.questlogLink);
-      formDataObj.append('previousGuilds', formData.previousGuilds);
-      formDataObj.append('leaveReason', formData.leaveReason);
-      formDataObj.append('combatPower', formData.combatPower);
-      
-      // Add guildId if provided
-      if (guildId) {
-        formDataObj.append('guildId', guildId);
-      }
-      
-      if (screenshot) {
-        formDataObj.append('screenshot', screenshot);
-      }
-      
+      // Submit application to backend
       const response = await axiosInstance.post(
         '/api/guild-applications', 
-        formDataObj,
+        submitFormData,
         {
           headers: {
             'Content-Type': 'multipart/form-data'
@@ -109,10 +110,70 @@ const ApplicationForm = ({ setUserApplication, guildId }) => {
         }
       );
       
-      setUserApplication(response.data);
+      // Update parent component state if needed
+      if (setUserApplication && typeof setUserApplication === 'function') {
+        setUserApplication(response.data);
+      }
+      
+      // Show success message
+      setSuccess(true);
+      
+      // Clear form fields
+      setFormData({
+        inGameName: '',
+        questlogLink: '',
+        previousGuilds: '',
+        leaveReason: '',
+        combatPower: ''
+      });
+      setScreenshot(null);
+      setPreviewUrl('');
+      
+      // Redirect after a short delay to show success message
+      setTimeout(() => {
+        navigate('/guilds/setup', { 
+          state: { 
+            tab: 1, // Go back to the "Join a Guild" tab
+            message: 'Your application has been submitted successfully! You will be notified when it is reviewed.'
+          } 
+        });
+      }, 1500);
+      
     } catch (error) {
-      console.error('Error submitting application:', error);
-      setSubmitError(error.response?.data?.error || 'Failed to submit application. Please try again.');
+      // Handle errors with appropriate messages
+      console.error('Application submission error:', error);
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        if (error.response.status === 400) {
+          setSubmitError(error.response.data.error || 'Invalid application data. Please check your information.');
+        } else if (error.response.status === 401) {
+          setSubmitError('You must be logged in to submit an application.');
+        } else if (error.response.status === 403) {
+          setSubmitError('You do not have permission to apply to this guild.');
+        } else if (error.response.status === 409) {
+          setSubmitError('You already have a pending application for this guild.');
+          
+          // Redirect after a short delay if they already applied
+          setTimeout(() => {
+            navigate('/guilds/setup', { 
+              state: { 
+                tab: 1,
+                message: 'You already have a pending application for this guild.'
+              } 
+            });
+          }, 1500);
+        } else {
+          setSubmitError('Failed to submit application. Please try again later.');
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        setSubmitError('Unable to reach the server. Please check your internet connection and try again.');
+      } else {
+        // Something happened in setting up the request
+        setSubmitError('An error occurred while submitting your application. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
