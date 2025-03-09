@@ -130,20 +130,13 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   };
 
   const getAvailableRoles = () => {
-    // Allow role changing for Guild Masters and Guild Advisors
-    if (currentUserRole !== 'Guild Master' && currentUserRole !== 'Guild Advisor') {
+    if (currentUserRole !== 'Guild Master') {
       return [];
     }
     
     return Object.keys(GUILD_ROLES).filter(role => {
-      // Filter out duplicate "Member" if "Guild Member" exists
       if ((role === 'Member' && GUILD_ROLES['Guild Member']) || 
           (role === 'Guild Member' && GUILD_ROLES['Member'] && role !== member.role)) {
-        return false;
-      }
-      
-      // Guild Advisors can't promote to Guild Master
-      if (currentUserRole === 'Guild Advisor' && role === 'Guild Master') {
         return false;
       }
       
@@ -656,11 +649,13 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
   const handleRoleSave = async (updatedMember) => {
     try {
-      const guildId = localStorage.getItem('guildId');
-      if (!guildId) {
-        console.error('No guild ID found');
+      if (currentUserRole !== 'Guild Master') {
+        console.error('Permission denied: Only Guild Masters can change roles');
+        setError('Permission denied: Only Guild Masters can change roles');
         return;
       }
+      
+      const guildId = localStorage.getItem('guildId');
       
       const isGuildMasterTransfer = updatedMember.role === 'Guild Master';
       const endpoint = isGuildMasterTransfer 
@@ -1172,24 +1167,24 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                     )}
                     
                     {/* ONLY show role management icon for Guild Masters and Guild Advisors */}
-                    {(currentUserRole === 'Guild Master' || currentUserRole === 'Guild Advisor') && (
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRoleManagementMember(member);
-                        }}
-                        sx={{ 
-                          color: '#ffd700',
-                          padding: isMobile ? '4px' : '8px',
-                          '&:hover': { 
-                            bgcolor: 'rgba(255, 215, 0, 0.2)',
-                            transform: 'scale(1.1)'
-                          }
-                        }}
-                      >
-                        <StarIcon fontSize={isMobile ? "small" : "medium"} />
-                      </IconButton>
-                    )}
+                    {currentUserRole === 'Guild Master' && (
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRoleManagementMember(member);
+                          }}
+                          sx={{ 
+                            color: '#ffd700',
+                            padding: isMobile ? '4px' : '8px',
+                            '&:hover': { 
+                              bgcolor: 'rgba(255, 215, 0, 0.2)',
+                              transform: 'scale(1.1)'
+                            }
+                          }}
+                        >
+                          <StarIcon fontSize={isMobile ? "small" : "medium"} />
+                        </IconButton>
+                      )}
                   </Box>
                 </TableCell>
               </TableRow>

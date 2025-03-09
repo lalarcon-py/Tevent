@@ -275,7 +275,6 @@ const GearCheck = () => {
                   />
                   {/* Add this for debugging */}
                   <Typography variant="caption" color="text.secondary">
-                    Image path: {imageUrl}
                   </Typography>
                 </Box>
               )}
