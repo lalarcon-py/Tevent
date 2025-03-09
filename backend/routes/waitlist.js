@@ -57,7 +57,7 @@ router.put('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, decrementQuantity } = req.body;
     const guildId = req.guildId;
     
     if (!guildId) {
@@ -72,7 +72,7 @@ router.put('/:id', async (req, res) => {
       }
     });
     
-    if (!membership || !['Guild Master', 'Guild Advisor'].includes(membership.role)) {
+    if (!membership || !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(membership.role)) {
       return res.status(403).json({ error: 'No permission to approve/deny requests' });
     }
     
@@ -101,6 +101,36 @@ router.put('/:id', async (req, res) => {
     // Update request status
     await request.update({ status });
     
+    // If approving, decrease the item quantity
+    if (status === 'Approved' && request.storageItem) {
+      // Decrement quantity
+      const newQuantity = Math.max(0, request.storageItem.quantity - 1);
+      
+      // Update the quantity
+      await request.storageItem.update({ quantity: newQuantity });
+      console.log(`Updated item ${request.storageItem.id} quantity to ${newQuantity}`);
+      
+      // If quantity reaches 0, don't delete but mark as out of stock
+      if (newQuantity === 0) {
+        // Find all pending requests for this item
+        const pendingRequests = await db.LootRequest.findAll({
+          where: { 
+            storage_item_id: request.storageItem.id,
+            status: 'Pending',
+            id: { [db.Sequelize.Op.ne]: request.id } // Exclude current request
+          }
+        });
+        
+        // Update all pending requests to "Denied - Out of Stock"
+        if (pendingRequests.length > 0) {
+          await db.LootRequest.update(
+            { status: 'Denied - Out of Stock' },
+            { where: { id: pendingRequests.map(req => req.id) } }
+          );
+        }
+      }
+    }
+    
     // If approved, also check and remove from wishlist
     if (status === 'Approved' && request.user_id) {
       try {
@@ -124,7 +154,11 @@ router.put('/:id', async (req, res) => {
       }
     }
     
-    res.json({ success: true, message: `Request ${status.toLowerCase()}` });
+    res.json({ 
+      success: true, 
+      message: `Request ${status.toLowerCase()}`,
+      storageUpdated: status === 'Approved' && request.storageItem !== null
+    });
   } catch (error) {
     console.error('Update request error:', error);
     res.status(500).json({ error: 'Failed to update request', details: error.message });

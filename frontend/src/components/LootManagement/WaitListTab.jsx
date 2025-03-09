@@ -26,7 +26,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 
-const WaitListTab = ({ dkpEnabled }) => {
+const WaitListTab = ({ dkpEnabled, refreshData }) => {
   const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState([]);
@@ -86,16 +86,35 @@ const WaitListTab = ({ dkpEnabled }) => {
       message: `Are you sure you want to approve ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
+          setLoading(true); // Show loading indicator
           const guildId = localStorage.getItem('guildId');
           if (!guildId) {
             console.error('No guild ID found');
             return;
           }
-          await axiosInstance.put(`/api/waitlist/${request.id}`, { status: 'Approved', guildId });
+          
+          console.log('Approving request:', request.id);
+          
+          // Make the API call
+          await axiosInstance.put(`/api/waitlist/${request.id}`, { 
+            status: 'Approved', 
+            guildId 
+          });
+          
+          console.log('Request approved successfully');
+          
+          // Force reload data
           await loadRequests();
+          
+          // Also refresh parent component data
+          if (refreshData) {
+            refreshData();
+          }
         } catch (error) {
           console.error('Failed to approve request:', error);
-          setError('Failed to approve request');
+          setError('Failed to approve request. Please try again.');
+        } finally {
+          setLoading(false);
         }
       }
     });
@@ -108,16 +127,32 @@ const WaitListTab = ({ dkpEnabled }) => {
       message: `Are you sure you want to deny ${request?.user?.username || 'this user'}'s request for ${getItemName(request) || 'this item'}?`,
       action: async () => {
         try {
+          setLoading(true);
           const guildId = localStorage.getItem('guildId');
           if (!guildId) {
             console.error('No guild ID found');
             return;
           }
-          await axiosInstance.put(`/api/waitlist/${request.id}`, { status: 'Denied', guildId });
+          
+          console.log('Denying request:', request.id);
+          
+          await axiosInstance.put(`/api/waitlist/${request.id}`, { 
+            status: 'Denied', 
+            guildId 
+          });
+          
+          console.log('Request denied successfully');
+          
           await loadRequests();
+          
+          if (refreshData) {
+            refreshData();
+          }
         } catch (error) {
           console.error('Failed to deny request:', error);
-          setError('Failed to deny request');
+          setError('Failed to deny request. Please try again.');
+        } finally {
+          setLoading(false);
         }
       }
     });
@@ -136,6 +171,10 @@ const WaitListTab = ({ dkpEnabled }) => {
             return;
           }
           await axiosInstance.delete(`/api/waitlist/${request.id}?guildId=${guildId}`);
+          
+          // Refresh data in parent component
+          if (refreshData) refreshData();
+          
           await loadRequests();
         } catch (error) {
           console.error('Failed to delete request:', error);
@@ -171,6 +210,11 @@ const WaitListTab = ({ dkpEnabled }) => {
     const item = getItem(storageItem);
     return item?.icon || null;
   };
+
+  // Make sure component refreshes when the refreshTrigger changes
+  useEffect(() => {
+    loadRequests();
+  }, [refreshData]);
 
   if (loading) {
     return (
@@ -363,27 +407,31 @@ const WaitListTab = ({ dkpEnabled }) => {
       </Paper>
      
       <Dialog
-        open={confirmDialog.open}
-        onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}
-      >
-        <DialogTitle>{confirmDialog.title}</DialogTitle>
-        <DialogContent>{confirmDialog.message}</DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              confirmDialog.action?.();
-              setConfirmDialog({ ...confirmDialog, open: false });
-            }}
-            color="primary"
-            variant="contained"
-          >
-            Confirm
-          </Button>
-        </DialogActions>
-      </Dialog>
+          open={confirmDialog.open}
+          onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}
+        >
+          <DialogTitle>{confirmDialog.title}</DialogTitle>
+          <DialogContent>{confirmDialog.message}</DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                // Execute the action function and then close the dialog
+                if (confirmDialog.action) {
+                  console.log('Executing confirm action...');
+                  confirmDialog.action();
+                }
+                setConfirmDialog({ ...confirmDialog, open: false });
+              }}
+              color="primary"
+              variant="contained"
+            >
+              Confirm
+            </Button>
+          </DialogActions>
+        </Dialog>
     </Box>
   );
 };

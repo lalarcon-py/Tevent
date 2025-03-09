@@ -16,7 +16,7 @@ import {
 } from '@mui/material';
 import axiosInstance from '../../config/axios.js';
 
-const LootRequestForm = () => {
+const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
   const [allItems, setAllItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
@@ -59,12 +59,28 @@ const LootRequestForm = () => {
   const handleSubmit = async () => {
     if (selectedItem) {
       try {
-        await axiosInstance.post('/api/waitlist', {
+        const response = await axiosInstance.post('/api/waitlist', {
           storageItemId: selectedItem.id
         });
+        
+        console.log('Request submitted successfully:', response.data);
         showNotification('Item request submitted successfully', 'success');
         setSelectedItem(null);
         setInputValue('');
+        
+        // Force tab change and refresh
+        if (onRequestSubmitted) {
+          setTimeout(() => {
+            onRequestSubmitted();
+            // Add a short delay before refreshing data
+            setTimeout(() => {
+              if (refreshData) refreshData();
+            }, 100);
+          }, 100);
+        } else if (refreshData) {
+          // If no tab change function, just refresh
+          refreshData();
+        }
       } catch (error) {
         console.error('Failed to submit request:', error);
         console.error('Error details:', error.response?.data);

@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import axiosInstance from '../../config/axios';
 
-const LootWaitlist = ({ dkpEnabled }) => {
+const LootWaitlist = ({ dkpEnabled, refreshData }) => {
   const { isAuthenticated } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +53,14 @@ const LootWaitlist = ({ dkpEnabled }) => {
       setLoading(false);
     }
   };
+
+  // Make sure component refreshes when the refreshTrigger changes
+  useEffect(() => {
+    if (isAuthenticated && refreshData) {
+      console.log('Refreshing waitlist due to refreshData change');
+      loadRequests();
+    }
+  }, [refreshData, isAuthenticated]);
 
   const getRarityColor = (rarity) => {
     switch(rarity?.toLowerCase()) {

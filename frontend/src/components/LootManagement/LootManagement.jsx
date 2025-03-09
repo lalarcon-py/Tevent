@@ -1,5 +1,5 @@
 // components/LootManagement/LootManagement.jsx - Fixed version
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
 import AdminLootPanel from './AdminLootPanel';
 import WaitListTab from './WaitListTab';
@@ -15,8 +15,16 @@ const LootManagement = () => {
   const { settings } = useGuildSettings();
   const { isAuthenticated, user } = useAuth();
   const [directDkpCheck, setDirectDkpCheck] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   
+  // Create a new isItemAdmin function to separate item storage admins from other admins
+  const isItemAdmin = user && ['Guild Master', 'Guild Advisor'].includes(user.role);
   const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+
+  // Create a refresh function that updates the trigger state
+  const refreshData = () => {
+    setRefreshKey(prevKey => prevKey + 1);
+  };
 
   useEffect(() => {
     // Log GuildSettings context value for debugging
@@ -87,23 +95,44 @@ const LootManagement = () => {
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
-        {isAdmin ? (
-          <AdminLootPanel key={`admin-panel-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
+        {isItemAdmin ? (
+          <AdminLootPanel 
+            key={`admin-panel-${String(dkpEnabled)}-${refreshKey}`} 
+            dkpEnabled={dkpEnabled} 
+            refreshData={refreshData}
+          />
         ) : (
-          <LootRequestForm key={`request-form-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
+          <LootRequestForm 
+            key={`request-form-${String(dkpEnabled)}-${refreshKey}`} 
+            dkpEnabled={dkpEnabled}
+            refreshData={refreshData}
+            onRequestSubmitted={() => setCurrentTab(1)}
+          />
         )}
       </Box>
 
       <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
         {isAdmin ? (
-          <WaitListTab key={`waitlist-tab-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
+          <WaitListTab 
+            key={`waitlist-tab-${String(dkpEnabled)}-${refreshKey}`} 
+            dkpEnabled={dkpEnabled}
+            refreshData={refreshData}
+          />
         ) : (
-          <LootWaitlist key={`loot-waitlist-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
+          <LootWaitlist 
+            key={`loot-waitlist-${String(dkpEnabled)}-${refreshKey}`} 
+            dkpEnabled={dkpEnabled}
+            refreshData={refreshData}
+          />
         )}
       </Box>
       
       <Box sx={{ display: currentTab !== 2 ? 'none' : 'block' }}>
-        <WishlistTab key={`wishlist-tab-${String(dkpEnabled)}`} dkpEnabled={dkpEnabled} />
+        <WishlistTab 
+          key={`wishlist-tab-${String(dkpEnabled)}-${refreshKey}`} 
+          dkpEnabled={dkpEnabled}
+          refreshData={refreshData}
+        />
       </Box>
     </Box>
   );

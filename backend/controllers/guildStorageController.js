@@ -47,7 +47,7 @@ const addItemToStorage = async (req, res) => {
     }
     
     const { item_id, quantity, dkp_cost, trait } = req.body;
-    const guildId = req.guildId;
+    const guildId = req.guildId || req.body.guildId;
     
     if (!guildId) {
       return res.status(400).json({ error: 'Guild ID is required' });
@@ -56,17 +56,22 @@ const addItemToStorage = async (req, res) => {
     if (!item_id) {
       return res.status(400).json({ error: 'Item ID is required' });
     }
-    
-    // Verify membership
-    const isMember = await db.GuildMember.findOne({
+
+    // Verify membership and role
+    const guildMember = await db.GuildMember.findOne({
       where: { guild_id: guildId, user_id: req.user.id }
     });
     
-    if (!isMember) {
+    if (!guildMember) {
       return res.status(403).json({ error: 'Not a member of this guild' });
     }
     
-    // Verify the item exists in guild catalog
+    // Check if user has permission to add items (Guild Master or Guild Advisor only)
+    if (!['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Check if the item exists in the guild's catalog
     const itemExists = await db.Item.findOne({
       where: {
         id: item_id,
@@ -78,14 +83,35 @@ const addItemToStorage = async (req, res) => {
       return res.status(404).json({ error: 'Item not found in catalog for this guild' });
     }
     
-    // Create storage item with guild_id
-    const storageItem = await db.GuildStorageItem.create({
-      guild_id: guildId,
-      item_id: item_id,
-      quantity: quantity || 1,
-      trait: trait || null,
-      dkp_cost: dkp_cost || 0
+    // Check if item already exists in storage with the same trait
+    const existingStorageItem = await db.GuildStorageItem.findOne({
+      where: {
+        guild_id: guildId,
+        item_id: item_id,
+        trait: trait || null
+      }
     });
+    
+    let storageItem;
+    
+    if (existingStorageItem) {
+      // Update existing item quantity
+      const newQuantity = existingStorageItem.quantity + (quantity || 1);
+      await existingStorageItem.update({
+        quantity: newQuantity,
+        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost
+      });
+      storageItem = existingStorageItem;
+    } else {
+      // Create new storage item
+      storageItem = await db.GuildStorageItem.create({
+        guild_id: guildId,
+        item_id: item_id,
+        quantity: quantity || 1,
+        trait: trait || null,
+        dkp_cost: dkp_cost || 0
+      });
+    }
     
     // Return with item details
     const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {

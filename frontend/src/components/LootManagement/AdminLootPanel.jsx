@@ -178,14 +178,26 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         return;
       }
       
-      const response = await axiosInstance.post(`/api/waitlist?guildId=${guildId}`, {
+      if (!storageItem || !storageItem.id) {
+        console.error('Invalid storage item:', storageItem);
+        return;
+      }
+      
+      console.log('Requesting item with ID:', storageItem.id);
+      
+      // IMPORTANT: The API expects storageItemId, not storageItem_id
+      const response = await axiosInstance.post(`/api/waitlist`, {
         storageItemId: storageItem.id,
-        guildId
+        guildId: guildId
       });
       
-      console.log('Item requested successfully');
+      console.log('Item requested successfully:', response.data);
+      
     } catch (error) {
       console.error('Failed to request item:', error);
+      if (error.response) {
+        console.error('Error details:', error.response.data);
+      }
     }
   };
 

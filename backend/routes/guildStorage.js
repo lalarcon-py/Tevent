@@ -53,14 +53,44 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Item ID is required' });
     }
 
-    // Create storage item with guild_id included
-    const storageItem = await db.GuildStorageItem.create({
-      guild_id: guildId,
-      item_id,
-      quantity: quantity || 1,
-      dkp_cost: dkp_cost || 0,
-      trait: trait || null
+    // Verify user has permission to add items (Guild Master or Guild Advisor only)
+    const guildMember = await db.GuildMember.findOne({
+      where: { guild_id: guildId, user_id: req.user.id }
     });
+    
+    if (!guildMember || !['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Check if item already exists in storage with the same trait
+    const existingStorageItem = await db.GuildStorageItem.findOne({
+      where: {
+        guild_id: guildId,
+        item_id: item_id,
+        trait: trait || null
+      }
+    });
+    
+    let storageItem;
+    
+    if (existingStorageItem) {
+      // Update existing item quantity
+      const newQuantity = existingStorageItem.quantity + (quantity || 1);
+      await existingStorageItem.update({
+        quantity: newQuantity,
+        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost
+      });
+      storageItem = existingStorageItem;
+    } else {
+      // Create new storage item
+      storageItem = await db.GuildStorageItem.create({
+        guild_id: guildId,
+        item_id: item_id,
+        quantity: quantity || 1,
+        dkp_cost: dkp_cost || 0,
+        trait: trait || null
+      });
+    }
 
     // Get the full item with its associations
     const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
@@ -89,21 +119,37 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
     
-    const storageItem = await models.GuildStorageItem.findByPk(id);
+    // Verify user has permission
+    const guildMember = await db.GuildMember.findOne({
+      where: { 
+        guild_id: guildId || req.query.guildId, 
+        user_id: req.user.id 
+      }
+    });
+    
+    if (!guildMember || !['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    const storageItem = await db.GuildStorageItem.findByPk(id);
     if (!storageItem) {
       return res.status(404).json({ error: 'Storage item not found' });
     }
     
-    // Update fields if provided
-    if (quantity !== undefined) storageItem.quantity = quantity;
+    // Update fields if provided with validation
+    if (quantity !== undefined) {
+      // Ensure quantity is not negative
+      storageItem.quantity = Math.max(0, parseInt(quantity, 10));
+    }
+    
     if (dkp_cost !== undefined) storageItem.dkp_cost = dkp_cost;
     if (trait !== undefined) storageItem.trait = trait;
     
     await storageItem.save();
     
     // Get the full item with its associations
-    const fullItem = await models.GuildStorageItem.findByPk(id, {
-      include: [models.Item]
+    const fullItem = await db.GuildStorageItem.findByPk(id, {
+      include: [db.Item]
     });
     
     res.json(fullItem);
@@ -112,6 +158,8 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to update storage item', details: error.message });
   }
 });
+
+
 // Delete guild storage item
 router.delete('/:id', async (req, res) => {
   try {
@@ -128,12 +176,12 @@ router.delete('/:id', async (req, res) => {
     }
     
     // First, delete any associated loot requests
-    await models.LootRequest.destroy({
+    await db.LootRequest.destroy({
       where: { storage_item_id: id }
     });
     
     // Then delete the storage item
-    const result = await models.GuildStorageItem.destroy({
+    const result = await db.GuildStorageItem.destroy({
       where: { id }
     });
     
