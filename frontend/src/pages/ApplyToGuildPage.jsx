@@ -62,14 +62,28 @@ const ApplyToGuildPage = () => {
       setLoading(true);
       setError(null);
       
-      await axiosInstance.post('/api/guild-applications', {
-        ...applicationData,
-        guildId
+      const formData = new FormData();
+      
+      formData.append('guildId', guildId);
+      
+      formData.append('inGameName', applicationData.inGameName);
+      formData.append('questlogLink', applicationData.questlogLink || '');
+      formData.append('previousGuilds', applicationData.previousGuilds);
+      formData.append('leaveReason', applicationData.leaveReason || '');
+      formData.append('combatPower', applicationData.combatPower);
+      
+      if (applicationData.screenshot) {
+        formData.append('screenshot', applicationData.screenshot);
+      }
+      
+      await axiosInstance.post('/api/guild-applications', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
       
       setSuccessMessage('Your application has been submitted successfully. The guild leadership will review it soon.');
       
-      // Update to fetch the latest application status
       const response = await axiosInstance.get('/api/guild-applications/my-application');
       setUserApplication(response.data);
     } catch (err) {
@@ -123,7 +137,13 @@ const ApplyToGuildPage = () => {
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: '1000px', mx: 'auto' }}>
+    <Box sx={{ 
+        p: 3, 
+        maxWidth: '1000px', 
+        mx: 'auto',
+        mt: 8,
+        mb: 4 
+      }}>
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Apply to Join {guild.name}
