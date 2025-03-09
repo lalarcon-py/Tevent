@@ -207,7 +207,8 @@ function AppContent() {
         <AppHeader showNavItems={false} />
         <Routes>
           <Route path="/auth-error" element={<AuthError />} />
-          <Route path="/applications" element={<GuildApplications />} />  // Add this line
+          <Route path="/applications" element={<GuildApplications />} />
+          <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="*" element={<LandingPage />} />
         </Routes>
       </Router>
