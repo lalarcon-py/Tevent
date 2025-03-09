@@ -76,6 +76,13 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   // Add a flag to check if this is a guild master transfer
   const isGuildMasterTransfer = selectedRole === 'Guild Master';
 
+  useEffect(() => {
+    if (currentUserRole !== 'Guild Master') {
+      onClose();
+    }
+  }, [currentUserRole, onClose]);
+  
+
   // Update state when member changes
   useEffect(() => {
     if (member) {
@@ -291,6 +298,8 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
     if (member) {
       const isCurrentUser = member.id === currentUser?.id;
       const currentUserHasAdminRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser?.role);
+      
+      // Only show combat power if it's your own profile OR if you're an admin
       setShowCombatPower(isCurrentUser || currentUserHasAdminRole);
       
       setEditedMember({
@@ -307,8 +316,8 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
 
   // Add the new permission check
   useEffect(() => {
-    // If trying to edit someone else's profile and not Guild Master, close the dialog
-    if (member && currentUser && member.id !== currentUser.id && currentUser.role !== 'Guild Master') {
+    if (member && currentUser && member.id !== currentUser.id && 
+        !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser.role)) {
       onClose();
     }
   }, [member, currentUser, onClose]);
@@ -631,6 +640,13 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
     }
     setSortConfig({ key, direction });
   };
+
+  useEffect(() => {
+
+    if (roleManagementMember && currentUserRole !== 'Guild Master') {
+      setRoleManagementMember(null);
+    }
+  }, [roleManagementMember, currentUserRole]);
 
   useEffect(() => {
     const fetchCurrentUserRole = async () => {
