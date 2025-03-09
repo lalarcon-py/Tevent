@@ -166,7 +166,7 @@ const joinGuild = async (req, res) => {
     await GuildMember.create({
       guild_id: guildId,
       user_id: req.user.id,
-      role: 'Member'
+      role: 'Guild Member'
     }, { transaction: t });
     
     // CRITICAL: Create user record with guild_id
@@ -187,7 +187,7 @@ const joinGuild = async (req, res) => {
           ...userData,
           id: userData.id,  // Keep same ID
           guild_id: guildId,
-          role: 'Member',
+          role: 'Guild Member',
           status: 'Active'
         }, { transaction: t });
         
@@ -604,7 +604,7 @@ const joinWithInvite = async (req, res) => {
     await db.GuildMember.create({
       guild_id: invite.guild_id,
       user_id: req.user.id,
-      role: 'Member',
+      role: 'Guild Member',
       joined_via_invite: true,
       invited_by: invite.created_by
     }, { transaction: t });

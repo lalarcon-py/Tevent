@@ -76,12 +76,13 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   // Add a flag to check if this is a guild master transfer
   const isGuildMasterTransfer = selectedRole === 'Guild Master';
 
+  // First useEffect - check for Guild Master permission
   useEffect(() => {
+    // Close the dialog if not Guild Master
     if (currentUserRole !== 'Guild Master') {
       onClose();
     }
   }, [currentUserRole, onClose]);
-  
 
   // Update state when member changes
   useEffect(() => {
@@ -159,73 +160,76 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
-          Manage {member.username}'s Profile
-        </DialogTitle>
-        <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
-          {error && (
-            <Typography color="error" sx={{ mb: 2 }}>
-              {error}
-            </Typography>
-          )}
-          {/* Only show username field if not transferring guild master role */}
-          {(currentUserRole === 'Guild Master' || currentUserRole === 'Guild Advisor') && 
-           !isGuildMasterTransfer && (
-            <Box sx={{ mb: 2 }}>
-              <Typography color="white" sx={{ mb: 1 }}>Username</Typography>
-              <TextField
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                fullWidth
+        {currentUserRole === 'Guild Master' ? (
+          <>
+            <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+              Manage {member.username}'s Profile
+            </DialogTitle>
+            <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
+              {error && (
+                <Typography color="error" sx={{ mb: 2 }}>
+                  {error}
+                </Typography>
+              )}
+              <Box sx={{ mb: 2 }}>
+                <Typography color="white" sx={{ mb: 1 }}>Role</Typography>
+                <Select
+                  value={selectedRole}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                  fullWidth
+                  sx={{ 
+                    bgcolor: '#2d2d2d',
+                    color: 'white',
+                    '& .MuiSelect-icon': { color: 'white' }
+                  }}
+                >
+                  {getAvailableRoles().map((role) => (
+                    <MenuItem key={role} value={role}>{role}</MenuItem>
+                  ))}
+                </Select>
+              </Box>
+              <Button 
+                variant="contained"
+                onClick={() => onSave({ 
+                  ...member, 
+                  role: selectedRole,
+                })}
                 sx={{ 
-                  bgcolor: '#2d2d2d',
-                  input: { color: 'white' },
-                  '& .MuiOutlinedInput-root': {
-                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
-                    '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
-                    '&.Mui-focused fieldset': { borderColor: '#90caf9' }
-                  }
+                  bgcolor: '#90caf9',
+                  '&:hover': { bgcolor: '#64b5f6' }
                 }}
-              />
-            </Box>
-          )}
-          <Box sx={{ mb: 2 }}>
-            <Typography color="white" sx={{ mb: 1 }}>Role</Typography>
-            <Select
-              value={selectedRole}
-              onChange={(e) => handleRoleChange(e.target.value)}
-              fullWidth
-              sx={{ 
-                bgcolor: '#2d2d2d',
-                color: 'white',
-                '& .MuiSelect-icon': { color: 'white' }
-              }}
-            >
-              {getAvailableRoles().map((role) => (
-                <MenuItem key={role} value={role}>{role}</MenuItem>
-              ))}
-            </Select>
-          </Box>
-          <Button 
-            variant="contained"
-            onClick={() => onSave({ 
-              ...member, 
-              role: selectedRole,
-              // Only include username if not transferring guild master role
-              ...(isGuildMasterTransfer ? {} : { username })
-            })}
-            sx={{ 
-              bgcolor: '#90caf9',
-              '&:hover': { bgcolor: '#64b5f6' }
-            }}
-          >
-            Save Changes
-          </Button>
-        </DialogContent>
+              >
+                Save Changes
+              </Button>
+            </DialogContent>
+          </>
+        ) : (
+          <>
+            <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+              Permission Denied
+            </DialogTitle>
+            <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
+              <Typography color="error">
+                Only Guild Masters can manage member roles.
+              </Typography>
+              <Button 
+                onClick={onClose} 
+                variant="contained" 
+                sx={{ 
+                  mt: 2, 
+                  bgcolor: '#90caf9',
+                  '&:hover': { bgcolor: '#64b5f6' }
+                }}
+              >
+                Close
+              </Button>
+            </DialogContent>
+          </>
+        )}
       </Dialog>
   
       <Dialog
-        open={confirmTransfer}
+        open={confirmTransfer && currentUserRole === 'Guild Master'}
         maxWidth="md"
         fullWidth
       >

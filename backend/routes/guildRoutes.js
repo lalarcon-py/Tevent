@@ -163,7 +163,7 @@ router.post('/join-by-code', async (req, res) => {
     await db.GuildMember.create({
       guild_id: guild.id,
       user_id: req.user.id,
-      role: 'Member'
+      role: 'Guild Member'
     }, { transaction: t });
     
     await t.commit();

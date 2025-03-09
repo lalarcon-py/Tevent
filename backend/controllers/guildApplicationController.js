@@ -230,7 +230,7 @@ const guildApplicationController = {
       await GuildMember.create({
         guild_id: guildId,
         user_id: application.user_id,
-        role: 'Member'
+        role: 'Guild Member'
       });
       
       // Update application status
