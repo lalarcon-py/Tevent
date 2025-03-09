@@ -24,8 +24,16 @@ const GuildApplications = () => {
   // Get guild ID from URL params or state
   const appliedGuildId = searchParams.get('guildId') || location.state?.guildId;
 
+  // Debug logs
+  console.log("GuildApplications component rendering with:");
+  console.log("- Guild ID from params:", searchParams.get('guildId'));
+  console.log("- Guild ID from state:", location.state?.guildId);
+  console.log("- Applied Guild ID:", appliedGuildId);
+  console.log("- User role:", user?.role);
+
   // Check if user is Guild Master or Advisor
   const isAdminRole = user && (user.role === 'Guild Master' || user.role === 'Guild Advisor');
+  console.log("- Is Admin:", isAdminRole);
 
   useEffect(() => {
     // Fetch guild info if applying to a guild
@@ -87,10 +95,25 @@ const GuildApplications = () => {
     );
   }
 
-  // For non-admin users without a guild ID, redirect to guild setup
+  // Modified condition to handle testing without a guild ID
   if (!isAdminRole && !appliedGuildId) {
-    navigate('/guilds/setup', { replace: true });
-    return null;
+    // For development/testing, show a test form
+    return (
+      <Box sx={{ p: 3 }}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Test Application Form (Development Mode)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            No guild ID provided. This is a test form for development purposes.
+          </Typography>
+          <ApplicationForm 
+            setUserApplication={setUserApplication} 
+            guildId="test-guild-id-for-development"
+          />
+        </Paper>
+      </Box>
+    );
   }
 
   return (
@@ -143,7 +166,7 @@ const GuildApplications = () => {
               </Typography>
               <ApplicationForm 
                 setUserApplication={setUserApplication} 
-                guildId={appliedGuildId}
+                guildId={appliedGuildId || "test-guild-id-for-development"}
               />
             </>
           )}
