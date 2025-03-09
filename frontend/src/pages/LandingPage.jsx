@@ -580,10 +580,10 @@ const LandingPage = () => {
                     </Typography>
                     
                     <Box sx={{ mt: 'auto', display: 'flex', gap: 1 }}>
-                      <Button
+                    <Button
                         variant="outlined"
                         size="small"
-                        onClick={() => navigate(`/applications?guildId=${guild.id}`)}
+                        onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
                         sx={{
                           flexGrow: 1,
                           borderColor: '#64748b',
@@ -592,7 +592,6 @@ const LandingPage = () => {
                       >
                         Apply
                       </Button>
-                      
                       <Button
                         variant="contained"
                         size="small"

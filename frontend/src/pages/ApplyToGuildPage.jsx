@@ -1,6 +1,6 @@
 // src/pages/ApplyToGuildPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Paper, CircularProgress, Alert, Button, Divider } from '@mui/material';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import ApplicationForm from '../components/Applications/ApplicationForm';
 import axiosInstance from '../config/axios';
@@ -14,6 +14,7 @@ const ApplyToGuildPage = () => {
   const [guild, setGuild] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [userApplication, setUserApplication] = useState(null);
 
   useEffect(() => {
@@ -34,6 +35,17 @@ const ApplyToGuildPage = () => {
         } else {
           setGuild(guildInfo);
         }
+        
+        // Check if user already has an application
+        try {
+          const userAppResponse = await axiosInstance.get('/api/guild-applications/my-application');
+          setUserApplication(userAppResponse.data);
+        } catch (err) {
+          // 404 is expected if no application exists
+          if (err.response?.status !== 404) {
+            console.error('Error fetching user application:', err);
+          }
+        }
       } catch (err) {
         console.error('Error fetching guild:', err);
         setError('Failed to load guild information');
@@ -44,6 +56,33 @@ const ApplyToGuildPage = () => {
 
     fetchGuildInfo();
   }, [guildId]);
+
+  const handleApplicationSubmit = async (applicationData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await axiosInstance.post('/api/guild-applications', {
+        ...applicationData,
+        guildId
+      });
+      
+      setSuccessMessage('Your application has been submitted successfully. The guild leadership will review it soon.');
+      
+      // Update to fetch the latest application status
+      const response = await axiosInstance.get('/api/guild-applications/my-application');
+      setUserApplication(response.data);
+    } catch (err) {
+      console.error('Application submission error:', err);
+      setError(err.response?.data?.error || 'Failed to submit application. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReturnToGuilds = () => {
+    navigate('/guilds/setup');
+  };
 
   if (loading) {
     return (
@@ -60,7 +99,7 @@ const ApplyToGuildPage = () => {
           {error}
         </Alert>
         <Typography variant="body1">
-          Please return to the <a href="/guilds/setup">guild setup page</a> and try again.
+          Please return to the <Button variant="text" onClick={handleReturnToGuilds}>guild setup page</Button> and try again.
         </Typography>
       </Box>
     );
@@ -72,6 +111,13 @@ const ApplyToGuildPage = () => {
         <Alert severity="warning">
           Guild not found. Please select a valid guild.
         </Alert>
+        <Button 
+          variant="contained" 
+          onClick={handleReturnToGuilds}
+          sx={{ mt: 2 }}
+        >
+          Return to Guilds
+        </Button>
       </Box>
     );
   }
@@ -87,14 +133,69 @@ const ApplyToGuildPage = () => {
           Please complete the application form below. Your application will be reviewed by guild leadership.
         </Typography>
         
-        {userApplication ? (
-          <Alert severity="info">
-            You already have a pending application for this guild.
+        {successMessage && (
+          <Alert 
+            severity="success" 
+            sx={{ mb: 3 }}
+            onClose={() => setSuccessMessage(null)}
+          >
+            {successMessage}
           </Alert>
+        )}
+        
+        {userApplication ? (
+          <Box sx={{ mt: 3 }}>
+            <Alert 
+              severity="info" 
+              sx={{ mb: 3 }}
+            >
+              You already have an application for this guild.
+            </Alert>
+            
+            <Typography variant="h6" gutterBottom>
+              Application Status
+            </Typography>
+            
+            <Box sx={{ p: 2, bgcolor: 'rgba(0, 0, 0, 0.03)', borderRadius: 1 }}>
+              <Typography variant="body1" gutterBottom>
+                <strong>Status:</strong> {userApplication.status}
+              </Typography>
+              
+              <Typography variant="body1" gutterBottom>
+                <strong>Submitted:</strong> {new Date(userApplication.created_at).toLocaleString()}
+              </Typography>
+              
+              <Divider sx={{ my: 2 }} />
+              
+              <Typography variant="body2" color="text.secondary">
+                {userApplication.status === 'PENDING' && 'Your application is being reviewed by guild leadership.'}
+                {userApplication.status === 'WAITLISTED' && 'You have been placed on the waitlist. The guild will contact you when a spot becomes available.'}
+                {userApplication.status === 'APPROVED' && 'Congratulations! Your application has been approved. You can now access the guild dashboard.'}
+                {userApplication.status === 'DENIED' && 'Unfortunately, your application has been denied. You may apply again at a later time.'}
+              </Typography>
+            </Box>
+            
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+              <Button variant="outlined" onClick={handleReturnToGuilds}>
+                Return to Guilds
+              </Button>
+              
+              {userApplication.status === 'DENIED' && (
+                <Button 
+                  variant="contained" 
+                  color="primary"
+                  onClick={() => setUserApplication(null)}
+                >
+                  Apply Again
+                </Button>
+              )}
+            </Box>
+          </Box>
         ) : (
           <ApplicationForm 
             setUserApplication={setUserApplication} 
             guildId={guildId}
+            onSubmit={handleApplicationSubmit}
           />
         )}
       </Paper>

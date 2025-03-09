@@ -455,20 +455,17 @@ const GuildSetupPage = () => {
                           </CardContent>
                           <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
                           <Button 
-                                variant="outlined" 
-                                onClick={() => {
-                                  // Use direct navigation with search parameters for maximum compatibility
-                                  window.location.href = `/applications?guildId=${guild.id}`;
-                                }}
-                                sx={{
-                                  mr: 1,
-                                  color: '#90caf9',
-                                  borderColor: '#90caf9',
-                                  '&:hover': { borderColor: '#64b5f6', color: '#64b5f6' }
-                                }}
-                              >
-                                Apply
-                              </Button>
+                              variant="outlined" 
+                              size="small"
+                              onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
+                              sx={{
+                                flexGrow: 1,
+                                borderColor: '#64748b',
+                                color: '#cbd5e1'
+                              }}
+                            >
+                              Apply
+                            </Button>
                             <Button 
                               variant="contained" 
                               onClick={() => openJoinDialog(guild)}

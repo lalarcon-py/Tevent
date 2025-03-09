@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Tabs, Tab, Paper, CircularProgress, Alert } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import ApplicationForm from '../components/Applications/ApplicationForm';
 import ApplicationList from '../components/Applications/ApplicationList';
 import WaitList from '../components/Applications/WaitList';
@@ -95,25 +95,13 @@ const GuildApplications = () => {
     );
   }
 
-  // Modified condition to handle testing without a guild ID
+  // Handle redirects after hooks have been called
   if (!isAdminRole && !appliedGuildId) {
-    // For development/testing, show a test form
-    return (
-      <Box sx={{ p: 3 }}>
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Test Application Form (Development Mode)
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            No guild ID provided. This is a test form for development purposes.
-          </Typography>
-          <ApplicationForm 
-            setUserApplication={setUserApplication} 
-            guildId="test-guild-id-for-development"
-          />
-        </Paper>
-      </Box>
-    );
+    return <Navigate to="/guilds/setup" replace />;
+  }
+
+  if (!isAdminRole && appliedGuildId) {
+    return <Navigate to={`/guild-apply?guildId=${appliedGuildId}`} replace />;
   }
 
   return (
@@ -144,7 +132,8 @@ const GuildApplications = () => {
           )}
         </>
       ) : (
-        // Regular user view - show application form or status
+        // This section shouldn't be reachable now due to the redirects,
+        // but keeping it as a fallback
         <Paper sx={{ p: 3 }}>
           {userApplication ? (
             <Box>
@@ -166,7 +155,7 @@ const GuildApplications = () => {
               </Typography>
               <ApplicationForm 
                 setUserApplication={setUserApplication} 
-                guildId={appliedGuildId || "test-guild-id-for-development"}
+                guildId={appliedGuildId}
               />
             </>
           )}
