@@ -29,7 +29,9 @@ import { BillingProvider, useBilling } from './contexts/BillingContext';
 import BillingPage from './pages/BillingPage';
 import InactiveGuildOverlay from './components/Billing/InactiveGuildOverlay';
 import ApplyToGuildPage from './pages/ApplyToGuildPage';
-  
+import AdminPortal from './pages/AdminPortal';
+
+
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
   : process.env.REACT_APP_API_URL;
@@ -209,6 +211,7 @@ function AppContent() {
           <Route path="/auth-error" element={<AuthError />} />
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
+          <Route path="/admin" element={<AdminPortal />} />
           <Route path="*" element={<LandingPage />} />
         </Routes>
       </Router>
@@ -259,6 +262,7 @@ function AppContent() {
           <Route path="/guilds/:guildId/dashboard" element={<Navigate to="/dashboard" replace />} />
           <Route path="/gear-check" element={<GearCheck />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/admin" element={<AdminPortal />} />
         </Routes>
       </Box>
     </Router>

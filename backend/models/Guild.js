@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Guild.hasMany(models.GuildMember, { foreignKey: 'guild_id' });
       Guild.hasOne(models.GuildSettings, { foreignKey: 'guild_id' });
+      Guild.hasOne(models.Subscription, { foreignKey: 'guild_id' });
     }
   }
 

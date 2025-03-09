@@ -15,6 +15,7 @@ const supportRoutes = require('./routes/supportRoutes');
 const userRoutes = require('./routes/userRoutes');
 const gearCheckRoutes = require('./routes/gearCheckRoutes');
 const billingRoutes = require('./routes/billingRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
@@ -151,6 +152,7 @@ app.delete('/api/user/delete', userController.deleteUser);
 // User support
 app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Add guildActivityMiddleware without the problematic billing routes
 app.use('/api/billing', billingRoutes);

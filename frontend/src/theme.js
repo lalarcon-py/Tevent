@@ -12,7 +12,7 @@ const darkTheme = createTheme({
       contrastText: '#1a1a1a',
     },
     background: {
-      default: 'linear-gradient(180deg, #1a1a1a 0%, #2d1a1a 100%)',
+      default: '#1a1a1a',
       paper: 'rgba(30, 30, 30, 0.8)',
     },
     text: {
