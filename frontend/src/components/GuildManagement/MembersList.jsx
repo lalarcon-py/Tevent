@@ -1164,49 +1164,31 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 )}
                 
                 <TableCell>
-                  <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
-                    {/* Show edit icon if it's the current user's own profile OR if the current user has admin privileges */}
-                    {(member.id === effectiveCurrentUser?.id || 
-                      ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUserRole)) && (
-                      <IconButton 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditMember(member);
-                        }}
-                        sx={{ 
-                          color: '#90caf9',
-                          padding: isMobile ? '4px' : '8px',
-                          '&:hover': { 
-                            bgcolor: 'rgba(144, 202, 249, 0.2)',
-                            transform: 'scale(1.1)'
-                          }
-                        }}
-                      >
-                        <EditIcon fontSize={isMobile ? "small" : "medium"} />
-                      </IconButton>
-                    )}
-                    
-                    {/* ONLY show role management icon for Guild Masters and Guild Advisors */}
-                    {currentUserRole === 'Guild Master' && (
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRoleManagementMember(member);
-                          }}
-                          sx={{ 
-                            color: '#ffd700',
-                            padding: isMobile ? '4px' : '8px',
-                            '&:hover': { 
-                              bgcolor: 'rgba(255, 215, 0, 0.2)',
-                              transform: 'scale(1.1)'
-                            }
-                          }}
-                        >
-                          <StarIcon fontSize={isMobile ? "small" : "medium"} />
-                        </IconButton>
-                      )}
-                  </Box>
-                </TableCell>
+                <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
+                  {/* Show edit icon if it's the current user's own profile OR if the current user has admin privileges */}
+                  {(member.id === effectiveCurrentUser?.id || 
+                    ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUserRole)) && (
+                    <IconButton 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditMember(member);
+                      }}
+                      sx={{ 
+                        color: '#90caf9',
+                        padding: isMobile ? '4px' : '8px',
+                        '&:hover': { 
+                          bgcolor: 'rgba(144, 202, 249, 0.2)',
+                          transform: 'scale(1.1)'
+                        }
+                      }}
+                    >
+                      <EditIcon fontSize={isMobile ? "small" : "medium"} />
+                    </IconButton>
+                  )}
+                  
+                  {/* Star icon for role management removed completely */}
+                </Box>
+              </TableCell>
               </TableRow>
             ))}
           </TableBody>
