@@ -162,6 +162,341 @@ router.post('/guilds/:guildId/subscription', async (req, res) => {
   }
 });
 
+router.get('/guilds/:guildId/storage', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const storageItems = await db.GuildStorageItem.findAll({
+      where: { guild_id: guildId },
+      include: [{
+        model: db.Item
+      }]
+    });
+    
+    res.json(storageItems);
+  } catch (error) {
+    console.error('Admin get guild storage error:', error);
+    res.status(500).json({ error: 'Failed to fetch guild storage' });
+  }
+});
+
+// Get guild storage items
+router.get('/guilds/:guildId/storage', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const storageItems = await db.GuildStorageItem.findAll({
+      where: { guild_id: guildId },
+      include: [{
+        model: db.Item
+      }]
+    });
+    
+    res.json(storageItems);
+  } catch (error) {
+    console.error('Admin get guild storage error:', error);
+    res.status(500).json({ error: 'Failed to fetch guild storage' });
+  }
+});
+
+// Get guild loot requests
+router.get('/guilds/:guildId/loot-requests', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const lootRequests = await db.LootRequest.findAll({
+      where: { guild_id: guildId },
+      include: [
+        {
+          model: db.GuildStorageItem,
+          as: 'storageItem',
+          include: [{ model: db.Item }]
+        },
+        {
+          model: db.User,
+          as: 'user',
+          attributes: ['id', 'username', 'avatar_url', 'discord_id']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+    
+    res.json(lootRequests);
+  } catch (error) {
+    console.error('Admin get loot requests error:', error);
+    res.status(500).json({ error: 'Failed to fetch loot requests' });
+  }
+});
+
+// Get guild wishlists
+router.get('/guilds/:guildId/wishlists', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const wishlists = await db.WishList.findAll({
+      where: { guild_id: guildId },
+      include: [
+        {
+          model: db.Item
+        },
+        {
+          model: db.User,
+          attributes: ['id', 'username', 'avatar_url', 'discord_id']
+        }
+      ],
+      order: [
+        ['priority', 'DESC'],
+        ['created_at', 'DESC']
+      ]
+    });
+    
+    res.json(wishlists);
+  } catch (error) {
+    console.error('Admin get wishlists error:', error);
+    res.status(500).json({ error: 'Failed to fetch wishlists' });
+  }
+});
+
+// Get all items (for admin autocomplete)
+router.get('/items', async (req, res) => {
+  try {
+    const items = await db.Item.findAll({
+      attributes: ['id', 'name', 'type', 'icon', 'rarity'],
+      order: [['name', 'ASC']]
+    });
+    
+    res.json(items);
+  } catch (error) {
+    console.error('Admin get items error:', error);
+    res.status(500).json({ error: 'Failed to fetch items' });
+  }
+});
+
+// CRUD operations for storage items in admin context
+
+// Add item to guild storage (admin version)
+router.post('/guilds/:guildId/storage', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const { item_id, quantity, trait, dkp_cost } = req.body;
+    
+    // Check if item exists
+    const item = await db.Item.findByPk(item_id);
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    
+    // Create or update storage item
+    let storageItem = await db.GuildStorageItem.findOne({
+      where: {
+        guild_id: guildId,
+        item_id: item_id,
+        trait: trait || null
+      }
+    });
+    
+    if (storageItem) {
+      // Update existing item
+      await storageItem.update({
+        quantity: storageItem.quantity + (parseInt(quantity) || 1),
+        dkp_cost: dkp_cost !== undefined ? dkp_cost : storageItem.dkp_cost
+      });
+    } else {
+      // Create new item
+      storageItem = await db.GuildStorageItem.create({
+        guild_id: guildId,
+        item_id: item_id,
+        quantity: parseInt(quantity) || 1,
+        trait: trait || null,
+        dkp_cost: dkp_cost || 0
+      });
+    }
+    
+    // Log admin action
+    await logAdminAction(
+      req.user.id,
+      'ADD_STORAGE_ITEM',
+      'storage_item',
+      storageItem.id,
+      { 
+        guild_id: guildId,
+        item_id: item_id,
+        item_name: item.name,
+        quantity: parseInt(quantity) || 1
+      }
+    );
+    
+    // Return with item details
+    const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
+      include: [{ model: db.Item }]
+    });
+    
+    res.status(201).json(fullItem);
+  } catch (error) {
+    console.error('Admin add storage item error:', error);
+    res.status(500).json({ error: 'Failed to add storage item' });
+  }
+});
+
+// Update guild storage item
+router.put('/guilds/:guildId/storage/:id', async (req, res) => {
+  try {
+    const { guildId, id } = req.params;
+    const { quantity, dkp_cost, trait } = req.body;
+    
+    // Find the storage item
+    const storageItem = await db.GuildStorageItem.findOne({
+      where: {
+        id,
+        guild_id: guildId
+      },
+      include: [{ model: db.Item }]
+    });
+    
+    if (!storageItem) {
+      return res.status(404).json({ error: 'Storage item not found' });
+    }
+    
+    // Update fields
+    await storageItem.update({
+      quantity: quantity !== undefined ? parseInt(quantity) : storageItem.quantity,
+      dkp_cost: dkp_cost !== undefined ? dkp_cost : storageItem.dkp_cost,
+      trait: trait !== undefined ? trait : storageItem.trait
+    });
+    
+    // Log admin action
+    await logAdminAction(
+      req.user.id,
+      'UPDATE_STORAGE_ITEM',
+      'storage_item',
+      storageItem.id,
+      { 
+        guild_id: guildId,
+        item_name: storageItem.Item?.name,
+        quantity: quantity !== undefined ? parseInt(quantity) : storageItem.quantity,
+        dkp_cost: dkp_cost
+      }
+    );
+    
+    // Return updated item
+    const updatedItem = await db.GuildStorageItem.findByPk(id, {
+      include: [{ model: db.Item }]
+    });
+    
+    res.json(updatedItem);
+  } catch (error) {
+    console.error('Admin update storage item error:', error);
+    res.status(500).json({ error: 'Failed to update storage item' });
+  }
+});
+
+// Delete guild storage item
+router.delete('/guilds/:guildId/storage/:id', async (req, res) => {
+  try {
+    const { guildId, id } = req.params;
+    
+    // Find the storage item for logging
+    const storageItem = await db.GuildStorageItem.findOne({
+      where: {
+        id,
+        guild_id: guildId
+      },
+      include: [{ model: db.Item }]
+    });
+    
+    if (!storageItem) {
+      return res.status(404).json({ error: 'Storage item not found' });
+    }
+    
+    // Delete associated loot requests
+    await db.LootRequest.destroy({
+      where: { storage_item_id: id }
+    });
+    
+    // Delete the storage item
+    await storageItem.destroy();
+    
+    // Log admin action
+    await logAdminAction(
+      req.user.id,
+      'DELETE_STORAGE_ITEM',
+      'storage_item',
+      id,
+      { 
+        guild_id: guildId,
+        item_name: storageItem.Item?.name
+      }
+    );
+    
+    res.json({ message: 'Storage item deleted successfully' });
+  } catch (error) {
+    console.error('Admin delete storage item error:', error);
+    res.status(500).json({ error: 'Failed to delete storage item' });
+  }
+});
+
+// Update loot request status (approve/deny)
+router.put('/guilds/:guildId/loot-requests/:id', async (req, res) => {
+  try {
+    const { guildId, id } = req.params;
+    const { status } = req.body;
+    
+    if (!['Approved', 'Denied', 'Pending'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    
+    // Find the request
+    const request = await db.LootRequest.findOne({
+      where: {
+        id,
+        guild_id: guildId
+      },
+      include: [
+        {
+          model: db.GuildStorageItem,
+          as: 'storageItem',
+          include: [{ model: db.Item }]
+        },
+        {
+          model: db.User,
+          as: 'user'
+        }
+      ]
+    });
+    
+    if (!request) {
+      return res.status(404).json({ error: 'Loot request not found' });
+    }
+    
+    // Update request status
+    await request.update({ status });
+    
+    // If approved, decrease item quantity
+    if (status === 'Approved' && request.storageItem) {
+      const newQuantity = Math.max(0, request.storageItem.quantity - 1);
+      await request.storageItem.update({ quantity: newQuantity });
+    }
+    
+    // Log admin action
+    await logAdminAction(
+      req.user.id,
+      `${status.toUpperCase()}_LOOT_REQUEST`,
+      'loot_request',
+      id,
+      { 
+        guild_id: guildId,
+        item_name: request.storageItem?.Item?.name,
+        user: request.user?.username
+      }
+    );
+    
+    res.json({ message: `Loot request ${status.toLowerCase()} successfully` });
+  } catch (error) {
+    console.error('Admin update loot request error:', error);
+    res.status(500).json({ error: 'Failed to update loot request' });
+  }
+});
+
 // Get admin logs
 router.get('/logs', async (req, res) => {
     try {

@@ -13,6 +13,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
 import HistoryIcon from '@mui/icons-material/History';
 import StorageIcon from '@mui/icons-material/Storage';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import AddIcon from '@mui/icons-material/Add';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import { format } from 'date-fns';
 import axiosInstance from '../config/axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -90,6 +94,26 @@ const AdminPortal = () => {
   
   // Logs state
   const [logs, setLogs] = useState([]);
+  
+  // Storage state
+  const [guildStorage, setGuildStorage] = useState([]);
+  const [lootRequests, setLootRequests] = useState([]);
+  const [wishlists, setWishlists] = useState([]);
+  const [storageLoading, setStorageLoading] = useState(false);
+  const [storageTab, setStorageTab] = useState(0);
+  const [itemDialog, setItemDialog] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [itemFormData, setItemFormData] = useState({
+    item_id: '',
+    quantity: 1,
+    trait: '',
+    dkp_cost: 0
+  });
+  const [availableItems, setAvailableItems] = useState([]);
+  const [editMode, setEditMode] = useState(false);
+
+  const [deleteItemDialogOpen, setDeleteItemDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   // Check admin status with backend
   useEffect(() => {
@@ -186,8 +210,12 @@ const AdminPortal = () => {
     setDetailsLoading(true);
     
     try {
-      const response = await axiosInstance.get(`/api/admin/guilds/${guild.id}`);
-      setGuildDetails(response.data);
+      // Fetch guild details
+      const detailsResponse = await axiosInstance.get(`/api/admin/guilds/${guild.id}`);
+      setGuildDetails(detailsResponse.data);
+      
+      // Fetch guild storage data
+      await fetchGuildStorage(guild.id);
     } catch (err) {
       console.error('Failed to fetch guild details:', err);
     } finally {
@@ -256,6 +284,144 @@ const AdminPortal = () => {
       console.error('Failed to fetch user details:', err);
     } finally {
       setDetailsLoading(false);
+    }
+  };
+  
+  // Storage Management Handlers
+  const fetchGuildStorage = async (guildId) => {
+    try {
+      setStorageLoading(true);
+      
+      const storageResponse = await axiosInstance.get(`/api/admin/guilds/${guildId}/storage`);
+      setGuildStorage(storageResponse.data);
+      
+      const requestsResponse = await axiosInstance.get(`/api/admin/guilds/${guildId}/loot-requests`);
+      setLootRequests(requestsResponse.data);
+      
+      const wishlistsResponse = await axiosInstance.get(`/api/admin/guilds/${guildId}/wishlists`);
+      setWishlists(wishlistsResponse.data);
+      
+      const itemsResponse = await axiosInstance.get(`/api/admin/items`);
+      setAvailableItems(itemsResponse.data);
+    } catch (err) {
+      console.error('Failed to fetch guild storage data:', err);
+      setError('Failed to load guild storage data');
+    } finally {
+      setStorageLoading(false);
+    }
+  };
+
+  const handleItemDialogOpen = (item = null) => {
+    if (item) {
+      // Edit mode
+      setEditMode(true);
+      setSelectedItem(item);
+      setItemFormData({
+        item_id: item.item_id,
+        quantity: item.quantity || 1,
+        trait: item.trait || '',
+        dkp_cost: item.dkp_cost || 0
+      });
+    } else {
+      // Add mode
+      setEditMode(false);
+      setSelectedItem(null);
+      setItemFormData({
+        item_id: '',
+        quantity: 1,
+        trait: '',
+        dkp_cost: 0
+      });
+    }
+    setItemDialog(true);
+  };
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setItemFormData(prev => ({
+      ...prev,
+      [name]: name === 'quantity' || name === 'dkp_cost' 
+        ? parseInt(value) || 0 
+        : value
+    }));
+  };
+
+  const handleSaveItem = async () => {
+    try {
+      setStorageLoading(true);
+      
+      if (editMode) {
+        // Update existing item
+        await axiosInstance.put(
+          `/api/admin/guilds/${selectedGuild.id}/storage/${selectedItem.id}`,
+          itemFormData
+        );
+        setSuccessMessage('Item updated successfully!');
+      } else {
+        // Add new item
+        await axiosInstance.post(
+          `/api/admin/guilds/${selectedGuild.id}/storage`,
+          itemFormData
+        );
+        setSuccessMessage('Item added successfully!');
+      }
+      
+      setOpenSnackbar(true);
+      setItemDialog(false);
+      
+      // Refresh storage data
+      await fetchGuildStorage(selectedGuild.id);
+    } catch (err) {
+      console.error('Failed to save item:', err);
+      setError('Failed to save item. Please try again.');
+    } finally {
+      setStorageLoading(false);
+    }
+  };
+
+  const handleDeleteItem = (itemId) => {
+    setItemToDelete(itemId);
+    setDeleteItemDialogOpen(true);
+  };
+  
+  const confirmDeleteItem = async () => {
+    try {
+      setStorageLoading(true);
+      
+      await axiosInstance.delete(`/api/admin/guilds/${selectedGuild.id}/storage/${itemToDelete}`);
+      
+      setSuccessMessage('Item deleted successfully!');
+      setOpenSnackbar(true);
+      setDeleteItemDialogOpen(false);
+      
+      // Refresh storage data
+      await fetchGuildStorage(selectedGuild.id);
+    } catch (err) {
+      console.error('Failed to delete item:', err);
+      setError('Failed to delete item. Please try again.');
+    } finally {
+      setStorageLoading(false);
+    }
+  };
+
+  const handleApproveDenyRequest = async (requestId, status) => {
+    try {
+      setStorageLoading(true);
+      
+      await axiosInstance.put(`/api/admin/guilds/${selectedGuild.id}/loot-requests/${requestId}`, {
+        status
+      });
+      
+      setSuccessMessage(`Request ${status === 'Approved' ? 'approved' : 'denied'} successfully!`);
+      setOpenSnackbar(true);
+      
+      // Refresh storage data
+      await fetchGuildStorage(selectedGuild.id);
+    } catch (err) {
+      console.error('Failed to update request:', err);
+      setError('Failed to update request. Please try again.');
+    } finally {
+      setStorageLoading(false);
     }
   };
 
@@ -662,6 +828,286 @@ const AdminPortal = () => {
                 
                 <Grid item xs={12}>
                   <Paper sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+                        <InventoryIcon sx={{ mr: 1 }} />
+                        Guild Storage Management
+                      </Typography>
+                      
+                      {storageTab === 0 && (
+                        <Button 
+                          variant="contained" 
+                          size="small"
+                          startIcon={<AddIcon />}
+                          onClick={() => handleItemDialogOpen()}
+                        >
+                          Add Item
+                        </Button>
+                      )}
+                    </Box>
+                    
+                    <Tabs 
+                      value={storageTab} 
+                      onChange={(e, newValue) => setStorageTab(newValue)}
+                      sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+                    >
+                      <Tab icon={<InventoryIcon />} label="Storage Items" iconPosition="start" />
+                      <Tab icon={<ShoppingCartIcon />} label="Loot Requests" iconPosition="start" />
+                      <Tab icon={<FavoriteIcon />} label="Wishlists" iconPosition="start" />
+                    </Tabs>
+                    
+                    {storageLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : (
+                      <>
+                        {/* Storage Items Tab */}
+                        {storageTab === 0 && (
+                          <TableContainer>
+                            <Table>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Item Name</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Quantity</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>DKP Cost</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Trait</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {guildStorage.length > 0 ? (
+                                  guildStorage.map((item) => (
+                                    <TableRow key={item.id}>
+                                      <TableCell>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          {item.Item?.icon && (
+                                            <Box
+                                              component="img"
+                                              src={item.Item.icon}
+                                              alt={item.Item?.name}
+                                              sx={{ width: 24, height: 24, mr: 1 }}
+                                            />
+                                          )}
+                                          <Typography sx={{ color: 'text.primary' }}>
+                                            {item.Item?.name || 'Unknown Item'}
+                                          </Typography>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell>{item.quantity || 0}</TableCell>
+                                      <TableCell>{item.dkp_cost || 0}</TableCell>
+                                      <TableCell>{item.trait || 'None'}</TableCell>
+                                      <TableCell>
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={() => handleItemDialogOpen(item)}
+                                          sx={{ mr: 1 }}
+                                        >
+                                          <EditIcon fontSize="small" />
+                                        </IconButton>
+                                        <IconButton 
+                                          size="small"
+                                          color="error"
+                                          onClick={() => handleDeleteItem(item.id)}
+                                        >
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={5} sx={{ textAlign: 'center', color: 'text.secondary' }}>
+                                      No storage items found
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        )}
+
+                        {/* Loot Requests Tab */}
+                        {storageTab === 1 && (
+                          <TableContainer>
+                            <Table>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Requested By</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Requested At</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {lootRequests.length > 0 ? (
+                                  lootRequests.map((request) => (
+                                    <TableRow key={request.id}>
+                                      <TableCell>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          {request.storageItem?.Item?.icon && (
+                                            <Box
+                                              component="img"
+                                              src={request.storageItem.Item.icon}
+                                              alt={request.storageItem?.Item?.name}
+                                              sx={{ width: 24, height: 24, mr: 1 }}
+                                            />
+                                          )}
+                                          <Typography sx={{ color: 'text.primary' }}>
+                                            {request.storageItem?.Item?.name || 'Unknown Item'}
+                                          </Typography>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          {request.user?.avatar_url && (
+                                            <Box
+                                              component="img"
+                                              src={request.user.avatar_url}
+                                              alt={request.user?.username}
+                                              sx={{ width: 24, height: 24, borderRadius: '50%', mr: 1 }}
+                                            />
+                                          )}
+                                          <Typography sx={{ color: 'text.primary' }}>
+                                            {request.user?.username || 'Unknown User'}
+                                          </Typography>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Chip 
+                                          label={request.status} 
+                                          size="small"
+                                          sx={{ 
+                                            bgcolor: request.status === 'Pending' 
+                                              ? 'rgba(255, 193, 7, 0.2)'
+                                              : request.status === 'Approved'
+                                                ? 'rgba(52, 211, 153, 0.2)'
+                                                : 'rgba(239, 68, 68, 0.2)',
+                                            color: request.status === 'Pending' 
+                                              ? '#ffc107'
+                                              : request.status === 'Approved'
+                                                ? '#34d399'
+                                                : '#ef4444'
+                                          }}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        {request.created_at && format(new Date(request.created_at), 'MM/dd/yyyy HH:mm')}
+                                      </TableCell>
+                                      <TableCell>
+                                        {request.status === 'Pending' && (
+                                          <>
+                                            <Button
+                                              variant="outlined"
+                                              size="small"
+                                              color="success"
+                                              onClick={() => handleApproveDenyRequest(request.id, 'Approved')}
+                                              sx={{ mr: 1 }}
+                                            >
+                                              Approve
+                                            </Button>
+                                            <Button
+                                              variant="outlined"
+                                              size="small"
+                                              color="error"
+                                              onClick={() => handleApproveDenyRequest(request.id, 'Denied')}
+                                            >
+                                              Deny
+                                            </Button>
+                                          </>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={5} sx={{ textAlign: 'center', color: 'text.secondary' }}>
+                                      No loot requests found
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        )}
+
+                        {/* Wishlists Tab */}
+                        {storageTab === 2 && (
+                          <TableContainer>
+                            <Table>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Member</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Priority</TableCell>
+                                  <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {wishlists.length > 0 ? (
+                                  wishlists.map((wish) => (
+                                    <TableRow key={wish.id}>
+                                      <TableCell>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          {wish.User?.avatar_url && (
+                                            <Box
+                                              component="img"
+                                              src={wish.User.avatar_url}
+                                              alt={wish.User?.username}
+                                              sx={{ width: 24, height: 24, borderRadius: '50%', mr: 1 }}
+                                            />
+                                          )}
+                                          <Typography sx={{ color: 'text.primary' }}>
+                                            {wish.User?.username || 'Unknown User'}
+                                          </Typography>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          {wish.Item?.icon && (
+                                            <Box
+                                              component="img"
+                                              src={wish.Item.icon}
+                                              alt={wish.Item?.name}
+                                              sx={{ width: 24, height: 24, mr: 1 }}
+                                            />
+                                          )}
+                                          <Typography sx={{ color: 'text.primary' }}>
+                                            {wish.Item?.name || wish.item_name || 'Unknown Item'}
+                                          </Typography>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell>
+                                        {wish.priority > 0 ? (
+                                          <Chip 
+                                            label={`${wish.priority} DKP`} 
+                                            size="small"
+                                            sx={{ bgcolor: 'rgba(255, 215, 0, 0.2)', color: '#ffd700' }}
+                                          />
+                                        ) : 'None'}
+                                      </TableCell>
+                                      <TableCell>{wish.notes || 'No notes'}</TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={4} sx={{ textAlign: 'center', color: 'text.secondary' }}>
+                                      No wishlist items found
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        )}
+                      </>
+                    )}
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography variant="h6">Members ({guildDetails?.members?.length || 0})</Typography>
                     </Box>
@@ -875,6 +1321,114 @@ const AdminPortal = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Add/Edit Item Dialog */}
+        <Dialog
+          open={itemDialog}
+          onClose={() => setItemDialog(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            {editMode ? 'Edit Storage Item' : 'Add Item to Storage'}
+          </DialogTitle>
+          <DialogContent>
+            <FormControl fullWidth sx={{ mt: 2, mb: 2 }}>
+              <InputLabel id="item-select-label">Item</InputLabel>
+              <Select
+                labelId="item-select-label"
+                name="item_id"
+                value={itemFormData.item_id}
+                onChange={handleFormChange}
+                disabled={editMode}
+              >
+                {availableItems.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {item.icon && (
+                        <Box
+                          component="img"
+                          src={item.icon}
+                          alt={item.name}
+                          sx={{ width: 24, height: 24, mr: 1 }}
+                        />
+                      )}
+                      {item.name}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <TextField
+              fullWidth
+              label="Quantity"
+              name="quantity"
+              type="number"
+              value={itemFormData.quantity}
+              onChange={handleFormChange}
+              sx={{ mb: 2 }}
+            />
+            
+            <TextField
+              fullWidth
+              label="DKP Cost"
+              name="dkp_cost"
+              type="number"
+              value={itemFormData.dkp_cost}
+              onChange={handleFormChange}
+              sx={{ mb: 2 }}
+            />
+            
+            <TextField
+              fullWidth
+              label="Trait (Optional)"
+              name="trait"
+              value={itemFormData.trait}
+              onChange={handleFormChange}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setItemDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveItem}
+              variant="contained"
+              disabled={!itemFormData.item_id}
+            >
+              {editMode ? 'Update Item' : 'Add Item'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+        open={deleteItemDialogOpen}
+        onClose={() => setDeleteItemDialogOpen(false)}
+        >
+        <DialogTitle>Delete Item</DialogTitle>
+        <DialogContent>
+            <Typography variant="body1">
+            Are you sure you want to delete this item? This action cannot be undone.
+            </Typography>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={() => setDeleteItemDialogOpen(false)}>
+            Cancel
+            </Button>
+            <Button 
+            onClick={confirmDeleteItem} 
+            variant="contained"
+            sx={{ 
+                backgroundColor: '#ef4444',
+                '&:hover': { backgroundColor: '#dc2626' }
+            }}
+            >
+            Delete
+            </Button>
+        </DialogActions>
+        </Dialog>
+        
 
         <Snackbar
           open={openSnackbar}
