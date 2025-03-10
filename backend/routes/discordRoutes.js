@@ -170,6 +170,12 @@ router.post('/link', async (req, res) => {
     }
     
     const { discordGuildId, appGuildId } = req.body;
+
+    console.log('Linking Discord guild:', {
+      discordGuildId,
+      appGuildId,
+      userId: req.user?.id
+    });
     
     if (!discordGuildId || !appGuildId) {
       return res.status(400).json({ error: 'Both Discord guild ID and app guild ID are required' });
