@@ -20,6 +20,7 @@ import LogoutButton from '../Auth/LogoutButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import axiosInstance from '../../config/axios';
+import DiscordIcon from '@mui/icons-material/ConnectedTv';
 
 const Navigation = ({ guildId }) => {
   const location = useLocation();
@@ -83,6 +84,38 @@ const Navigation = ({ guildId }) => {
     setMobileOpen(!mobileOpen);
   };
 
+  const handleDiscordIntegration = () => {
+    // Get the guild's join code
+    const currentGuildId = guildId || localStorage.getItem('guildId');
+    
+    if (!currentGuildId) {
+      alert('No guild selected');
+      return;
+    }
+    
+    // Fetch join code and then open Discord authorization
+    axiosInstance.get(`/api/guilds/${currentGuildId}/settings`)
+      .then(response => {
+        const joinCode = response.data.joinCode;
+        
+        // Create Discord invitation URL
+        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.REACT_APP_DISCORD_CLIENT_ID}&permissions=2147485696&scope=bot%20applications.commands`;
+        
+        // Open Discord authorization in new tab
+        window.open(discordUrl, '_blank');
+        
+        // Show modal or alert with instructions
+        setTimeout(() => {
+          alert(`After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`);
+        }, 500);
+      })
+      .catch(error => {
+        console.error('Failed to get join code:', error);
+        alert('Could not retrieve Discord integration information');
+      });
+  };
+  
+
   // Check role permissions
   const isGuildMaster = guildRole === 'Guild Master';
   const isAdvisorOrMaster = ['Guild Master', 'Guild Advisor'].includes(guildRole);
@@ -126,7 +159,7 @@ const Navigation = ({ guildId }) => {
       text: 'Gear Check',
       icon: <FormatListBulletedIcon />,
       path: '/gear-check'
-    }
+    },
   );
   
   // Add conditional menu items
@@ -144,6 +177,15 @@ const Navigation = ({ guildId }) => {
       text: 'Billing',
       icon: <ReceiptIcon />,
       path: '/billing'
+    });
+  }
+
+  if (isGuildMaster) {
+    baseMenuItems.push({
+      text: 'Discord Integration',
+      icon: <DiscordIcon />,
+      path: '/discord-integration',
+      onClick: () => handleDiscordIntegration()
     });
   }
 
@@ -176,37 +218,38 @@ const Navigation = ({ guildId }) => {
       
       {/* Main menu items */}
       <List sx={{ py: 2 }}>
-        {baseMenuItems.map((item) => (
-          <ListItem 
-            button 
-            component={Link} 
-            to={item.path}
-            key={item.text}
-            sx={{ 
-              color: location.pathname === item.path ? '#90caf9' : 'white',
-              backgroundColor: location.pathname === item.path ? 'rgba(144, 202, 249, 0.08)' : 'transparent',
-              py: 1.5, // Increased vertical padding for more spacing
-              '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.08)'
-              }
-            }}
-          >
-            <ListItemIcon sx={{ 
-              color: location.pathname === item.path ? '#90caf9' : 'rgba(255, 255, 255, 0.7)',
-              minWidth: isMobile ? 40 : 56
-            }}>
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText 
-              primary={item.text} 
-              primaryTypographyProps={{ 
-                fontSize: isMobile ? '0.95rem' : '1rem',
-                fontWeight: location.pathname === item.path ? 'bold' : 'normal'
+          {baseMenuItems.map((item) => (
+            <ListItem 
+              button 
+              component={item.onClick ? 'div' : Link} // Use div if we have an onClick handler
+              to={!item.onClick ? item.path : undefined} // Only use "to" if no onClick
+              onClick={item.onClick} // Add onClick handler
+              key={item.text}
+              sx={{ 
+                color: location.pathname === item.path ? '#90caf9' : 'white',
+                backgroundColor: location.pathname === item.path ? 'rgba(144, 202, 249, 0.08)' : 'transparent',
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)'
+                }
               }}
-            />
-          </ListItem>
-        ))}
-      </List>
+            >
+              <ListItemIcon sx={{ 
+                color: location.pathname === item.path ? '#90caf9' : 'rgba(255, 255, 255, 0.7)',
+                minWidth: isMobile ? 40 : 56
+              }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{ 
+                  fontSize: isMobile ? '0.95rem' : '1rem',
+                  fontWeight: location.pathname === item.path ? 'bold' : 'normal'
+                }}
+              />
+            </ListItem>
+          ))}
+        </List>
       
       {/* Spacer to push settings and logout to bottom */}
       <Box sx={{ flexGrow: 1 }} />

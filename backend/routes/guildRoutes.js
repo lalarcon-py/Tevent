@@ -204,6 +204,34 @@ router.post('/verify-join-code', async (req, res) => {
   }
 });
 
+router.post('/lookup-by-join-code', async (req, res) => {
+  try {
+    const { joinCode } = req.body;
+    
+    // Find guild by join code (which should be unique)
+    const guild = await db.Guild.findOne({
+      where: { join_code: joinCode }
+    });
+    
+    if (!guild) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'No guild found with this join code' 
+      });
+    }
+    
+    // Return minimal information (no need to expose the guild ID directly to the client)
+    res.json({
+      success: true,
+      guildName: guild.name,
+      guildId: guild.id // This is only used internally by the bot
+    });
+  } catch (error) {
+    console.error('Join code lookup error:', error);
+    res.status(500).json({ success: false, error: 'Lookup failed' });
+  }
+});
+
 // Join an existing guild (backward compatibility - kept as GET)
 router.get('/join/:guildId', async (req, res) => {
   await joinGuild(req, res);

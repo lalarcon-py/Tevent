@@ -1,6 +1,9 @@
+// discord-bot/index.js
 require('dotenv').config();
-const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, Collection, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const axios = require('axios');
+const express = require('express');
+const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 
@@ -18,47 +21,119 @@ const API_URL = process.env.API_URL;
 // Collection to store commands
 client.commands = new Collection();
 
-// Store guild mappings (Discord guild ID -> App guild ID)
-const guildMappingsFile = path.join(__dirname, 'guild_mappings.json');
-let guildMappings = {};
+// Set up a small express server to receive webhook updates
+const app = express();
+const PORT = process.env.BOT_PORT || 3300;
 
-// Load guild mappings from file if it exists
-if (fs.existsSync(guildMappingsFile)) {
-  try {
-    guildMappings = JSON.parse(fs.readFileSync(guildMappingsFile, 'utf8'));
-    console.log('Loaded guild mappings:', Object.keys(guildMappings).length);
-  } catch (error) {
-    console.error('Error loading guild mappings:', error);
-  }
-}
+app.use(bodyParser.json());
 
-// Function to save guild mappings
-function saveGuildMappings() {
-  try {
-    fs.writeFileSync(guildMappingsFile, JSON.stringify(guildMappings, null, 2));
-  } catch (error) {
-    console.error('Error saving guild mappings:', error);
+// Endpoint to update mappings from the main backend
+app.post('/update-mapping', (req, res) => {
+  const { discordGuildId, appGuildId, secret } = req.body;
+  
+  if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+    return res.status(403).json({ error: 'Unauthorized' });
   }
-}
+  
+  console.log(`Received mapping update: Discord Guild ${discordGuildId} -> App Guild ${appGuildId}`);
+  
+  // You can store in memory for quick access if needed
+  res.json({ success: true });
+});
+
+app.listen(PORT, () => {
+  console.log(`Bot webhook server running on port ${PORT}`);
+});
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();
 });
 
-// Member join handler
-client.on('guildMemberAdd', async (member) => {
-  const appGuildId = guildMappings[member.guild.id];
-  if (!appGuildId) return; // Skip if no mapping exists
-  
+// Handle when the bot joins a new server
+client.on('guildCreate', async (guild) => {
   try {
-    // Login to get session cookie first
-    const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
-      botSecret: process.env.BOT_SECRET // You'll need to create this endpoint
+    // Find the best channel to send welcome message
+    const targetChannel = guild.systemChannel || 
+                         guild.channels.cache.find(c => 
+                           c.type === 0 && // TextChannel type
+                           guild.members.me.permissionsIn(c).has('SendMessages')
+                         );
+    
+    if (!targetChannel) return;
+    
+    // Get guild owner
+    const owner = await guild.fetchOwner();
+    
+    // Create setup message with components
+    const embed = new EmbedBuilder()
+      .setTitle('Bot Setup')
+      .setDescription(`Thanks for adding me to ${guild.name}! Let's link this server to your application guild.`)
+      .addFields([
+        { 
+          name: 'Option 1: Quick Setup', 
+          value: 'Use the button below to open a setup page where you can select your application guild.' 
+        },
+        { 
+          name: 'Option 2: Manual Setup', 
+          value: 'If you already know your guild ID and join code, use the `/link-guild` command.' 
+        }
+      ])
+      .setColor('#4CAF50');
+    
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId('setup_wizard')
+          .setLabel('Setup Wizard')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setURL(`${process.env.FRONTEND_URL}/discord/setup?guildId=${guild.id}`)
+          .setLabel('Quick Setup')
+          .setStyle(ButtonStyle.Link)
+      );
+    
+    await targetChannel.send({ 
+      content: `<@${owner.id}>, please set up the bot to enable all features.`,
+      embeds: [embed], 
+      components: [row] 
     });
     
-    const cookies = loginResponse.headers['set-cookie'];
+    // Also send a DM to the server owner
+    try {
+      await owner.send({ 
+        content: `Hi! I was just added to your server **${guild.name}**. Please set up the bot to enable all features.`,
+        embeds: [embed], 
+        components: [row] 
+      });
+    } catch (dmError) {
+      console.log('Could not send DM to owner, continuing anyway');
+    }
+  } catch (error) {
+    console.error('Error in guildCreate handler:', error);
+  }
+});
 
+// Member join handler
+client.on('guildMemberAdd', async (member) => {
+  try {
+    // Get app guild ID from database
+    const appGuildId = await getGuildMapping(member.guild.id);
+    if (!appGuildId) return; // Skip if no mapping exists
+    
+    // Login to get session cookie
+    const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
+      botSecret: process.env.BOT_SECRET
+    });
+    
+    if (!loginResponse.data.success) {
+      console.error('Bot login failed');
+      return;
+    }
+    
+    const cookies = loginResponse.headers['set-cookie'];
+    
+    // Add the user to the application guild
     await axios.post(`${API_URL}/api/users`, {
       discordId: member.id,
       username: member.user.username,
@@ -69,9 +144,34 @@ client.on('guildMemberAdd', async (member) => {
         Cookie: cookies
       }
     });
+    
     console.log(`User ${member.user.username} added to guild ${appGuildId}!`);
   } catch (error) {
     console.error('Error adding new user:', error);
+  }
+});
+
+// Button interaction handler
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+  
+  if (interaction.customId === 'setup_wizard') {
+    // Respond with the setup link
+    const setupUrl = `${process.env.FRONTEND_URL}/discord/setup?guildId=${interaction.guild.id}`;
+    
+    await interaction.reply({
+      content: `Click the link below to connect this Discord server to your application guild:`,
+      components: [
+        new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setURL(setupUrl)
+              .setLabel('Open Setup Page')
+              .setStyle(ButtonStyle.Link)
+          )
+      ],
+      ephemeral: true
+    });
   }
 });
 
@@ -84,20 +184,7 @@ const registerCommands = async () => {
       {
         name: 'link-guild',
         description: 'Link this Discord server to your application guild',
-        options: [
-          {
-            name: 'guild_id',
-            description: 'Your application Guild ID',
-            type: 3, // STRING type
-            required: true
-          },
-          {
-            name: 'join_code',
-            description: 'Your guild join code for verification',
-            type: 3,
-            required: true
-          }
-        ]
+        options: []
       },
       // Storage commands
       {
@@ -174,7 +261,7 @@ const registerCommands = async () => {
     console.log('Started refreshing application (/) commands.');
     
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
       { body: commands },
     );
 
@@ -197,6 +284,28 @@ async function getAuthSession() {
   }
 }
 
+// Helper function to get the app guild ID from a Discord guild ID
+async function getGuildMapping(discordGuildId) {
+  try {
+    const cookies = await getAuthSession();
+    if (!cookies) return null;
+    
+    const response = await axios.get(`${API_URL}/api/discord/mapping/${discordGuildId}`, {
+      headers: { Cookie: cookies }
+    });
+    
+    if (!response.data || !response.data.appGuildId) return null;
+    return response.data.appGuildId;
+  } catch (error) {
+    // If it's a 404, the mapping doesn't exist yet
+    if (error.response && error.response.status === 404) {
+      return null;
+    }
+    console.error('Error getting guild mapping:', error);
+    return null;
+  }
+}
+
 // Slash command handler
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
@@ -212,11 +321,11 @@ client.on('interactionCreate', async (interaction) => {
     
     // For all other commands, check if this Discord server is linked
     const discordGuildId = interaction.guild.id;
-    const appGuildId = guildMappings[discordGuildId];
+    const appGuildId = await getGuildMapping(discordGuildId);
     
     if (!appGuildId) {
       return await interaction.reply({ 
-        content: 'This Discord server is not linked to an application guild. An admin needs to use /link-guild first.',
+        content: 'This Discord server is not linked to an application guild. An admin needs to use the setup process.',
         ephemeral: true 
       });
     }
@@ -250,7 +359,7 @@ client.on('interactionCreate', async (interaction) => {
 // Link guild command handler
 async function handleLinkGuildCommand(interaction) {
   // Only server admins can use this command
-  if (!interaction.member.permissions.has('ADMINISTRATOR')) {
+  if (!interaction.member.permissions.has('Administrator')) {
     return await interaction.reply({ 
       content: 'Only server administrators can link guilds.', 
       ephemeral: true 
@@ -259,41 +368,24 @@ async function handleLinkGuildCommand(interaction) {
   
   await interaction.deferReply({ ephemeral: true });
   
-  const guildId = interaction.options.getString('guild_id');
-  const joinCode = interaction.options.getString('join_code');
-  const discordGuildId = interaction.guild.id;
+  // Generate a web setup URL instead of requiring manual parameters
+  const setupUrl = `${process.env.FRONTEND_URL}/discord/setup?guildId=${interaction.guild.id}`;
   
-  try {
-    // Authenticate
-    const cookies = await getAuthSession();
-    if (!cookies) {
-      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
-    }
-    
-    // Verify guild ID and join code
-    const response = await axios.post(`${API_URL}/api/guilds/verify-join-code`, {
-      guildId,
-      joinCode
-    }, {
-      headers: { Cookie: cookies }
-    });
-    
-    if (response.data.valid) {
-      // Store the mapping
-      guildMappings[discordGuildId] = guildId;
-      saveGuildMappings();
-      
-      await interaction.editReply(`Successfully linked this Discord server to guild "${response.data.guildName}"!`);
-    } else {
-      await interaction.editReply('Invalid Guild ID or Join Code. Please try again.');
-    }
-  } catch (error) {
-    console.error('Error linking guild:', error);
-    await interaction.editReply('Failed to link guild. Make sure the Guild ID and Join Code are correct.');
-  }
+  await interaction.editReply({
+    content: `Click the link below to connect this Discord server to your guild:`,
+    components: [
+      new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setURL(setupUrl)
+            .setLabel('Setup Connection')
+            .setStyle(ButtonStyle.Link)
+        )
+    ]
+  });
 }
 
-// Command handlers
+// Command handlers for other commands
 async function handleStorageCommand(interaction, appGuildId) {
   await interaction.deferReply();
   
@@ -357,7 +449,6 @@ async function handleStorageCommand(interaction, appGuildId) {
   }
 }
 
-// Implement the other command handlers similarly, passing appGuildId to each...
 async function handleEventsCommand(interaction, appGuildId) {
   await interaction.deferReply();
   
@@ -438,7 +529,189 @@ function createEventEmbed(event) {
     .setFooter({ text: `Use /event-signup to sign up - Event ID: ${event.id}` });
 }
 
-// Add implementations for the other command handlers...
+async function handleEventSignupCommand(interaction, appGuildId) {
+  await interaction.deferReply({ ephemeral: true });
+  
+  try {
+    const eventId = interaction.options.getString('event_id');
+    const role = interaction.options.getString('role');
+    
+    // Authenticate
+    const cookies = await getAuthSession();
+    if (!cookies) {
+      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
+    }
+    
+    // First, check if the event exists
+    const eventResponse = await axios.get(`${API_URL}/api/events?guildId=${appGuildId}`, {
+      headers: { Cookie: cookies }
+    });
+    
+    const event = eventResponse.data.find(e => e.id === eventId);
+    if (!event) {
+      return await interaction.editReply(`Event with ID ${eventId} not found.`);
+    }
+    
+    // Sign up for the event
+    await axios.post(`${API_URL}/api/events/${eventId}/signup`, {
+      role,
+      guildId: appGuildId,
+      userId: interaction.user.id
+    }, {
+      headers: { Cookie: cookies }
+    });
+    
+    await interaction.editReply(`You've been signed up for "${event.title}" as ${role}.`);
+  } catch (error) {
+    console.error('Error signing up for event:', error);
+    
+    let errorMessage = 'Failed to sign up for the event.';
+    if (error.response && error.response.data && error.response.data.error) {
+      errorMessage = error.response.data.error;
+    }
+    
+    await interaction.editReply(errorMessage);
+  }
+}
+
+async function handleTeamsCommand(interaction, appGuildId) {
+  await interaction.deferReply();
+  
+  try {
+    const eventId = interaction.options.getString('event_id');
+    
+    // Authenticate
+    const cookies = await getAuthSession();
+    if (!cookies) {
+      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
+    }
+    
+    // Get teams for this event
+    const teamsResponse = await axios.get(`${API_URL}/api/teams/event/${eventId}?guildId=${appGuildId}`, {
+      headers: { Cookie: cookies }
+    });
+    
+    const teams = teamsResponse.data;
+    
+    if (!teams || teams.length === 0) {
+      return await interaction.editReply('No teams found for this event.');
+    }
+    
+    // Create an embed for each team
+    const embeds = teams.map(team => {
+      const embed = new EmbedBuilder()
+        .setTitle(team.name)
+        .setDescription(`Members: ${team.members?.length || 0}`);
+      
+      // Add team member details
+      if (team.members && team.members.length > 0) {
+        const tankMembers = team.members.filter(m => m.role === 'TANK');
+        const healerMembers = team.members.filter(m => m.role === 'HEALER');
+        const dpsMembers = team.members.filter(m => m.role === 'DPS');
+        
+        if (tankMembers.length > 0) {
+          embed.addFields({
+            name: 'Tanks',
+            value: tankMembers.map(m => m.User?.username || m.username).join('\n')
+          });
+        }
+        
+        if (healerMembers.length > 0) {
+          embed.addFields({
+            name: 'Healers',
+            value: healerMembers.map(m => m.User?.username || m.username).join('\n')
+          });
+        }
+        
+        if (dpsMembers.length > 0) {
+          embed.addFields({
+            name: 'DPS',
+            value: dpsMembers.map(m => m.User?.username || m.username).join('\n')
+          });
+        }
+      }
+      
+      return embed;
+    });
+    
+    await interaction.editReply({
+      content: `Teams for event ID ${eventId}:`,
+      embeds: embeds.slice(0, 10) // Discord limits to 10 embeds
+    });
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    await interaction.editReply('Failed to fetch teams for this event.');
+  }
+}
+
+async function handleMembersCommand(interaction, appGuildId) {
+  await interaction.deferReply();
+  
+  try {
+    // Authenticate
+    const cookies = await getAuthSession();
+    if (!cookies) {
+      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
+    }
+    
+    // Get guild members
+    const membersResponse = await axios.get(`${API_URL}/api/guilds/${appGuildId}/members`, {
+      headers: { Cookie: cookies }
+    });
+    
+    const members = membersResponse.data;
+    
+    if (!members || members.length === 0) {
+      return await interaction.editReply('No members found for this guild.');
+    }
+    
+    // Group members by role
+    const guildMasters = members.filter(m => m.role === 'Guild Master');
+    const advisors = members.filter(m => m.role === 'Guild Advisor');
+    const guardians = members.filter(m => m.role === 'Guild Guardian');
+    const regularMembers = members.filter(m => !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(m.role));
+    
+    // Create embed
+    const embed = new EmbedBuilder()
+      .setTitle('Guild Members')
+      .setDescription(`Total members: ${members.length}`);
+    
+    if (guildMasters.length > 0) {
+      embed.addFields({
+        name: 'Guild Masters',
+        value: guildMasters.map(m => m.username).join('\n')
+      });
+    }
+    
+    if (advisors.length > 0) {
+      embed.addFields({
+        name: 'Guild Advisors',
+        value: advisors.map(m => m.username).join('\n')
+      });
+    }
+    
+    if (guardians.length > 0) {
+      embed.addFields({
+        name: 'Guild Guardians',
+        value: guardians.map(m => m.username).join('\n')
+      });
+    }
+    
+    // Regular members (limited to prevent overflow)
+    if (regularMembers.length > 0) {
+      embed.addFields({
+        name: 'Guild Members',
+        value: regularMembers.slice(0, 20).map(m => m.username).join('\n') + 
+               (regularMembers.length > 20 ? `\n...and ${regularMembers.length - 20} more` : '')
+      });
+    }
+    
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error('Error fetching guild members:', error);
+    await interaction.editReply('Failed to fetch guild members.');
+  }
+}
 
 // Initialize bot
 client.login(process.env.DISCORD_BOT_TOKEN);

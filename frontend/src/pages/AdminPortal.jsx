@@ -1369,7 +1369,7 @@ const AdminPortal = () => {
               onChange={handleFormChange}
               sx={{ mb: 2 }}
             />
-            
+           
             <TextField
               fullWidth
               label="DKP Cost"
@@ -1429,7 +1429,6 @@ const AdminPortal = () => {
         </DialogActions>
         </Dialog>
         
-
         <Snackbar
           open={openSnackbar}
           autoHideDuration={6000}
