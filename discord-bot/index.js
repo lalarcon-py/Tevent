@@ -7,6 +7,12 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 
+console.log('Environment Check:', {
+  CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',
+  TOKEN: process.env.DISCORD_BOT_TOKEN || 'missing',
+  TOKEN_LENGTH: process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.length : 0
+});
+
 // Create client with necessary intents
 const client = new Client({ 
   intents: [

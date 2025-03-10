@@ -16,6 +16,7 @@ const userRoutes = require('./routes/userRoutes');
 const gearCheckRoutes = require('./routes/gearCheckRoutes');
 const billingRoutes = require('./routes/billingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 // Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
@@ -185,6 +186,14 @@ app.put('/api/guilds/:guildId/settings',
   validateGuildMembership, 
   guildSettingsController.updateGuildSettings
 );
+
+app.use('/api/discord-bot', createProxyMiddleware({
+  target: 'http://heartfelt-sparkle.railway.internal:3300',
+  changeOrigin: true,
+  pathRewrite: {
+    '^/api/discord-bot': ''
+  }
+}));
 
 app.use('/api/guilds/:guildId/members', guildScopeMiddleware, validateGuildMembership, (req, res, next) => {
   const { guildId } = req.params;
