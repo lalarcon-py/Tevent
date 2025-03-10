@@ -263,6 +263,7 @@ function AppContent() {
           <Route path="/gear-check" element={<GearCheck />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/admin" element={<AdminPortal />} />
+          <Route path="/discord/setup" element={<DiscordSetupPage />} />
         </Routes>
       </Box>
     </Router>
