@@ -179,6 +179,31 @@ router.post('/join-by-code', async (req, res) => {
   }
 });
 
+// Verify guild join code
+router.post('/verify-join-code', async (req, res) => {
+  try {
+    const { guildId, joinCode } = req.body;
+    
+    const guild = await db.Guild.findOne({
+      where: { id: guildId }
+    });
+    
+    if (!guild) {
+      return res.status(404).json({ valid: false, error: 'Guild not found' });
+    }
+    
+    const isValidCode = guild.join_code === joinCode;
+    
+    res.json({
+      valid: isValidCode,
+      guildName: isValidCode ? guild.name : null
+    });
+  } catch (error) {
+    console.error('Join code verification error:', error);
+    res.status(500).json({ valid: false, error: 'Verification failed' });
+  }
+});
+
 // Join an existing guild (backward compatibility - kept as GET)
 router.get('/join/:guildId', async (req, res) => {
   await joinGuild(req, res);
