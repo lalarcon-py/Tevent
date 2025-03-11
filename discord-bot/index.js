@@ -13,6 +13,17 @@ console.log('Environment Check:', {
   TOKEN_LENGTH: process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.length : 0
 });
 
+const { Pool } = require('pg');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+// Log connection info
+console.log("Database connection configured");
+
 // Create client with necessary intents
 const client = new Client({ 
   intents: [
@@ -302,45 +313,27 @@ async function getGuildMapping(discordGuildId) {
   try {
     console.log(`Checking mapping for Discord guild: ${discordGuildId}`);
     
-    // First try the direct bot endpoint - no auth needed
+    // Query the database directly instead of going through API
     try {
-      const response = await axios.get(
-        `${API_URL}/api/discord/public-mapping/${discordGuildId}`
+      const result = await pool.query(
+        'SELECT discord_guild_id, app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+        [discordGuildId.toString()]
       );
       
-      console.log('Bot mapping response:', response.data);
-      
-      if (response.data.success && response.data.appGuildId) {
-        return response.data.appGuildId;
+      if (result.rows && result.rows.length > 0) {
+        console.log('Direct database mapping found:', result.rows[0]);
+        return result.rows[0].app_guild_id;
+      } else {
+        console.log('No mapping found in database');
       }
-    } catch (directError) {
-      console.log('Direct mapping check failed, trying authenticated endpoint');
+    } catch (dbError) {
+      console.error('Database query error:', dbError.message);
     }
     
-    // Fall back to authenticated endpoint
-    const cookies = await getAuthSession();
-    if (!cookies) {
-      console.error('Failed to get auth session');
-      return null;
-    }
-    
-    const response = await axios.get(
-      `${API_URL}/api/discord/mapping/${discordGuildId}`,
-      { headers: { Cookie: cookies } }
-    );
-    
-    if (response.data && response.data.appGuildId) {
-      return response.data.appGuildId;
-    }
-    
+    // API fallback is too unreliable with IPv6 issues, so we'll skip it
     return null;
   } catch (error) {
     console.error('Error getting guild mapping:', error.message);
-    // Log more details but don't expose in response
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
-    }
     return null;
   }
 }
