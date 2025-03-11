@@ -50,53 +50,87 @@ module.exports = {
         )
     ),
 
-  async execute(interaction) {
-
-    if (!await ensureDatabaseConnection()) {
-      return interaction.reply({ 
-        content: 'Unable to connect to the database. Please try again later or contact the bot administrator.',
-        ephemeral: true 
-      });
-    }
+  // Helper function to check database connection
+  async checkDatabaseConnection() {
     try {
+      await sequelize.authenticate();
+      return true;
+    } catch (error) {
+      console.error('Database connection error in loot command:', error);
+      return false;
+    }
+  },
+
+  async execute(interaction) {
+    try {
+      // Ensure database connection first
+      if (!await this.checkDatabaseConnection()) {
+        return interaction.reply({ 
+          content: 'Unable to connect to the database. Please contact the bot administrator.',
+          ephemeral: true 
+        });
+      }
+
       const subcommand = interaction.options.getSubcommand();
-      const guildId = await database.getGuildIdFromDiscord(interaction.guildId);
+      
+      // Get guild ID directly from the database mapping
+      let guildId;
+      try {
+        guildId = await database.getGuildIdFromDiscord(interaction.guildId);
+      } catch (mappingError) {
+        console.error('Error resolving guild mapping:', mappingError);
+        return interaction.reply({ 
+          content: 'Error connecting to the guild database. Please contact the bot administrator.',
+          ephemeral: true
+        });
+      }
       
       if (!guildId) {
         return interaction.reply({ 
-          content: 'This Discord server is not linked to any guild.',
+          content: 'This Discord server is not linked to any guild in the application.',
           ephemeral: true
         });
       }
 
       if (subcommand === 'list') {
         try {
+          // Show "thinking" state while fetching data
+          await interaction.deferReply();
+          
           const items = await database.getGuildStorageItems(guildId);
           
           if (!items || items.length === 0) {
-            return interaction.reply('No items found in guild storage.');
+            return interaction.editReply('No items found in guild storage.');
           }
           
           const embed = this.createStorageEmbed(items);
           
-          await interaction.reply({ 
+          await interaction.editReply({ 
             content: '📦 Guild Storage Items',
             embeds: [embed]
           });
         } catch (error) {
           console.error('Error fetching storage items:', error);
-          await interaction.reply({ 
-            content: 'An error occurred while fetching storage items.',
-            ephemeral: true
-          });
+          if (interaction.deferred) {
+            await interaction.editReply({ 
+              content: 'An error occurred while fetching storage items.',
+            });
+          } else {
+            await interaction.reply({ 
+              content: 'An error occurred while fetching storage items.',
+              ephemeral: true
+            });
+          }
         }
       }
       else if (subcommand === 'requests') {
         try {
+          await interaction.deferReply();
+          
           const requests = await database.getLootRequests(guildId);
           
           if (!requests || requests.length === 0) {
-            return interaction.reply('No pending loot requests found.');
+            return interaction.editReply('No pending loot requests found.');
           }
           
           const embed = this.createLootRequestsEmbed(requests);
@@ -119,24 +153,39 @@ module.exports = {
             rows.push(row);
           }
           
-          await interaction.reply({ 
+          await interaction.editReply({ 
             content: '🙏 Pending Loot Requests',
             embeds: [embed],
             components: rows
           });
         } catch (error) {
           console.error('Error fetching loot requests:', error);
-          await interaction.reply({ 
-            content: 'An error occurred while fetching loot requests.',
-            ephemeral: true
-          });
+          if (interaction.deferred) {
+            await interaction.editReply({ 
+              content: 'An error occurred while fetching loot requests.'
+            });
+          } else {
+            await interaction.reply({ 
+              content: 'An error occurred while fetching loot requests.',
+              ephemeral: true
+            });
+          }
         }
       }
       else if (subcommand === 'approve') {
         const requestId = interaction.options.getString('request_id');
         
         try {
-          const result = await database.approveLootRequest(guildId, requestId);
+          await interaction.deferReply();
+          
+          // Add more robust error handling for the database operation
+          let result;
+          try {
+            result = await database.approveLootRequest(guildId, requestId);
+          } catch (dbError) {
+            console.error('Database error during loot approval:', dbError);
+            return interaction.editReply('Database error: Unable to approve request. Please try again later.');
+          }
           
           if (result.success) {
             // Send notification to the requester
@@ -150,28 +199,42 @@ module.exports = {
               // Continue even if DM fails
             }
             
-            await interaction.reply({ 
+            await interaction.editReply({ 
               content: `✅ Loot request approved successfully. **${result.itemName}** will be given to **${result.username}**.`
             });
           } else {
-            await interaction.reply({ 
-              content: result.message || 'Failed to approve request.',
-              ephemeral: true
+            await interaction.editReply({ 
+              content: result.message || 'Failed to approve request.'
             });
           }
         } catch (error) {
           console.error('Error approving request:', error);
-          await interaction.reply({ 
-            content: 'An error occurred while approving the request.',
-            ephemeral: true
-          });
+          if (interaction.deferred) {
+            await interaction.editReply({ 
+              content: 'An error occurred while approving the request.'
+            });
+          } else {
+            await interaction.reply({ 
+              content: 'An error occurred while approving the request.',
+              ephemeral: true
+            });
+          }
         }
       }
       else if (subcommand === 'deny') {
         const requestId = interaction.options.getString('request_id');
         
         try {
-          const result = await database.denyLootRequest(guildId, requestId);
+          await interaction.deferReply();
+          
+          // Add more robust error handling for the database operation
+          let result;
+          try {
+            result = await database.denyLootRequest(guildId, requestId);
+          } catch (dbError) {
+            console.error('Database error during loot denial:', dbError);
+            return interaction.editReply('Database error: Unable to deny request. Please try again later.');
+          }
           
           if (result.success) {
             // Send notification to the requester
@@ -185,21 +248,26 @@ module.exports = {
               // Continue even if DM fails
             }
             
-            await interaction.reply({ 
+            await interaction.editReply({ 
               content: `❌ Loot request from **${result.username}** for **${result.itemName}** has been denied.`
             });
           } else {
-            await interaction.reply({ 
-              content: result.message || 'Failed to deny request.',
-              ephemeral: true
+            await interaction.editReply({ 
+              content: result.message || 'Failed to deny request.'
             });
           }
         } catch (error) {
           console.error('Error denying request:', error);
-          await interaction.reply({ 
-            content: 'An error occurred while denying the request.',
-            ephemeral: true
-          });
+          if (interaction.deferred) {
+            await interaction.editReply({ 
+              content: 'An error occurred while denying the request.'
+            });
+          } else {
+            await interaction.reply({ 
+              content: 'An error occurred while denying the request.',
+              ephemeral: true
+            });
+          }
         }
       }
       else if (subcommand === 'request') {
@@ -207,11 +275,20 @@ module.exports = {
         const discordUserId = interaction.user.id;
         
         try {
-          const result = await database.createLootRequest(guildId, itemId, discordUserId);
+          await interaction.deferReply();
+          
+          // Add more robust error handling for the database operation
+          let result;
+          try {
+            result = await database.createLootRequest(guildId, itemId, discordUserId);
+          } catch (dbError) {
+            console.error('Database error during loot request creation:', dbError);
+            return interaction.editReply('Database error: Unable to create request. Please try again later.');
+          }
           
           if (result.success) {
-            // Notify officers about the new request in the current channel
-            await interaction.reply({ 
+            // Notify officers about the new request
+            await interaction.editReply({ 
               content: `📢 **New Loot Request**\n${interaction.user.username} has requested **${result.itemName}**`,
               components: [
                 new ActionRowBuilder()
@@ -228,25 +305,40 @@ module.exports = {
               ]
             });
           } else {
-            await interaction.reply({ 
-              content: result.message || 'Failed to submit request.',
-              ephemeral: true
+            await interaction.editReply({ 
+              content: result.message || 'Failed to submit request.'
             });
           }
         } catch (error) {
           console.error('Error requesting item:', error);
-          await interaction.reply({ 
-            content: 'An error occurred while requesting the item.',
-            ephemeral: true
-          });
+          if (interaction.deferred) {
+            await interaction.editReply({ 
+              content: 'An error occurred while requesting the item.'
+            });
+          } else {
+            await interaction.reply({ 
+              content: 'An error occurred while requesting the item.',
+              ephemeral: true
+            });
+          }
         }
       }
     } catch (error) {
       console.error('General loot command error:', error);
-      await interaction.reply({ 
-        content: 'An error occurred while processing the loot command.',
-        ephemeral: true
-      });
+      try {
+        if (interaction.deferred) {
+          await interaction.editReply({ 
+            content: 'An error occurred while processing the loot command.'
+          });
+        } else {
+          await interaction.reply({ 
+            content: 'An error occurred while processing the loot command.',
+            ephemeral: true
+          });
+        }
+      } catch (replyError) {
+        console.error('Error sending error message:', replyError);
+      }
     }
   },
   

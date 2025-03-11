@@ -44,7 +44,7 @@ async function checkDatabaseConnection() {
 // Run the check before starting
 checkDatabaseConnection().then(() => {
   // Start bot only after database connection is verified
-  client.login(process.env.TOKEN);
+  client.login(process.env.DISCORD_BOT_TOKEN);
 }).catch(error => {
   console.error('Startup error:', error);
   process.exit(1);
