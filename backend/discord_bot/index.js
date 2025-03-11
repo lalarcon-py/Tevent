@@ -269,7 +269,4 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// Login
-client.login(process.env.DISCORD_BOT_TOKEN);
-
 module.exports = client;
