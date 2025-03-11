@@ -259,7 +259,12 @@ const registerCommands = async () => {
         name: 'members',
         description: 'View guild members',
         options: []
-      }
+      },
+      {
+        name: 'check-connection',
+        description: 'Check if this Discord server is connected to a guild',
+        options: []
+      },
     ];
 
     const CLIENT_ID = '1333905158496587816';
@@ -295,21 +300,47 @@ async function getAuthSession() {
 // Helper function to get the app guild ID from a Discord guild ID
 async function getGuildMapping(discordGuildId) {
   try {
+    console.log(`Checking mapping for Discord guild: ${discordGuildId}`);
+    
+    // First try the direct bot endpoint - no auth needed
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/discord/bot-mapping/${discordGuildId}`
+      );
+      
+      console.log('Bot mapping response:', response.data);
+      
+      if (response.data.success && response.data.appGuildId) {
+        return response.data.appGuildId;
+      }
+    } catch (directError) {
+      console.log('Direct mapping check failed, trying authenticated endpoint');
+    }
+    
+    // Fall back to authenticated endpoint
     const cookies = await getAuthSession();
-    if (!cookies) return null;
-    
-    const response = await axios.get(`${API_URL}/api/discord/mapping/${discordGuildId}`, {
-      headers: { Cookie: cookies }
-    });
-    
-    if (!response.data || !response.data.appGuildId) return null;
-    return response.data.appGuildId;
-  } catch (error) {
-    // If it's a 404, the mapping doesn't exist yet
-    if (error.response && error.response.status === 404) {
+    if (!cookies) {
+      console.error('Failed to get auth session');
       return null;
     }
-    console.error('Error getting guild mapping:', error);
+    
+    const response = await axios.get(
+      `${API_URL}/api/discord/mapping/${discordGuildId}`,
+      { headers: { Cookie: cookies } }
+    );
+    
+    if (response.data && response.data.appGuildId) {
+      return response.data.appGuildId;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting guild mapping:', error.message);
+    // Log more details but don't expose in response
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
     return null;
   }
 }
@@ -353,6 +384,30 @@ client.on('interactionCreate', async (interaction) => {
     }
     else if (commandName === 'members') {
       await handleMembersCommand(interaction, appGuildId);
+    }
+    else if (commandName === 'check-connection') {
+      await interaction.deferReply();
+      
+      try {
+        const discordGuildId = interaction.guild.id;
+        console.log(`Running connection check for Discord guild: ${discordGuildId}`);
+        
+        // First try direct database check
+        const appGuildId = await getGuildMapping(discordGuildId);
+        
+        if (appGuildId) {
+          await interaction.editReply({
+            content: `✅ **Connection Success!**\nThis Discord server is connected to guild ID: \`${appGuildId}\``
+          });
+        } else {
+          await interaction.editReply({
+            content: `❌ **Not Connected**\nThis Discord server (ID: ${discordGuildId}) is not connected to any guild yet.\n\nAn admin needs to complete the connection setup.`
+          });
+        }
+      } catch (error) {
+        console.error('Check connection error:', error);
+        await interaction.editReply(`❌ **Error Checking Connection**\n${error.message}`);
+      }
     }
   } catch (error) {
     console.error('Error handling command:', error);

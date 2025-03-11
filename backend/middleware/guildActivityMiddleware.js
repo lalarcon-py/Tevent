@@ -8,6 +8,12 @@ const guildActivityMiddleware = async (req, res, next) => {
       req.get('X-Skip-Guild-Activity-Check') === 'true') {
     return next();
   }
+
+  if (req.path.includes('/discord') || 
+      req.path.includes('/auth') || 
+      req.path.startsWith('/api/discord-setup')) {
+    return next();
+  }
   
   // Get guild ID from request
   const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body?.guildId;

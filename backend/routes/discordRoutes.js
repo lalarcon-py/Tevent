@@ -31,6 +31,37 @@ function decryptState(text) {
   decrypted += decipher.final('utf8');
   return decrypted;
 }
+router.get('/bot-mapping/:discordGuildId', async (req, res) => {
+  try {
+    const { discordGuildId } = req.params;
+    
+    // Direct SQL query to avoid ORM issues
+    const [result] = await sequelize.query(
+      `SELECT discord_guild_id, app_guild_id FROM discord_guild_mappings 
+       WHERE discord_guild_id = ?`,
+      { 
+        replacements: [discordGuildId],
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+    
+    if (!result) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'No mapping found for this Discord server'
+      });
+    }
+    
+    res.json({
+      success: true,
+      discordGuildId: result.discord_guild_id,
+      appGuildId: result.app_guild_id  // The UUID your bot needs
+    });
+  } catch (error) {
+    console.error('Error in bot mapping endpoint:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
 
 // Get mapping by Discord guild ID
 router.get('/mapping/:discordGuildId', async (req, res) => {
