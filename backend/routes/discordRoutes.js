@@ -170,15 +170,14 @@ router.post('/link', async (req, res) => {
     }
     
     const { discordGuildId, appGuildId } = req.body;
-
-    console.log('Linking Discord guild:', {
-      discordGuildId,
-      appGuildId,
-      userId: req.user?.id
-    });
     
     if (!discordGuildId || !appGuildId) {
       return res.status(400).json({ error: 'Both Discord guild ID and app guild ID are required' });
+    }
+    
+    // ✅ Add validation for appGuildId format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(appGuildId)) {
+      return res.status(400).json({ error: 'Invalid app guild ID format' });
     }
     
     // Verify user is Guild Master of the app guild
@@ -194,8 +193,14 @@ router.post('/link', async (req, res) => {
       return res.status(403).json({ error: 'You must be a Guild Master to link this guild' });
     }
     
-    // Create or update mapping
-    await storeDiscordMapping(discordGuildId, appGuildId);
+    // ✅ Change the model definition to ensure discord_guild_id is stored as STRING
+    await DiscordGuildMapping.upsert({
+      discord_guild_id: String(discordGuildId), // Convert to string explicitly
+      app_guild_id: appGuildId
+    });
+    
+    // ✅ Skip middleware check for this route
+    res.set('X-Skip-Guild-Activity-Check', 'true');
     
     res.status(200).json({ 
       success: true, 

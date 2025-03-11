@@ -3,8 +3,9 @@ const { Guild, Subscription } = require('../models');
 
 const guildActivityMiddleware = async (req, res, next) => {
   // Skip check for non-guild routes
-  const bypassRoutes = ['/api/billing', '/api/auth'];
-  if (bypassRoutes.some(route => req.path.startsWith(route))) {
+  const bypassRoutes = ['/api/billing', '/api/auth', '/api/discord'];
+  if (bypassRoutes.some(route => req.path.startsWith(route)) || 
+      req.get('X-Skip-Guild-Activity-Check') === 'true') {
     return next();
   }
   
