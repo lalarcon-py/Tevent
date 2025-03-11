@@ -6,9 +6,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const db = require(path.join(__dirname, 'models'));
 const commandRateLimit = new Map();
 const { Sequelize } = require('sequelize');
-const db = require('./backend/models');
 
 console.log('Environment Check:', {
   CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',
