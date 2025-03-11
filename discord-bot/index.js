@@ -292,7 +292,7 @@ async function getAuthSession() {
     });
     return loginResponse.headers['set-cookie'];
   } catch (error) {
-    console.error('Authentication error:', error);
+    console.error('Authentication error:', error.message);
     return null;
   }
 }
