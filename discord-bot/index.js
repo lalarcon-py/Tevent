@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const commandRateLimit = new Map();
 const { Sequelize } = require('sequelize');
-const db = require('../../models');
+const db = require('./backend/models');
 
 console.log('Environment Check:', {
   CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',
