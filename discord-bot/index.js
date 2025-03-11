@@ -22,7 +22,7 @@ const client = new Client({
   ] 
 });
 
-const API_URL = process.env.API_URL;
+const API_URL = process.env.API_URL || 'https://tevent.app';
 
 // Collection to store commands
 client.commands = new Collection();
@@ -128,7 +128,7 @@ client.on('guildMemberAdd', async (member) => {
     if (!appGuildId) return; // Skip if no mapping exists
     
     // Login to get session cookie
-    const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
+    const loginResponse = await axios.post(`${API_URL}/api/auth/bot-login`, {
       botSecret: process.env.BOT_SECRET
     });
     
@@ -305,7 +305,7 @@ async function getGuildMapping(discordGuildId) {
     // First try the direct bot endpoint - no auth needed
     try {
       const response = await axios.get(
-        `${API_URL}/api/discord/bot-mapping/${discordGuildId}`
+        `${API_URL}/api/discord/public-mapping/${discordGuildId}`
       );
       
       console.log('Bot mapping response:', response.data);

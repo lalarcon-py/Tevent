@@ -5,6 +5,7 @@ const axios = require('axios');
 const { Guild, GuildMember, DiscordGuildMapping } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const { sequelize } = require('../config/database');
 
 // Encryption/decryption functions for state parameter
 function encryptState(text) {
@@ -31,31 +32,37 @@ function decryptState(text) {
   decrypted += decipher.final('utf8');
   return decrypted;
 }
+
 router.get('/bot-mapping/:discordGuildId', async (req, res) => {
   try {
     const { discordGuildId } = req.params;
     
-    // Direct SQL query to avoid ORM issues
+    console.log('Bot mapping request for Discord guild ID:', discordGuildId);
+    
+    // Direct SQL query with string conversion for consistency
     const [result] = await sequelize.query(
       `SELECT discord_guild_id, app_guild_id FROM discord_guild_mappings 
        WHERE discord_guild_id = ?`,
       { 
-        replacements: [discordGuildId],
+        replacements: [discordGuildId.toString()],
         type: sequelize.QueryTypes.SELECT
       }
     );
     
     if (!result) {
+      console.log(`No mapping found for Discord guild ID: ${discordGuildId}`);
       return res.status(404).json({ 
         success: false,
         error: 'No mapping found for this Discord server'
       });
     }
     
+    console.log('Found mapping:', result);
+    
     res.json({
       success: true,
       discordGuildId: result.discord_guild_id,
-      appGuildId: result.app_guild_id  // The UUID your bot needs
+      appGuildId: result.app_guild_id
     });
   } catch (error) {
     console.error('Error in bot mapping endpoint:', error);
