@@ -211,6 +211,56 @@ router.post('/link', async (req, res) => {
     res.status(500).json({ error: 'Failed to link Discord guild' });
   }
 });
+
+router.post('/link-auto', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { discordGuildId } = req.body;
+    
+    if (!discordGuildId) {
+      return res.status(400).json({ error: 'Discord guild ID is required' });
+    }
+    
+    // Find guilds where the user is a Guild Master
+    const userGuilds = await GuildMember.findAll({
+      where: { 
+        user_id: req.user.id,
+        role: 'Guild Master'
+      },
+      include: [{
+        model: Guild,
+        attributes: ['id', 'name']
+      }]
+    });
+    
+    if (!userGuilds || userGuilds.length === 0) {
+      return res.status(403).json({ 
+        error: 'You must be a Guild Master of at least one guild to use Discord integration'
+      });
+    }
+    
+    // Use the first guild automatically (or the only one if there's just one)
+    const appGuildId = userGuilds[0].Guild.id;
+    
+    // Create or update the mapping
+    await DiscordGuildMapping.upsert({
+      discord_guild_id: String(discordGuildId), // Store as string
+      app_guild_id: appGuildId
+    });
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Discord server linked successfully!',
+      guildName: userGuilds[0].Guild.name
+    });
+  } catch (error) {
+    console.error('Error auto-linking Discord guild:', error);
+    res.status(500).json({ error: 'Failed to link Discord guild' });
+  }
+});
   
 // Helper function to store the mapping
 async function storeDiscordMapping(discordGuildId, appGuildId) {

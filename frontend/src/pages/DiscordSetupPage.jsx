@@ -55,21 +55,20 @@ const DiscordSetupPage = () => {
   }, [isAuthenticated, discordGuildId, login]);
 
   const handleLink = async () => {
-    if (!guild) {
-      setError('No guild available to link');
-      return;
-    }
-    
     try {
       setLoading(true);
-      await axiosInstance.post('/api/discord/link', {
-        discordGuildId,
-        appGuildId: guild.id
+      
+      // Use the new auto-link endpoint that doesn't require specifying a guild
+      const response = await axiosInstance.post('/api/discord/link-auto', {
+        discordGuildId
       });
       
       setSuccess(true);
+      // Optionally show the guild name that was linked
+      setGuild({ name: response.data.guildName || 'Your guild' });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to link server. Please try again.');
+      console.error('Link error:', err);
     } finally {
       setLoading(false);
     }
@@ -115,28 +114,24 @@ const DiscordSetupPage = () => {
         </Alert>
       ) : (
         <Paper sx={{ p: 3, textAlign: 'center' }}>
-          {guild ? (
-            <>
-              <Typography variant="h6" sx={{ mb: 3 }}>
-                Connect Discord to: <strong>{guild.name}</strong>
-              </Typography>
-              
-              <Button 
-                variant="contained" 
-                color="primary" 
-                size="large"
-                onClick={handleLink}
-                sx={{ py: 1.5, px: 4, fontSize: '1.1rem' }}
-              >
-                Link Discord Now
-              </Button>
-            </>
-          ) : (
-            <Typography color="text.secondary">
-              You don't have any guilds you can link. You must be a Guild Master to link a guild.
-            </Typography>
-          )}
-        </Paper>
+        <Typography variant="h6" sx={{ mb: 3 }}>
+          Link Discord to Your Guild
+        </Typography>
+        
+        <Typography variant="body1" sx={{ mb: 3 }}>
+          This will connect your Discord server to your guild where you're a Guild Master.
+        </Typography>
+        
+        <Button 
+          variant="contained" 
+          color="primary" 
+          size="large"
+          onClick={handleLink}
+          sx={{ py: 1.5, px: 4, fontSize: '1.1rem' }}
+        >
+          Link Discord Now
+        </Button>
+      </Paper>
       )}
     </Box>
   );
