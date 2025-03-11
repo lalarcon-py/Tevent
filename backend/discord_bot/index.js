@@ -17,6 +17,47 @@ const client = new Client({
   ],
 });
 
+async function checkDatabaseConnection() {
+  try {
+    console.log('Testing database connection...');
+    await db.sequelize.authenticate();
+    console.log('Database connection established successfully.');
+    
+    // Check for required models
+    const requiredModels = [
+      'User', 'Guild', 'GuildMember', 'Event', 'EventParticipant', 
+      'Team', 'TeamMember', 'DiscordGuildMapping'
+    ];
+    
+    for (const model of requiredModels) {
+      if (!db[model]) {
+        console.warn(`WARNING: Required model '${model}' not found! Some features may not work.`);
+      }
+    }
+    
+    // Check if DiscordGuildMapping exists
+    try {
+      const mappingCount = await db.DiscordGuildMapping.count();
+      console.log(`Found ${mappingCount} Discord-to-Guild mappings in database.`);
+    } catch (err) {
+      console.error('Error checking Discord mappings:', err.message);
+    }
+    
+  } catch (error) {
+    console.error('Unable to connect to the database:', error);
+    process.exit(1); // Exit with error code
+  }
+}
+
+// Run the check before starting
+checkDatabaseConnection().then(() => {
+  // Start bot only after database connection is verified
+  client.login(process.env.TOKEN);
+}).catch(error => {
+  console.error('Startup error:', error);
+  process.exit(1);
+});
+
 // Command collection setup
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
