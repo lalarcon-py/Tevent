@@ -1,4 +1,4 @@
-// config/database.js
+// backend/config/database.js
 require('dotenv').config();
 const { Sequelize } = require('sequelize');
 
@@ -13,13 +13,28 @@ const commonConfig = {
 
 const createBaseConnection = () => {
   if (process.env.NODE_ENV === 'production') {
-    return new Sequelize(process.env.DATABASE_URL, {
+    // Extract connection components from DATABASE_URL to force IPv4
+    const url = new URL(process.env.DATABASE_URL);
+    const hostname = url.hostname;
+    const port = url.port || 5432;
+    const database = url.pathname.substring(1); // Remove leading /
+    const username = url.username;
+    const password = url.password;
+    
+    console.log(`[DEBUG] Creating production DB connection to: ${hostname}:${port}/${database}`);
+    
+    return new Sequelize(database, username, password, {
+      host: hostname,
+      port: port,
+      dialect: 'postgres',
       ...commonConfig,
       dialectOptions: {
         ssl: {
           require: true,
           rejectUnauthorized: false
-        }
+        },
+        // Force IPv4
+        family: 4
       },
       pool: {
         max: 20,  // Increase pool size for production
@@ -32,7 +47,11 @@ const createBaseConnection = () => {
       host: 'localhost',
       port: 5432,
       dialect: 'postgres',
-      ...commonConfig
+      ...commonConfig,
+      dialectOptions: {
+        // Force IPv4 even in development
+        family: 4
+      }
     });
   }
 };
