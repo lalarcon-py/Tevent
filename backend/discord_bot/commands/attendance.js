@@ -47,7 +47,8 @@ module.exports = {
     ),
 
   async execute(interaction) {
-
+    console.log(`[DEBUG] Loot command execution started. Subcommand: ${interaction.options.getSubcommand()}`);
+    
     if (!await ensureDatabaseConnection()) {
       return interaction.reply({ 
         content: 'Unable to connect to the database. Please try again later or contact the bot administrator.',
