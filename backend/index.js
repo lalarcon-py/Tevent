@@ -94,6 +94,33 @@ app.use(session({
   }
 }));
 
+app.post('/auth/bot-login', (req, res) => {
+  try {
+    const { botSecret } = req.body;
+    
+    // Verify bot secret
+    if (botSecret !== process.env.BOT_SECRET) {
+      return res.status(401).json({ error: 'Invalid bot credentials' });
+    }
+    
+    // Create a bot user session
+    req.login({
+      id: 'bot-user',
+      username: 'Discord Bot',
+      role: 'Bot'
+    }, (err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Session creation failed' });
+      }
+      
+      res.status(200).json({ success: true });
+    });
+  } catch (error) {
+    console.error('Bot login error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
 // Error handler middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
@@ -159,6 +186,7 @@ app.use('/api/discord-bot', require('./routes/discordBotRoutes'));
 // Add guildActivityMiddleware without the problematic billing routes
 app.use('/api/billing', billingRoutes);
 app.use('/api/discord-setup', require('./routes/discordRoutes'));
+app.use('/api/discord', require('./routes/discordBotRoutes'));
 app.use(guildActivityMiddleware);
 
 
