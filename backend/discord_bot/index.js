@@ -1,3 +1,4 @@
+//backend/discord_bot/index.js
 const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
