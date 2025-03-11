@@ -154,6 +154,7 @@ app.delete('/api/user/delete', userController.deleteUser);
 app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/discord-bot', require('./routes/discordBotRoutes'));
 
 // Add guildActivityMiddleware without the problematic billing routes
 app.use('/api/billing', billingRoutes);
