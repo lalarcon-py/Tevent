@@ -2,6 +2,17 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder } = require('discord.js');
 const database = require('../utils/database');
 const embedBuilder = require('../utils/embed_builder');
+const { sequelize } = require('../../../config/database');
+
+async function ensureDatabaseConnection() {
+  try {
+    await sequelize.authenticate();
+    return true;
+  } catch (error) {
+    console.error('Database connection error in command:', error);
+    return false;
+  }
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -29,6 +40,14 @@ module.exports = {
     ),
 
   async execute(interaction) {
+
+    if (!await ensureDatabaseConnection()) {
+      return interaction.reply({ 
+        content: 'Unable to connect to the database. Please try again later or contact the bot administrator.',
+        ephemeral: true 
+      });
+    }
+    
     try {
       const guildId = await database.getGuildIdFromDiscord(interaction.guildId);
       

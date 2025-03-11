@@ -5,7 +5,7 @@ const { Routes } = require('discord-api-types/v9');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
-const { Sequelize } = require('sequelize');
+const { sequelize } = require('../config/database');
 const db = require('./models');
 
 const client = new Client({
@@ -20,27 +20,19 @@ const client = new Client({
 async function checkDatabaseConnection() {
   try {
     console.log('Testing database connection...');
-    await db.sequelize.authenticate();
+    await sequelize.authenticate();
     console.log('Database connection established successfully.');
     
-    // Check for required models
-    const requiredModels = [
-      'User', 'Guild', 'GuildMember', 'Event', 'EventParticipant', 
-      'Team', 'TeamMember', 'DiscordGuildMapping'
-    ];
-    
-    for (const model of requiredModels) {
-      if (!db[model]) {
-        console.warn(`WARNING: Required model '${model}' not found! Some features may not work.`);
-      }
-    }
-    
-    // Check if DiscordGuildMapping exists
+    // Test if we can access the discord_guild_mappings table
     try {
-      const mappingCount = await db.DiscordGuildMapping.count();
-      console.log(`Found ${mappingCount} Discord-to-Guild mappings in database.`);
+      const [result] = await sequelize.query(
+        'SELECT COUNT(*) FROM discord_guild_mappings',
+        { type: sequelize.QueryTypes.SELECT }
+      );
+      console.log(`Found ${result.count} Discord-to-Guild mappings in database.`);
     } catch (err) {
-      console.error('Error checking Discord mappings:', err.message);
+      console.error('Error accessing discord_guild_mappings table:', err.message);
+      console.warn('The bot may not be able to resolve guild mappings.');
     }
     
   } catch (error) {

@@ -216,22 +216,23 @@ module.exports = {
     try {
       console.log(`Checking mapping for Discord guild: ${discordServerId}`);
       
-      // Use direct database query
-      const mapping = await db.DiscordGuildMapping.findOne({
-        where: { discord_guild_id: discordServerId.toString() }
-      });
+      // Use direct database query with parameterized query
+      const [result] = await sequelize.query(
+        `SELECT app_guild_id FROM discord_guild_mappings 
+         WHERE discord_guild_id = $1`,
+        { 
+          bind: [discordServerId.toString()],
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
       
-      if (!mapping) {
+      if (!result) {
         console.log(`No mapping found for Discord guild ID: ${discordServerId}`);
         return null;
       }
       
-      console.log(`Direct database mapping found:`, {
-        discord_guild_id: mapping.discord_guild_id,
-        app_guild_id: mapping.app_guild_id
-      });
-      
-      return mapping.app_guild_id;
+      console.log(`Mapping found: ${result.app_guild_id}`);
+      return result.app_guild_id;
     } catch (error) {
       console.error('Error getting guild ID from Discord server ID:', error);
       throw error;

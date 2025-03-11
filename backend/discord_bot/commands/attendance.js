@@ -4,6 +4,7 @@ const { EmbedBuilder } = require('discord.js');
 const database = require('../utils/database');
 const embedBuilder = require('../utils/embed_builder');
 const { EventParticipant, EventAbsentee } = require('../../../models');
+const { sequelize } = require('../../../config/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -46,6 +47,14 @@ module.exports = {
     ),
 
   async execute(interaction) {
+
+    if (!await ensureDatabaseConnection()) {
+      return interaction.reply({ 
+        content: 'Unable to connect to the database. Please try again later or contact the bot administrator.',
+        ephemeral: true 
+      });
+    }
+
     try {
       const subcommand = interaction.options.getSubcommand();
       

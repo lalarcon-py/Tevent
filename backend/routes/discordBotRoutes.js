@@ -4,11 +4,14 @@ const router = express.Router();
 const { sequelize } = require('../config/database');
 
 // Direct bot mapping endpoint - NO authentication required
+// In backend/routes/discordBotRoutes.js
+
+// Direct bot mapping endpoint - NO authentication required but secured with API key
 router.get('/bot-mapping/:discordGuildId', async (req, res) => {
   try {
     const { discordGuildId } = req.params;
     
-    // SECURITY FIX: Use API key authentication
+    // SECURITY: Use API key authentication
     const apiKey = req.headers['x-bot-api-key'];
     if (!apiKey || apiKey !== process.env.BOT_API_KEY) {
       console.log('Unauthorized access attempt to bot mapping');
@@ -20,7 +23,7 @@ router.get('/bot-mapping/:discordGuildId', async (req, res) => {
     
     console.log('Authorized bot mapping request for Discord guild ID:', discordGuildId);
     
-    // Use parameterized query with explicit type conversion
+    // Use direct database query with parameterized query
     const [result] = await sequelize.query(
       `SELECT discord_guild_id, app_guild_id FROM discord_guild_mappings 
        WHERE discord_guild_id = $1`,
@@ -38,7 +41,6 @@ router.get('/bot-mapping/:discordGuildId', async (req, res) => {
       });
     }
     
-    // SECURITY FIX: Only return the minimum necessary data
     res.json({
       success: true,
       appGuildId: result.app_guild_id
