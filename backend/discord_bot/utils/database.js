@@ -1,43 +1,32 @@
-const { Event, User, EventParticipant, Team, TeamMember, Guild, GuildMember, Item, LootRequest, GuildStorageItem } = require('../../../models');
+// backend/discord_bot/utils/database.js
+const db = require('../../../models');
 const { Op, Sequelize } = require('sequelize');
 
 /**
- * Database utility functions for Discord bot
+ * Database utility functions for Discord bot with direct database access
  */
 module.exports = {
   /**
    * Get upcoming events for a guild
    */
   getUpcomingEvents: async (guildId, days = 7) => {
-    // SECURITY FIX: Validate inputs
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-    
-    if (!Number.isInteger(parseInt(days)) || days <= 0 || days > 30) {
-      days = 7; // Default to 7 if invalid
-    }
-    
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(now.getDate() + parseInt(days));
     
-    // SECURITY FIX: Limit data retrieval to only necessary fields
-    return await Event.findAll({
+    return await db.Event.findAll({
       where: {
         guild_id: guildId,
         event_time: {
           [Op.between]: [now, futureDate]
         }
       },
-      attributes: ['id', 'title', 'description', 'event_time', 'location', 'tanks', 'healers', 'dps'],
       include: [{
-        model: EventParticipant,
+        model: db.EventParticipant,
         as: 'participants',
-        attributes: ['id', 'role', 'user_id'],
         include: [{
-          model: User,
-          attributes: ['id', 'username', 'discord_id'] // Limit exposed user data
+          model: db.User,
+          attributes: ['id', 'username', 'discord_id']
         }]
       }],
       order: [['event_time', 'ASC']]
@@ -48,18 +37,12 @@ module.exports = {
    * Get specific event by ID
    */
   getEventById: async (eventId) => {
-    if (!eventId) {
-      throw new Error('Event ID is required');
-    }
-    
-    return await Event.findByPk(eventId, {
-      attributes: ['id', 'title', 'description', 'event_time', 'location', 'tanks', 'healers', 'dps', 'guild_id'],
+    return await db.Event.findByPk(eventId, {
       include: [{
-        model: EventParticipant,
+        model: db.EventParticipant,
         as: 'participants',
-        attributes: ['id', 'role', 'user_id'],
         include: [{
-          model: User,
+          model: db.User,
           attributes: ['id', 'username', 'discord_id']
         }]
       }]
@@ -70,20 +53,14 @@ module.exports = {
    * Get teams for an event
    */
   getEventTeams: async (eventId) => {
-    if (!eventId) {
-      throw new Error('Event ID is required');
-    }
-    
-    return await Team.findAll({
+    return await db.Team.findAll({
       where: { event_id: eventId },
-      attributes: ['id', 'name', 'event_id', 'guild_id'],
       include: [{
-        model: TeamMember,
+        model: db.TeamMember,
         as: 'members',
-        attributes: ['id', 'role', 'position'],
         include: [{
-          model: User,
-          attributes: ['id', 'username', 'discord_id']
+          model: db.User,
+          attributes: ['id', 'username', 'discord_id', 'builds']
         }]
       }],
       order: [['name', 'ASC']]
@@ -94,19 +71,13 @@ module.exports = {
    * Get a specific team by ID
    */
   getTeamById: async (teamId) => {
-    if (!teamId) {
-      throw new Error('Team ID is required');
-    }
-    
-    return await Team.findByPk(teamId, {
-      attributes: ['id', 'name', 'event_id', 'guild_id'],
+    return await db.Team.findByPk(teamId, {
       include: [{
-        model: TeamMember,
+        model: db.TeamMember,
         as: 'members',
-        attributes: ['id', 'role', 'position'],
         include: [{
-          model: User,
-          attributes: ['id', 'username', 'discord_id']
+          model: db.User,
+          attributes: ['id', 'username', 'discord_id', 'builds']
         }]
       }]
     });
@@ -116,93 +87,68 @@ module.exports = {
    * Get attendance statistics for guild members
    */
   getAttendanceStats: async (guildId, periodDays = 30) => {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
+    // Calculate period start date
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - periodDays);
     
-    // Sanitize input
-    if (!Number.isInteger(parseInt(periodDays)) || periodDays <= 0 || periodDays > 90) {
-      periodDays = 30;
-    }
-    
-    try {
-      // Calculate period start date
-      const periodStart = new Date();
-      periodStart.setDate(periodStart.getDate() - periodDays);
-      
-      // Get events in the specified period
-      const events = await Event.findAll({
-        where: {
-          guild_id: guildId,
-          event_time: {
-            [Op.gte]: periodStart,
-            [Op.lte]: new Date()
-          }
-        },
-        attributes: ['id', 'title', 'event_time'],
-        include: [{
-          model: EventParticipant,
-          as: 'participants',
-          attributes: ['id', 'user_id']
-        }]
-      });
-      
-      if (!events || events.length === 0) {
-        return []; // No events found
-      }
-      
-      // Get all members in guild
-      const members = await GuildMember.findAll({
-        where: { guild_id: guildId },
-        attributes: ['id', 'user_id'],
-        include: [{
-          model: User,
-          attributes: ['id', 'username']
-        }]
-      });
-      
-      // Calculate attendance for each member
-      const memberStats = [];
-      
-      for (const member of members) {
-        if (!member.User) continue;
-        
-        let eventsAttended = 0;
-        
-        for (const event of events) {
-          const attended = event.participants.some(p => p.user_id === member.user_id);
-          if (attended) eventsAttended++;
+    // Get events in the specified period
+    const events = await db.Event.findAll({
+      where: {
+        guild_id: guildId,
+        event_time: {
+          [Op.gte]: periodStart,
+          [Op.lte]: new Date()
         }
-        
-        const attendanceRate = events.length > 0 ? 
-          (eventsAttended / events.length) * 100 : 0;
-        
-        memberStats.push({
-          id: member.user_id,
-          username: member.User.username,
-          events_attended: eventsAttended,
-          total_events: events.length,
-          attendance_rate: parseFloat(attendanceRate.toFixed(1))
-        });
+      },
+      include: [{
+        model: db.EventParticipant,
+        as: 'participants',
+        attributes: ['id', 'user_id']
+      }]
+    });
+    
+    // Get guild members
+    const members = await db.GuildMember.findAll({
+      where: { guild_id: guildId },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username']
+      }]
+    });
+    
+    // Calculate attendance stats
+    const stats = [];
+    
+    for (const member of members) {
+      if (!member.User) continue;
+      
+      let eventsAttended = 0;
+      
+      for (const event of events) {
+        const attended = event.participants.some(p => p.user_id === member.user_id);
+        if (attended) eventsAttended++;
       }
       
-      // Sort by attendance rate (descending)
-      return memberStats.sort((a, b) => b.attendance_rate - a.attendance_rate);
-    } catch (error) {
-      console.error('Error calculating attendance stats:', error);
-      throw error;
+      const attendanceRate = events.length > 0 ? 
+        (eventsAttended / events.length) * 100 : 0;
+      
+      stats.push({
+        id: member.user_id,
+        username: member.User.username,
+        events_attended: eventsAttended,
+        total_events: events.length,
+        attendance_rate: parseFloat(attendanceRate.toFixed(1))
+      });
     }
+    
+    return stats.sort((a, b) => b.attendance_rate - a.attendance_rate);
   },
   
   /**
    * Sign up a user for an event
    */
   signUpForEvent: async (guildId, eventId, discordUserId, role) => {
-    if (!guildId || !eventId || !discordUserId || !role) {
-      throw new Error('Missing required parameters');
-    }
-    
-    const user = await User.findOne({
+    const user = await db.User.findOne({
       where: { discord_id: discordUserId }
     });
     
@@ -210,7 +156,7 @@ module.exports = {
       return { success: false, message: 'User not found' };
     }
     
-    const event = await Event.findOne({
+    const event = await db.Event.findOne({
       where: { id: eventId, guild_id: guildId }
     });
     
@@ -219,7 +165,7 @@ module.exports = {
     }
     
     // Check if user is already signed up
-    const existing = await EventParticipant.findOne({
+    const existing = await db.EventParticipant.findOne({
       where: {
         event_id: eventId,
         user_id: user.id,
@@ -234,7 +180,7 @@ module.exports = {
     }
     
     // Check if role is full
-    const participants = await EventParticipant.findAll({
+    const participants = await db.EventParticipant.findAll({
       where: { 
         event_id: eventId,
         role,
@@ -253,7 +199,7 @@ module.exports = {
     }
     
     // Create new signup
-    await EventParticipant.create({
+    await db.EventParticipant.create({
       event_id: eventId,
       user_id: user.id,
       guild_id: guildId,
@@ -267,22 +213,25 @@ module.exports = {
    * Get guild ID from Discord server ID
    */
   getGuildIdFromDiscord: async (discordServerId) => {
-    if (!discordServerId) {
-      throw new Error('Discord server ID is required');
-    }
-    
     try {
-      // SECURITY FIX: Use parameterized query
-      const [result] = await Sequelize.query(
-        `SELECT app_guild_id FROM discord_guild_mappings 
-         WHERE discord_guild_id = ?`,
-        { 
-          replacements: [discordServerId.toString()],
-          type: Sequelize.QueryTypes.SELECT
-        }
-      );
+      console.log(`Checking mapping for Discord guild: ${discordServerId}`);
       
-      return result ? result.app_guild_id : null;
+      // Use direct database query
+      const mapping = await db.DiscordGuildMapping.findOne({
+        where: { discord_guild_id: discordServerId.toString() }
+      });
+      
+      if (!mapping) {
+        console.log(`No mapping found for Discord guild ID: ${discordServerId}`);
+        return null;
+      }
+      
+      console.log(`Direct database mapping found:`, {
+        discord_guild_id: mapping.discord_guild_id,
+        app_guild_id: mapping.app_guild_id
+      });
+      
+      return mapping.app_guild_id;
     } catch (error) {
       console.error('Error getting guild ID from Discord server ID:', error);
       throw error;
@@ -293,16 +242,11 @@ module.exports = {
    * Get members with their roles
    */
   getMembers: async (guildId) => {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-    
-    return await GuildMember.findAll({
+    return await db.GuildMember.findAll({
       where: { guild_id: guildId },
-      attributes: ['id', 'role', 'user_id'],
       include: [{
-        model: User,
-        attributes: ['id', 'username', 'discord_id']
+        model: db.User,
+        attributes: ['id', 'username', 'discord_id', 'builds', 'combat_power']
       }]
     });
   },
@@ -311,36 +255,32 @@ module.exports = {
    * Update event attendance
    */
   updateEventAttendance: async (eventId, userId, attended) => {
-    if (!eventId || !userId) {
-      throw new Error('Event ID and User ID are required');
+    // Get the event first to check guild_id
+    const event = await db.Event.findByPk(eventId, {
+      attributes: ['id', 'guild_id']
+    });
+    
+    if (!event) {
+      throw new Error('Event not found');
     }
     
-    try {
-      // Get the event first to check guild_id
-      const event = await Event.findByPk(eventId, {
-        attributes: ['id', 'guild_id']
+    if (attended) {
+      // If marking as attended, create or ensure a participant record exists
+      const [participant, created] = await db.EventParticipant.findOrCreate({
+        where: { 
+          event_id: eventId,
+          user_id: userId,
+          guild_id: event.guild_id
+        },
+        defaults: {
+          role: 'ATTENDEE' // Default role if not specified
+        }
       });
       
-      if (!event) {
-        throw new Error('Event not found');
-      }
-      
-      if (attended) {
-        // If marking as attended, create or ensure a participant record exists
-        const [participant, created] = await EventParticipant.findOrCreate({
-          where: { 
-            event_id: eventId,
-            user_id: userId,
-            guild_id: event.guild_id
-          },
-          defaults: {
-            role: 'ATTENDEE' // Default role if not specified
-          }
-        });
-        
-        // Remove from absentees if exists
+      // Remove from absentees if table exists
+      if (db.EventAbsentee) {
         try {
-          await EventAbsentee.destroy({
+          await db.EventAbsentee.destroy({
             where: {
               event_id: eventId,
               user_id: userId,
@@ -348,22 +288,23 @@ module.exports = {
             }
           });
         } catch (error) {
-          // EventAbsentee table might not exist, so catch and ignore
-          console.warn('Failed to remove from absentees (table might not exist)');
+          console.warn('Failed to remove from absentees:', error.message);
         }
-      } else {
-        // If marking as absent, remove participant record if it exists
-        await EventParticipant.destroy({
-          where: { 
-            event_id: eventId,
-            user_id: userId,
-            guild_id: event.guild_id
-          }
-        });
-        
-        // Create absence record if you have such a table
+      }
+    } else {
+      // If marking as absent, remove participant record if it exists
+      await db.EventParticipant.destroy({
+        where: { 
+          event_id: eventId,
+          user_id: userId,
+          guild_id: event.guild_id
+        }
+      });
+      
+      // Create absence record if table exists
+      if (db.EventAbsentee) {
         try {
-          await EventAbsentee.findOrCreate({
+          await db.EventAbsentee.findOrCreate({
             where: {
               event_id: eventId,
               user_id: userId,
@@ -371,104 +312,75 @@ module.exports = {
             }
           });
         } catch (error) {
-          // EventAbsentee table might not exist, so catch and ignore
-          console.warn('Failed to add to absentees (table might not exist)');
+          console.warn('Failed to add to absentees:', error.message);
         }
       }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating event attendance:', error);
-      throw error;
     }
+    
+    return { success: true };
   },
   
   /**
    * Get items in guild storage
    */
   getGuildStorageItems: async (guildId) => {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-    
-    try {
-      return await GuildStorageItem.findAll({
-        where: { guild_id: guildId },
-        attributes: ['id', 'item_id', 'quantity', 'trait', 'dkp_cost'],
-        include: [{
-          model: Item,
-          attributes: ['id', 'name', 'type', 'icon']
-        }]
-      });
-    } catch (error) {
-      console.error('Error getting guild storage items:', error);
-      throw error;
-    }
+    return await db.GuildStorageItem.findAll({
+      where: { guild_id: guildId },
+      include: [{
+        model: db.Item,
+        attributes: ['id', 'name', 'type', 'icon']
+      }]
+    });
   },
   
   /**
    * Get pending loot requests
    */
   getLootRequests: async (guildId) => {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-    
-    try {
-      return await LootRequest.findAll({
-        where: { 
-          guild_id: guildId,
-          status: 'Pending'
+    return await db.LootRequest.findAll({
+      where: { 
+        guild_id: guildId,
+        status: 'Pending'
+      },
+      include: [
+        {
+          model: db.GuildStorageItem,
+          as: 'storageItem',
+          include: [{
+            model: db.Item,
+            attributes: ['id', 'name', 'type', 'icon']
+          }]
         },
-        attributes: ['id', 'storage_item_id', 'user_id', 'status', 'created_at', 'priority'],
-        include: [
-          {
-            model: GuildStorageItem,
-            as: 'storageItem',
-            attributes: ['id', 'item_id', 'quantity', 'trait', 'dkp_cost'],
-            include: [{
-              model: Item,
-              attributes: ['id', 'name', 'type', 'icon']
-            }]
-          },
-          {
-            model: User,
-            as: 'user',
-            attributes: ['id', 'username', 'discord_id']
-          }
-        ],
-        order: [['created_at', 'DESC']]
-      });
-    } catch (error) {
-      console.error('Error getting loot requests:', error);
-      throw error;
-    }
+        {
+          model: db.User,
+          as: 'user',
+          attributes: ['id', 'username', 'discord_id']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
   },
   
   /**
    * Approve a loot request
    */
   approveLootRequest: async (guildId, requestId) => {
-    if (!guildId || !requestId) {
-      throw new Error('Guild ID and Request ID are required');
-    }
-    
-    const t = await Sequelize.transaction();
+    const t = await db.sequelize.transaction();
     
     try {
-      const request = await LootRequest.findOne({
+      const request = await db.LootRequest.findOne({
         where: { 
           id: requestId,
           guild_id: guildId
         },
         include: [
           {
-            model: GuildStorageItem,
+            model: db.GuildStorageItem,
             as: 'storageItem',
-            include: [Item]
+            include: [db.Item]
           },
           {
-            model: User,
+            model: db.User,
             as: 'user'
           }
         ],
@@ -512,24 +424,20 @@ module.exports = {
    * Deny a loot request
    */
   denyLootRequest: async (guildId, requestId) => {
-    if (!guildId || !requestId) {
-      throw new Error('Guild ID and Request ID are required');
-    }
-    
     try {
-      const request = await LootRequest.findOne({
+      const request = await db.LootRequest.findOne({
         where: { 
           id: requestId,
           guild_id: guildId
         },
         include: [
           {
-            model: GuildStorageItem,
+            model: db.GuildStorageItem,
             as: 'storageItem',
-            include: [Item]
+            include: [db.Item]
           },
           {
-            model: User,
+            model: db.User,
             as: 'user'
           }
         ]
@@ -559,12 +467,8 @@ module.exports = {
    * Create a loot request
    */
   createLootRequest: async (guildId, itemId, discordUserId) => {
-    if (!guildId || !itemId || !discordUserId) {
-      throw new Error('Guild ID, Item ID, and Discord User ID are required');
-    }
-    
     try {
-      const user = await User.findOne({
+      const user = await db.User.findOne({
         where: { discord_id: discordUserId }
       });
       
@@ -572,12 +476,12 @@ module.exports = {
         return { success: false, message: 'User not found' };
       }
       
-      const storageItem = await GuildStorageItem.findOne({
+      const storageItem = await db.GuildStorageItem.findOne({
         where: { 
           id: itemId,
           guild_id: guildId
         },
-        include: [Item]
+        include: [db.Item]
       });
       
       if (!storageItem) {
@@ -585,7 +489,7 @@ module.exports = {
       }
       
       // Check if user already has a pending request for this item
-      const existingRequest = await LootRequest.findOne({
+      const existingRequest = await db.LootRequest.findOne({
         where: {
           storage_item_id: itemId,
           user_id: user.id,
@@ -599,7 +503,7 @@ module.exports = {
       }
       
       // Create new request
-      const request = await LootRequest.create({
+      const request = await db.LootRequest.create({
         storage_item_id: itemId,
         user_id: user.id,
         guild_id: guildId,
@@ -621,18 +525,9 @@ module.exports = {
    * Get a user by Discord ID
    */
   getUserByDiscordId: async (discordId) => {
-    if (!discordId) {
-      throw new Error('Discord ID is required');
-    }
-    
-    try {
-      return await User.findOne({
-        where: { discord_id: discordId },
-        attributes: ['id', 'username', 'discord_id']
-      });
-    } catch (error) {
-      console.error('Error getting user by Discord ID:', error);
-      throw error;
-    }
+    return await db.User.findOne({
+      where: { discord_id: discordId },
+      attributes: ['id', 'username', 'discord_id']
+    });
   }
 };

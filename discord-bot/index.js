@@ -7,6 +7,8 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const commandRateLimit = new Map();
+const { Sequelize } = require('sequelize');
+const db = require('../../models');
 
 console.log('Environment Check:', {
   CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',
@@ -44,6 +46,47 @@ const app = express();
 const PORT = process.env.BOT_PORT || 3300;
 
 app.use(bodyParser.json());
+
+async function checkDatabaseConnection() {
+  try {
+    console.log('Testing database connection...');
+    await db.sequelize.authenticate();
+    console.log('Database connection established successfully.');
+    
+    // Check for required models
+    const requiredModels = [
+      'User', 'Guild', 'GuildMember', 'Event', 'EventParticipant', 
+      'Team', 'TeamMember', 'DiscordGuildMapping'
+    ];
+    
+    for (const model of requiredModels) {
+      if (!db[model]) {
+        console.warn(`WARNING: Required model '${model}' not found! Some features may not work.`);
+      }
+    }
+    
+    // Check if DiscordGuildMapping exists
+    try {
+      const mappingCount = await db.DiscordGuildMapping.count();
+      console.log(`Found ${mappingCount} Discord-to-Guild mappings in database.`);
+    } catch (err) {
+      console.error('Error checking Discord mappings:', err.message);
+    }
+    
+  } catch (error) {
+    console.error('Unable to connect to the database:', error);
+    process.exit(1); // Exit with error code
+  }
+}
+
+// Run the check before starting
+checkDatabaseConnection().then(() => {
+  // Start bot only after database connection is verified
+  client.login(process.env.TOKEN);
+}).catch(error => {
+  console.error('Startup error:', error);
+  process.exit(1);
+});
 
 // Endpoint to update mappings from the main backend
 app.post('/update-mapping', (req, res) => {
