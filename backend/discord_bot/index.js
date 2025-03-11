@@ -26,15 +26,49 @@ for (const file of commandFiles) {
   client.commands.set(command.data.name, command);
 }
 
+// Rate limiting for commands
+const commandRateLimit = new Map();
+
 // Ready event
 client.once(Events.ClientReady, () => {
   // Initialize schedulers for events, attendance reports
   require('./utils/scheduler')(client);
+  console.log('Discord bot is ready!');
 });
 
 // Command handling
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
+
+  // SECURITY FIX: Implement rate limiting
+  const userId = interaction.user.id;
+  const now = Date.now();
+  const rateLimit = {
+    maxCommands: 5,  // 5 commands
+    timeWindow: 60000 // per minute
+  };
+  
+  if (!commandRateLimit.has(userId)) {
+    commandRateLimit.set(userId, { count: 0, resetTime: now + rateLimit.timeWindow });
+  }
+  
+  const userLimit = commandRateLimit.get(userId);
+  
+  // Reset rate if time expired
+  if (now > userLimit.resetTime) {
+    userLimit.count = 0;
+    userLimit.resetTime = now + rateLimit.timeWindow;
+  }
+  
+  // Check rate limit
+  if (userLimit.count >= rateLimit.maxCommands) {
+    return interaction.reply({
+      content: 'You are sending commands too quickly. Please wait a minute.',
+      ephemeral: true
+    });
+  }
+  
+  userLimit.count++;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
@@ -62,8 +96,9 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isButton()) return;
-    
+  if (!interaction.isButton()) return;
+  
+  try {
     const permissionCheck = require('./utils/permissions');
     const hasPermission = await permissionCheck(interaction);
     
@@ -88,24 +123,36 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
         
-        const result = await database.approveLootRequest(guildId, requestId);
-        
-        if (result.success) {
-          // Send notification to the requester
-          try {
-            const user = await interaction.client.users.fetch(result.discordId);
-            await user.send(`✅ Your request for **${result.itemName}** has been approved!`);
-          } catch (error) {
-            console.error('Failed to DM user:', error);
-          }
+        // Fix: Add better error handling
+        try {
+          const result = await database.approveLootRequest(guildId, requestId);
           
-          await interaction.update({ 
-            content: `✅ **Loot Request Approved**\nRequest for **${result.itemName}** from **${result.username}** has been approved by ${interaction.user.username}.`,
-            components: []
-          });
-        } else {
+          if (result.success) {
+            // Send notification to the requester
+            try {
+              if (result.discordId) {
+                const user = await interaction.client.users.fetch(result.discordId);
+                await user.send(`✅ Your request for **${result.itemName}** has been approved!`);
+              }
+            } catch (dmError) {
+              console.error('Failed to DM user:', dmError);
+              // Continue even if DM fails
+            }
+            
+            await interaction.update({ 
+              content: `✅ **Loot Request Approved**\nRequest for **${result.itemName}** from **${result.username}** has been approved by ${interaction.user.username}.`,
+              components: []
+            });
+          } else {
+            await interaction.reply({ 
+              content: result.message || 'Failed to approve request.',
+              ephemeral: true
+            });
+          }
+        } catch (databaseError) {
+          console.error('Database error during loot approval:', databaseError);
           await interaction.reply({ 
-            content: result.message || 'Failed to approve request.',
+            content: 'A database error occurred while approving the request.',
             ephemeral: true
           });
         }
@@ -131,24 +178,36 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
         
-        const result = await database.denyLootRequest(guildId, requestId);
-        
-        if (result.success) {
-          // Send notification to the requester
-          try {
-            const user = await interaction.client.users.fetch(result.discordId);
-            await user.send(`❌ Your request for **${result.itemName}** has been denied.`);
-          } catch (error) {
-            console.error('Failed to DM user:', error);
-          }
+        // Fix: Add better error handling
+        try {
+          const result = await database.denyLootRequest(guildId, requestId);
           
-          await interaction.update({ 
-            content: `❌ **Loot Request Denied**\nRequest for **${result.itemName}** from **${result.username}** has been denied by ${interaction.user.username}.`,
-            components: []
-          });
-        } else {
+          if (result.success) {
+            // Send notification to the requester
+            try {
+              if (result.discordId) {
+                const user = await interaction.client.users.fetch(result.discordId);
+                await user.send(`❌ Your request for **${result.itemName}** has been denied.`);
+              }
+            } catch (dmError) {
+              console.error('Failed to DM user:', dmError);
+              // Continue even if DM fails
+            }
+            
+            await interaction.update({ 
+              content: `❌ **Loot Request Denied**\nRequest for **${result.itemName}** from **${result.username}** has been denied by ${interaction.user.username}.`,
+              components: []
+            });
+          } else {
+            await interaction.reply({ 
+              content: result.message || 'Failed to deny request.',
+              ephemeral: true
+            });
+          }
+        } catch (databaseError) {
+          console.error('Database error during loot denial:', databaseError);
           await interaction.reply({ 
-            content: result.message || 'Failed to deny request.',
+            content: 'A database error occurred while denying the request.',
             ephemeral: true
           });
         }
@@ -160,7 +219,19 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
     }
-  });
+  } catch (error) {
+    console.error('Button interaction error:', error);
+    try {
+      await interaction.reply({ 
+        content: 'An error occurred while processing this action.',
+        ephemeral: true
+      });
+    } catch (replyError) {
+      // Handle case where we can't reply (e.g., already replied)
+      console.error('Could not reply with error message:', replyError);
+    }
+  }
+});
 
 // Login
 client.login(process.env.DISCORD_BOT_TOKEN);
