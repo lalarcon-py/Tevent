@@ -261,6 +261,63 @@ router.post('/link-auto', async (req, res) => {
     res.status(500).json({ error: 'Failed to link Discord guild' });
   }
 });
+
+// backend/routes/discordSetupRoutes.js
+router.post('/complete-link', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { discordServerId } = req.body; // Clearly named
+    
+    if (!discordServerId) {
+      return res.status(400).json({ error: 'Discord server ID is required' });
+    }
+    
+    // Find the user's guild where they're a Guild Master
+    const userGuild = await GuildMember.findOne({
+      where: { 
+        user_id: req.user.id,
+        role: 'Guild Master'
+      },
+      include: [{
+        model: Guild,
+        attributes: ['id', 'name', 'status']
+      }]
+    });
+    
+    if (!userGuild) {
+      return res.status(403).json({ 
+        error: 'You must be a Guild Master of a guild to use Discord integration'
+      });
+    }
+    
+    // Get the actual application guild UUID
+    const appGuildId = userGuild.Guild.id; // This is your UUID like f88e6aab-...
+    
+    console.log('Creating mapping between:', {
+      discordServerId, // Discord numeric ID
+      appGuildId      // Your UUID
+    });
+    
+    // Create the mapping with explicit parameter names
+    await DiscordGuildMapping.upsert({
+      discord_guild_id: discordServerId.toString(),
+      app_guild_id: appGuildId
+    });
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Discord server linked successfully!',
+      guildName: userGuild.Guild.name
+    });
+  } catch (error) {
+    console.error('Error linking Discord guild:', error);
+    res.status(500).json({ error: 'Failed to link Discord guild' });
+  }
+});
+
   
 // Helper function to store the mapping
 async function storeDiscordMapping(discordGuildId, appGuildId) {

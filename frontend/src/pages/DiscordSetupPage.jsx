@@ -21,6 +21,7 @@ const DiscordSetupPage = () => {
   const [success, setSuccess] = useState(false);
   const { isAuthenticated, login } = useAuth();
   const navigate = useNavigate();
+  const discordServerId = searchParams.get('guildId');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -58,17 +59,17 @@ const DiscordSetupPage = () => {
     try {
       setLoading(true);
       
-      // Use the new auto-link endpoint that doesn't require specifying a guild
-      const response = await axiosInstance.post('/api/discord/link-auto', {
-        discordGuildId
+      // Call a dedicated endpoint with clear parameter naming
+      const response = await axiosInstance.post('/api/discord-setup/complete-link', {
+        discordServerId: discordServerId, // Clearly named Discord ID
+        // Don't pass any application guild ID - we'll look it up server-side
       });
       
       setSuccess(true);
-      // Optionally show the guild name that was linked
       setGuild({ name: response.data.guildName || 'Your guild' });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to link server. Please try again.');
-      console.error('Link error:', err);
+      console.error('Link error details:', err);
     } finally {
       setLoading(false);
     }

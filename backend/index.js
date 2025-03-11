@@ -157,7 +157,9 @@ app.use('/api/admin', adminRoutes);
 
 // Add guildActivityMiddleware without the problematic billing routes
 app.use('/api/billing', billingRoutes);
+app.use('/api/discord-setup', require('./routes/discordRoutes'));
 app.use(guildActivityMiddleware);
+
 
 // General use routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
