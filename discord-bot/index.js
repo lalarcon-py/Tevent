@@ -6,18 +6,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
-
-// Find the project root (directory containing backend)
-let projectRoot = __dirname;
-while (!require('fs').existsSync(path.join(projectRoot, 'backend')) &&
-       projectRoot !== path.parse(projectRoot).root) {
-  projectRoot = path.dirname(projectRoot);
-}
-
-// Import models using the absolute path
-const db = require(path.join(projectRoot, 'backend', 'models'));
 const commandRateLimit = new Map();
 const { Sequelize } = require('sequelize');
+const db = require('./backend/models');
 
 console.log('Environment Check:', {
   CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',

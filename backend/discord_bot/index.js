@@ -4,6 +4,8 @@ const { Routes } = require('discord-api-types/v9');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+const { Sequelize } = require('sequelize');
+const db = require('./models');
 
 const client = new Client({
   intents: [
