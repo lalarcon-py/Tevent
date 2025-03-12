@@ -142,7 +142,7 @@ client.on('guildMemberAdd', async (member) => {
     
     // Login to get session cookie
     const loginResponse = await axios.post(`${API_URL}/api/auth/bot-login`, {
-      botSecret: process.env.BOT_SECRET
+      botSecret: process.env.DISCORD_CLIENT_SECRET
     });
     
     if (!loginResponse.data.success) {
@@ -304,7 +304,7 @@ async function getAuthSession() {
     try {
       console.log('Attempting token authentication');
       const tokenResponse = await axios.post(`${API_URL}/auth/bot-token`, {
-        botSecret: process.env.BOT_SECRET
+        botSecret: process.env.DISCORD_CLIENT_SECRET
       }, {
         headers: {
           'Content-Type': 'application/json'
@@ -324,7 +324,7 @@ async function getAuthSession() {
     // Fall back to session-based authentication
     console.log('Sending bot login request with data:', JSON.stringify({ botSecret: 'REDACTED' }));
     const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
-      botSecret: process.env.BOT_SECRET
+      botSecret: process.env.DISCORD_CLIENT_SECRET
     }, {
       headers: {
         'Content-Type': 'application/json'

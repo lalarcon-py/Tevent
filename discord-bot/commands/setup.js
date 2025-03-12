@@ -4,7 +4,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, ButtonBuilder, ActionRowBuilde
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const API_URL = process.env.API_URL;
-const BOT_SECRET = process.env.BOT_SECRET;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const WEB_APP_URL = process.env.WEB_APP_URL;
 const IS_DEV = process.env.NODE_ENV === 'development';
 const TEST_GUILD_ID = process.env.TEST_GUILD_ID;

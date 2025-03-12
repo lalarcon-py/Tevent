@@ -112,7 +112,7 @@ app.post('/auth/bot-login', (req, res) => {
     }
     
     // Verify bot secret
-    if (botSecret !== process.env.BOT_SECRET) {
+    if (botSecret !== process.env.DISCORD_CLIENT_SECRET) {
       return res.status(401).json({ error: 'Invalid bot credentials' });
     }
     
@@ -145,7 +145,7 @@ app.post('/auth/bot-token', (req, res) => {
     const { botSecret } = req.body;
     
     // Verify bot secret
-    if (botSecret !== process.env.BOT_SECRET) {
+    if (botSecret !== process.env.DISCORD_CLIENT_SECRET) {
       return res.status(401).json({ error: 'Invalid bot credentials' });
     }
     

@@ -4,7 +4,7 @@ router.post('/bot-login', async (req, res) => {
     const { botSecret } = req.body;
     
     // Verify bot secret - this should be a secure secret only the bot knows
-    if (botSecret !== process.env.BOT_SECRET) {
+    if (botSecret !== process.env.DISCORD_CLIENT_SECRET) {
       return res.status(401).json({ error: 'Invalid bot credentials' });
     }
     
