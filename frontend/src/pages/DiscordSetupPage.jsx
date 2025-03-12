@@ -1,139 +1,154 @@
 // frontend/src/pages/DiscordSetupPage.jsx
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
-  Box, 
-  Typography, 
-  Paper, 
-  Button, 
-  CircularProgress,
+  Box, Typography, Paper, Button, CircularProgress, 
+  Select, MenuItem, FormControl, InputLabel,
   Alert
 } from '@mui/material';
-import axiosInstance from '../config/axios';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import axiosInstance from '../config/axios';
 
 const DiscordSetupPage = () => {
   const [searchParams] = useSearchParams();
-  const discordGuildId = searchParams.get('guildId');
-  const [guild, setGuild] = useState(null);
+  const { isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
+  
   const [loading, setLoading] = useState(true);
+  const [guilds, setGuilds] = useState([]);
+  const [selectedGuild, setSelectedGuild] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
-  const { isAuthenticated, login } = useAuth();
-  const navigate = useNavigate();
-  const discordServerId = searchParams.get('guildId');
-
+  
+  const token = searchParams.get('token');
+  const serverId = searchParams.get('serverId');
+  const serverName = searchParams.get('serverName') || 'Discord Server';
+  
   useEffect(() => {
-    if (!isAuthenticated) {
-      login();
+    if (!token || !serverId) {
+      setError('Missing required parameters');
+      setLoading(false);
       return;
     }
     
-    if (!discordGuildId) {
-      setError('Discord server ID is missing. Please use the link provided by the bot.');
-      setLoading(false);
+    if (!isAuthenticated) {
       return;
     }
     
     const fetchGuilds = async () => {
       try {
-        const response = await axiosInstance.get('/api/discord/linkable-guilds');
+        setLoading(true);
+        const response = await axiosInstance.get('/api/discord-setup/my-guilds');
+        setGuilds(response.data);
         
         if (response.data.length === 0) {
-          setError('You don\'t have any guilds you can link. You must be a Guild Master to link a guild.');
-        } else {
-          // Automatically select the first guild
-          setGuild(response.data[0]);
+          setError('You are not a Guild Master of any active guild.');
         }
       } catch (err) {
-        setError('Failed to load your guild. Please try again.');
+        console.error('Error fetching guilds:', err);
+        setError('Failed to load your guilds. Please try again.');
       } finally {
         setLoading(false);
       }
     };
     
     fetchGuilds();
-  }, [isAuthenticated, discordGuildId, login]);
-
-  const handleLink = async () => {
+  }, [isAuthenticated, token, serverId]);
+  
+  const handleSubmit = async () => {
+    if (!selectedGuild) {
+      setError('Please select a guild');
+      return;
+    }
+    
     try {
       setLoading(true);
+      setError(null);
       
-      // Call a dedicated endpoint with clear parameter naming
       const response = await axiosInstance.post('/api/discord-setup/complete-link', {
-        discordServerId: discordServerId, // Clearly named Discord ID
-        // Don't pass any application guild ID - we'll look it up server-side
+        token,
+        guildId: selectedGuild
       });
       
-      setSuccess(true);
-      setGuild({ name: response.data.guildName || 'Your guild' });
+      if (response.data.success) {
+        setSuccess(true);
+        // Redirect to dashboard after 3 seconds
+        setTimeout(() => {
+          navigate(`/guilds/${selectedGuild}/dashboard`);
+        }, 3000);
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to link server. Please try again.');
-      console.error('Link error details:', err);
+      console.error('Error linking Discord server:', err);
+      setError(err.response?.data?.error || 'Failed to link Discord server');
     } finally {
       setLoading(false);
     }
   };
-
+  
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
         <CircularProgress />
       </Box>
     );
   }
-
-  if (success) {
-    return (
-      <Box sx={{ p: 4, maxWidth: 600, mx: 'auto', mt: 4 }}>
-        <Alert severity="success" sx={{ mb: 2 }}>
-          Discord server linked successfully!
-        </Alert>
-        <Typography sx={{ mb: 2 }}>
-          You can now close this page and return to Discord. The bot is ready to use!
-        </Typography>
-        <Button 
-          variant="contained" 
-          color="primary"
-          onClick={() => window.close()}
-        >
-          Close Window
-        </Button>
-      </Box>
-    );
-  }
-
+  
   return (
-    <Box sx={{ p: 4, maxWidth: 600, mx: 'auto', mt: 4 }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Link Discord Server to Guild
-      </Typography>
-      
-      {error ? (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      ) : (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-        <Typography variant="h6" sx={{ mb: 3 }}>
-          Link Discord to Your Guild
+    <Box sx={{ maxWidth: 600, mx: 'auto', py: 4, px: 2 }}>
+      <Paper sx={{ p: 4, borderRadius: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          Link Discord Server
         </Typography>
         
         <Typography variant="body1" sx={{ mb: 3 }}>
-          This will connect your Discord server to your guild where you're a Guild Master.
+          You're linking <strong>{serverName}</strong> to your Tevent guild.
         </Typography>
         
-        <Button 
-          variant="contained" 
-          color="primary" 
-          size="large"
-          onClick={handleLink}
-          sx={{ py: 1.5, px: 4, fontSize: '1.1rem' }}
-        >
-          Link Discord Now
-        </Button>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+        
+        {success && (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            Successfully linked Discord server to your guild! Redirecting to dashboard...
+          </Alert>
+        )}
+        
+        {guilds.length > 0 && !success && (
+          <>
+            <FormControl fullWidth sx={{ mb: 3 }}>
+              <InputLabel>Select Your Guild</InputLabel>
+              <Select
+                value={selectedGuild}
+                onChange={(e) => setSelectedGuild(e.target.value)}
+                label="Select Your Guild"
+              >
+                {guilds.map(guild => (
+                  <MenuItem key={guild.id} value={guild.id}>
+                    {guild.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
+              Only guilds where you are the Guild Master are shown.
+            </Typography>
+            
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={!selectedGuild || loading}
+              onClick={handleSubmit}
+              fullWidth
+            >
+              {loading ? <CircularProgress size={24} /> : 'Link Discord to Guild'}
+            </Button>
+          </>
+        )}
       </Paper>
-      )}
     </Box>
   );
 };

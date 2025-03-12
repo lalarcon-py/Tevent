@@ -1,272 +1,263 @@
-//backend/discord_bot/index.js
-const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
-const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v9');
+const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
-const { sequelize } = require('../config/database');
-const db = require('./models');
+const crypto = require('crypto');
 
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const API_URL = process.env.API_URL;
+const BOT_SECRET = process.env.BOT_SECRET;
+const WEB_APP_URL = process.env.WEB_APP_URL;
+const IS_DEV = process.env.NODE_ENV === 'development';
+const TEST_GUILD_ID = process.env.TEST_GUILD_ID;
+
+// Create Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-  ],
+  ]
 });
 
-async function checkDatabaseConnection() {
-  try {
-    console.log('Testing database connection...');
-    await sequelize.authenticate();
-    console.log('Database connection established successfully.');
-    
-    // Test if we can access the discord_guild_mappings table
-    try {
-      const [result] = await sequelize.query(
-        'SELECT COUNT(*) FROM discord_guild_mappings',
-        { type: sequelize.QueryTypes.SELECT }
-      );
-      console.log(`Found ${result.count} Discord-to-Guild mappings in database.`);
-    } catch (err) {
-      console.error('Error accessing discord_guild_mappings table:', err.message);
-      console.warn('The bot may not be able to resolve guild mappings.');
-    }
-    
-  } catch (error) {
-    console.error('Unable to connect to the database:', error);
-    process.exit(1); // Exit with error code
-  }
-}
-
-// Run the check before starting
-checkDatabaseConnection().then(() => {
-  // Start bot only after database connection is verified
-  client.login(process.env.DISCORD_BOT_TOKEN);
-}).catch(error => {
-  console.error('Startup error:', error);
-  process.exit(1);
-});
-
-// Command collection setup
+// Store commands
 client.commands = new Collection();
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+// Store pending auth sessions
+const authSessions = new Map();
+// Store guild mappings
+const guildMappings = new Map();
 
-// Register commands
-for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
-  client.commands.set(command.data.name, command);
+// Authenticate with backend
+async function authenticateWithBackend() {
+  try {
+    const response = await axios.post(`${API_URL}/auth/bot-login`, {
+      botSecret: BOT_SECRET
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'TeventBot/1.0'
+      }
+    });
+    
+    if (response.status === 200) {
+      console.log('Bot authenticated with backend');
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Authentication error:', error.message);
+    return false;
+  }
 }
 
-// Rate limiting for commands
-const commandRateLimit = new Map();
+// Load guild mappings
+async function loadGuildMappings() {
+  try {
+    const response = await axios.get(`${API_URL}/api/discord-bot/guild-mappings`, {
+      headers: {
+        'User-Agent': 'TeventBot/1.0'
+      }
+    });
+    
+    if (response.data && Array.isArray(response.data)) {
+      guildMappings.clear();
+      response.data.forEach(mapping => {
+        guildMappings.set(mapping.discord_guild_id, mapping.app_guild_id);
+      });
+      console.log(`Loaded ${guildMappings.size} guild mappings`);
+    }
+  } catch (error) {
+    console.error('Error loading guild mappings:', error.message);
+  }
+}
 
-// Ready event
-client.once(Events.ClientReady, () => {
-  // Initialize schedulers for events, attendance reports
-  require('./utils/scheduler')(client);
-  console.log('Discord bot is ready!');
+// Load and register commands
+async function registerCommands() {
+  const commands = [];
+  client.commands.clear();
+  
+  const commandsPath = path.join(__dirname, 'commands');
+  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+  
+  for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+    const command = require(filePath);
+    
+    if ('data' in command && 'execute' in command) {
+      commands.push(command.data.toJSON());
+      client.commands.set(command.data.name, command);
+      console.log(`Loaded command: ${command.data.name}`);
+    } else {
+      console.warn(`The command at ${filePath} is missing required properties`);
+    }
+  }
+  
+  try {
+    console.log('Refreshing application commands...');
+    
+    const rest = new REST().setToken(TOKEN);
+    if (IS_DEV && TEST_GUILD_ID) {
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, TEST_GUILD_ID),
+        { body: commands }
+      );
+      console.log(`Registered commands in test guild: ${TEST_GUILD_ID}`);
+    } else {
+      // Register globally in production
+      await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        { body: commands }
+      );
+      console.log('Registered commands globally');
+    }
+  } catch (error) {
+    console.error('Error registering commands:', error);
+  }
+}
+
+// Generate a unique auth token for setup process
+function generateAuthToken(discordGuildId, userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiry = Date.now() + (30 * 60 * 1000); // 30 minutes
+  
+  authSessions.set(token, {
+    discordGuildId,
+    userId,
+    expiry
+  });
+  
+  // Clean up expired tokens every 5 minutes
+  setTimeout(() => {
+    const now = Date.now();
+    for (const [key, session] of authSessions.entries()) {
+      if (session.expiry < now) {
+        authSessions.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000);
+  
+  return token;
+}
+
+// Initialize bot
+client.once('ready', async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  
+  // Authenticate with backend
+  const authenticated = await authenticateWithBackend();
+  if (authenticated) {
+    await loadGuildMappings();
+    await registerCommands();
+  } else {
+    console.error('Failed to authenticate with backend. Bot will not function properly.');
+  }
 });
 
-// Command handling
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  // SECURITY FIX: Implement rate limiting
-  const userId = interaction.user.id;
-  const now = Date.now();
-  const rateLimit = {
-    maxCommands: 5,  // 5 commands
-    timeWindow: 60000 // per minute
-  };
+// Handle interaction events (slash commands)
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
   
-  if (!commandRateLimit.has(userId)) {
-    commandRateLimit.set(userId, { count: 0, resetTime: now + rateLimit.timeWindow });
-  }
-  
-  const userLimit = commandRateLimit.get(userId);
-  
-  // Reset rate if time expired
-  if (now > userLimit.resetTime) {
-    userLimit.count = 0;
-    userLimit.resetTime = now + rateLimit.timeWindow;
-  }
-  
-  // Check rate limit
-  if (userLimit.count >= rateLimit.maxCommands) {
-    return interaction.reply({
-      content: 'You are sending commands too quickly. Please wait a minute.',
-      ephemeral: true
-    });
-  }
-  
-  userLimit.count++;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
-
-  try {
-    // Check permissions
-    const permissionCheck = require('./utils/permissions');
-    const hasPermission = await permissionCheck(interaction);
-    
-    if (!hasPermission) {
-      return interaction.reply({ 
-        content: 'You need to be a Guild Master or Guild Advisor to use this command.',
-        ephemeral: true 
-      });
-    }
-    
-    await command.execute(interaction);
-  } catch (error) {
-    console.error('Command execution error:', error);
-    await interaction.reply({ 
-      content: 'There was an error executing this command.',
-      ephemeral: true 
-    });
-  }
-});
-
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isButton()) return;
   
   try {
-    const permissionCheck = require('./utils/permissions');
-    const hasPermission = await permissionCheck(interaction);
+    // Get app guild ID if needed
+    let appGuildId = null;
     
-    if (!hasPermission) {
-      return interaction.reply({ 
-        content: 'You need to be a Guild Master or Guild Advisor to use this.',
-        ephemeral: true 
-      });
+    if (command.requiresGuild && interaction.guildId) {
+      appGuildId = guildMappings.get(interaction.guildId);
     }
     
-    if (interaction.customId.startsWith('approve_loot_')) {
-      const requestId = interaction.customId.replace('approve_loot_', '');
-      
-      try {
-        const database = require('./utils/database');
-        const guildId = await database.getGuildIdFromDiscord(interaction.guildId);
-        
-        if (!guildId) {
-          return interaction.reply({
-            content: 'This Discord server is not linked to any guild.',
-            ephemeral: true
-          });
-        }
-        
-        // Fix: Add better error handling
-        try {
-          const result = await database.approveLootRequest(guildId, requestId);
-          
-          if (result.success) {
-            // Send notification to the requester
-            try {
-              if (result.discordId) {
-                const user = await interaction.client.users.fetch(result.discordId);
-                await user.send(`✅ Your request for **${result.itemName}** has been approved!`);
-              }
-            } catch (dmError) {
-              console.error('Failed to DM user:', dmError);
-              // Continue even if DM fails
-            }
-            
-            await interaction.update({ 
-              content: `✅ **Loot Request Approved**\nRequest for **${result.itemName}** from **${result.username}** has been approved by ${interaction.user.username}.`,
-              components: []
-            });
-          } else {
-            await interaction.reply({ 
-              content: result.message || 'Failed to approve request.',
-              ephemeral: true
-            });
-          }
-        } catch (databaseError) {
-          console.error('Database error during loot approval:', databaseError);
-          await interaction.reply({ 
-            content: 'A database error occurred while approving the request.',
-            ephemeral: true
-          });
-        }
-      } catch (error) {
-        console.error('Error approving loot request:', error);
-        await interaction.reply({ 
-          content: 'An error occurred while approving the request.',
-          ephemeral: true
-        });
-      }
-    }
-    else if (interaction.customId.startsWith('deny_loot_')) {
-      const requestId = interaction.customId.replace('deny_loot_', '');
-      
-      try {
-        const database = require('./utils/database');
-        const guildId = await database.getGuildIdFromDiscord(interaction.guildId);
-        
-        if (!guildId) {
-          return interaction.reply({
-            content: 'This Discord server is not linked to any guild.',
-            ephemeral: true
-          });
-        }
-        
-        // Fix: Add better error handling
-        try {
-          const result = await database.denyLootRequest(guildId, requestId);
-          
-          if (result.success) {
-            // Send notification to the requester
-            try {
-              if (result.discordId) {
-                const user = await interaction.client.users.fetch(result.discordId);
-                await user.send(`❌ Your request for **${result.itemName}** has been denied.`);
-              }
-            } catch (dmError) {
-              console.error('Failed to DM user:', dmError);
-              // Continue even if DM fails
-            }
-            
-            await interaction.update({ 
-              content: `❌ **Loot Request Denied**\nRequest for **${result.itemName}** from **${result.username}** has been denied by ${interaction.user.username}.`,
-              components: []
-            });
-          } else {
-            await interaction.reply({ 
-              content: result.message || 'Failed to deny request.',
-              ephemeral: true
-            });
-          }
-        } catch (databaseError) {
-          console.error('Database error during loot denial:', databaseError);
-          await interaction.reply({ 
-            content: 'A database error occurred while denying the request.',
-            ephemeral: true
-          });
-        }
-      } catch (error) {
-        console.error('Error denying loot request:', error);
-        await interaction.reply({ 
-          content: 'An error occurred while denying the request.',
-          ephemeral: true
-        });
-      }
-    }
+    // Execute command with context
+    await command.execute(interaction, {
+      client,
+      appGuildId,
+      axios,
+      guildMappings,
+      authSessions,
+      generateAuthToken
+    });
   } catch (error) {
-    console.error('Button interaction error:', error);
-    try {
-      await interaction.reply({ 
-        content: 'An error occurred while processing this action.',
-        ephemeral: true
-      });
-    } catch (replyError) {
-      // Handle case where we can't reply (e.g., already replied)
-      console.error('Could not reply with error message:', replyError);
+    console.error(`Error executing command ${interaction.commandName}:`, error);
+    
+    const errorReply = {
+      content: 'There was an error executing this command!',
+      ephemeral: true
+    };
+    
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(errorReply);
+    } else {
+      await interaction.reply(errorReply);
     }
   }
 });
 
-module.exports = client;
+// Web endpoint for completing auth flow
+const express = require('express');
+const app = express();
+app.use(express.json());
+
+app.post('/auth/complete', async (req, res) => {
+  const { token, guildId, guildName } = req.body;
+  
+  if (!token || !guildId || !guildName) {
+    return res.status(400).json({ error: 'Missing required parameters' });
+  }
+  
+  // Verify token
+  const session = authSessions.get(token);
+  if (!session) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+  
+  // Check if token is expired
+  if (session.expiry < Date.now()) {
+    authSessions.delete(token);
+    return res.status(403).json({ error: 'Token expired' });
+  }
+  
+  try {
+    // Link the Discord guild to the app guild
+    const response = await axios.post(`${API_URL}/api/discord-bot/link-guild`, {
+      discordGuildId: session.discordGuildId,
+      appGuildId: guildId
+    }, {
+      headers: {
+        'User-Agent': 'TeventBot/1.0'
+      }
+    });
+    
+    // Update local cache
+    guildMappings.set(session.discordGuildId, guildId);
+    
+    // Notify user in Discord
+    const guild = client.guilds.cache.get(session.discordGuildId);
+    if (guild) {
+      try {
+        const member = await guild.members.fetch(session.userId);
+        member.send(`Your server "${guild.name}" has been successfully linked to guild "${guildName}" in Tevent!`);
+      } catch (discordError) {
+        console.error('Error sending Discord notification:', discordError);
+      }
+    }
+    
+    // Remove the token
+    authSessions.delete(token);
+    
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error completing auth:', error);
+    return res.status(500).json({ error: 'Failed to complete authentication' });
+  }
+});
+
+// Start Express server (for handling auth callbacks)
+const PORT = process.env.PORT || 3300;
+app.listen(PORT, () => {
+  console.log(`Web server listening on port ${PORT}`);
+});
+
+// Start the Discord bot
+client.login(TOKEN);
