@@ -306,13 +306,15 @@ async function getAuthSession() {
       const tokenResponse = await axios.post(`${API_URL}/auth/bot-token`, {
         botSecret: process.env.BOT_SECRET
       }, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
         httpAgent: new require('http').Agent({ family: 4 }),
         httpsAgent: new require('https').Agent({ family: 4 })
       });
       
       if (tokenResponse.data && tokenResponse.data.token) {
         console.log('Token authentication successful');
-        // Return the token in a format that can be used in headers
         return ['Authorization=Bearer ' + tokenResponse.data.token];
       }
     } catch (tokenError) {
@@ -320,13 +322,18 @@ async function getAuthSession() {
     }
     
     // Fall back to session-based authentication
+    console.log('Sending bot login request with data:', JSON.stringify({ botSecret: 'REDACTED' }));
     const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
       botSecret: process.env.BOT_SECRET
     }, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
       httpAgent: new require('http').Agent({ family: 4 }),
       httpsAgent: new require('https').Agent({ family: 4 })
     });
     
+    console.log('Login response received:', loginResponse.status);
     return loginResponse.headers['set-cookie'];
   } catch (error) {
     console.error('Authentication error:', error.message);

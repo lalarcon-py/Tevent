@@ -96,17 +96,25 @@ app.use(session({
 
 app.post('/auth/bot-login', (req, res) => {
   console.log('Bot login attempt received');
+  console.log('Request body:', req.body);
+  console.log('Content-Type:', req.headers['content-type']);
+  
   try {
-    const { botSecret } = req.body;
-    console.log('Received bot secret length:', botSecret ? botSecret.length : 'null');
+    // Use a more defensive approach
+    const botSecret = req.body?.botSecret;
+    console.log('Bot secret received:', botSecret ? '✓' : '✗');
+    
+    if (!botSecret) {
+      return res.status(400).json({ 
+        error: 'Missing bot secret',
+        details: 'botSecret is required in the request body'
+      });
+    }
     
     // Verify bot secret
     if (botSecret !== process.env.BOT_SECRET) {
-      console.log('Bot secret mismatch');
       return res.status(401).json({ error: 'Invalid bot credentials' });
     }
-    
-    console.log('Bot secret validated, attempting to create session');
     
     // Create a bot user session
     req.login({
@@ -119,12 +127,14 @@ app.post('/auth/bot-login', (req, res) => {
         return res.status(500).json({ error: 'Session creation failed', details: err.message });
       }
       
-      console.log('Bot session created successfully');
       res.status(200).json({ success: true });
     });
   } catch (error) {
     console.error('Bot login error:', error);
-    res.status(500).json({ error: 'Authentication failed', details: error.message });
+    res.status(500).json({ 
+      error: 'Authentication failed', 
+      details: error.message
+    });
   }
 });
 
@@ -168,6 +178,7 @@ app.use(passport.session());
 
 // Parse JSON bodies
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Create guildMembershipMiddleware if it doesn't exist yet
 if (!validateGuildMembership) {
@@ -214,6 +225,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/discord-bot', require('./routes/discordBotRoutes'));
+app.use('/auth', express.json());
 
 // Add guildActivityMiddleware without the problematic billing routes
 app.use('/api/billing', billingRoutes);
