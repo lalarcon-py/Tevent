@@ -300,8 +300,12 @@ const registerCommands = async () => {
 // Helper function to authenticate and get a session
 async function getAuthSession() {
   try {
-    const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
+    // Force IPv4 and ensure correct endpoint path
+    const loginResponse = await axios.post(`${API_URL}/api/auth/bot-login`, {
       botSecret: process.env.BOT_SECRET
+    }, {
+      httpAgent: new require('http').Agent({ family: 4 }),
+      httpsAgent: new require('https').Agent({ family: 4 })
     });
     return loginResponse.headers['set-cookie'];
   } catch (error) {
