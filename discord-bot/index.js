@@ -300,15 +300,39 @@ const registerCommands = async () => {
 // Helper function to authenticate and get a session
 async function getAuthSession() {
   try {
+    // Try token-based authentication first
+    try {
+      console.log('Attempting token authentication');
+      const tokenResponse = await axios.post(`${API_URL}/auth/bot-token`, {
+        botSecret: process.env.BOT_SECRET
+      }, {
+        httpAgent: new require('http').Agent({ family: 4 }),
+        httpsAgent: new require('https').Agent({ family: 4 })
+      });
+      
+      if (tokenResponse.data && tokenResponse.data.token) {
+        console.log('Token authentication successful');
+        // Return the token in a format that can be used in headers
+        return ['Authorization=Bearer ' + tokenResponse.data.token];
+      }
+    } catch (tokenError) {
+      console.log('Token auth failed, trying session auth:', tokenError.message);
+    }
+    
+    // Fall back to session-based authentication
     const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
       botSecret: process.env.BOT_SECRET
     }, {
       httpAgent: new require('http').Agent({ family: 4 }),
       httpsAgent: new require('https').Agent({ family: 4 })
     });
+    
     return loginResponse.headers['set-cookie'];
   } catch (error) {
     console.error('Authentication error:', error.message);
+    if (error.response) {
+      console.error('Server response:', error.response.data);
+    }
     return null;
   }
 }
@@ -454,13 +478,19 @@ async function handleStorageCommand(interaction, appGuildId) {
     const searchQuery = interaction.options.getString('item');
     
     // Authenticate
-    const cookies = await getAuthSession();
-    if (!cookies) {
+    const authHeader = await getAuthSession();
+    if (!authHeader) {
       return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
     }
     
+    // Determine if we got a token or cookie
+    const isToken = authHeader[0]?.startsWith('Authorization');
+    const headers = isToken ? 
+      { Authorization: authHeader[0].split('=')[1] } : 
+      { Cookie: authHeader };
+    
     const response = await axios.get(`${API_URL}/api/guild-storage/items?guildId=${appGuildId}`, {
-      headers: { Cookie: cookies }
+      headers: headers
     });
     
     let items = response.data;
@@ -517,13 +547,19 @@ async function handleEventsCommand(interaction, appGuildId) {
     const eventId = interaction.options.getString('id');
     
     // Authenticate
-    const cookies = await getAuthSession();
-    if (!cookies) {
+    const authHeader = await getAuthSession();
+    if (!authHeader) {
       return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
     }
     
+    // Determine if we got a token or cookie
+    const isToken = authHeader[0]?.startsWith('Authorization');
+    const headers = isToken ? 
+      { Authorization: authHeader[0].split('=')[1] } : 
+      { Cookie: authHeader };
+    
     const response = await axios.get(`${API_URL}/api/events?guildId=${appGuildId}`, {
-      headers: { Cookie: cookies }
+      headers: headers
     });
     
     let events = response.data;
@@ -598,14 +634,20 @@ async function handleEventSignupCommand(interaction, appGuildId) {
     const role = interaction.options.getString('role');
     
     // Authenticate
-    const cookies = await getAuthSession();
-    if (!cookies) {
+    const authHeader = await getAuthSession();
+    if (!authHeader) {
       return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
     }
     
+    // Determine if we got a token or cookie
+    const isToken = authHeader[0]?.startsWith('Authorization');
+    const headers = isToken ? 
+      { Authorization: authHeader[0].split('=')[1] } : 
+      { Cookie: authHeader };
+    
     // First, check if the event exists
     const eventResponse = await axios.get(`${API_URL}/api/events?guildId=${appGuildId}`, {
-      headers: { Cookie: cookies }
+      headers: headers
     });
     
     const event = eventResponse.data.find(e => e.id === eventId);
@@ -642,14 +684,20 @@ async function handleTeamsCommand(interaction, appGuildId) {
     const eventId = interaction.options.getString('event_id');
     
     // Authenticate
-    const cookies = await getAuthSession();
-    if (!cookies) {
+    const authHeader = await getAuthSession();
+    if (!authHeader) {
       return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
     }
+
+    // Determine if we got a token or cookie
+    const isToken = authHeader[0]?.startsWith('Authorization');
+    const headers = isToken ? 
+      { Authorization: authHeader[0].split('=')[1] } : 
+      { Cookie: authHeader };
     
     // Get teams for this event
     const teamsResponse = await axios.get(`${API_URL}/api/teams/event/${eventId}?guildId=${appGuildId}`, {
-      headers: { Cookie: cookies }
+      headers: headers
     });
     
     const teams = teamsResponse.data;
@@ -710,14 +758,20 @@ async function handleMembersCommand(interaction, appGuildId) {
   
   try {
     // Authenticate
-    const cookies = await getAuthSession();
-    if (!cookies) {
+    const authHeader = await getAuthSession();
+    if (!authHeader) {
       return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
     }
+
+    // Determine if we got a token or cookie
+    const isToken = authHeader[0]?.startsWith('Authorization');
+    const headers = isToken ? 
+      { Authorization: authHeader[0].split('=')[1] } : 
+      { Cookie: authHeader };
     
     // Get guild members
     const membersResponse = await axios.get(`${API_URL}/api/guilds/${appGuildId}/members`, {
-      headers: { Cookie: cookies }
+      headers: headers
     });
     
     const members = membersResponse.data;

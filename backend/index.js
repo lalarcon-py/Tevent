@@ -95,13 +95,18 @@ app.use(session({
 }));
 
 app.post('/auth/bot-login', (req, res) => {
+  console.log('Bot login attempt received');
   try {
     const { botSecret } = req.body;
+    console.log('Received bot secret length:', botSecret ? botSecret.length : 'null');
     
     // Verify bot secret
     if (botSecret !== process.env.BOT_SECRET) {
+      console.log('Bot secret mismatch');
       return res.status(401).json({ error: 'Invalid bot credentials' });
     }
+    
+    console.log('Bot secret validated, attempting to create session');
     
     // Create a bot user session
     req.login({
@@ -110,13 +115,40 @@ app.post('/auth/bot-login', (req, res) => {
       role: 'Bot'
     }, (err) => {
       if (err) {
-        return res.status(500).json({ error: 'Session creation failed' });
+        console.error('Session creation failed:', err);
+        return res.status(500).json({ error: 'Session creation failed', details: err.message });
       }
       
+      console.log('Bot session created successfully');
       res.status(200).json({ success: true });
     });
   } catch (error) {
     console.error('Bot login error:', error);
+    res.status(500).json({ error: 'Authentication failed', details: error.message });
+  }
+});
+
+const jwt = require('jsonwebtoken');
+
+app.post('/auth/bot-token', (req, res) => {
+  try {
+    const { botSecret } = req.body;
+    
+    // Verify bot secret
+    if (botSecret !== process.env.BOT_SECRET) {
+      return res.status(401).json({ error: 'Invalid bot credentials' });
+    }
+    
+    // Generate a token instead of using sessions
+    const token = jwt.sign(
+      { id: 'bot-user', role: 'Bot' },
+      process.env.JWT_SECRET || 'bot-fallback-secret',
+      { expiresIn: '1h' }
+    );
+    
+    res.status(200).json({ success: true, token });
+  } catch (error) {
+    console.error('Bot token error:', error);
     res.status(500).json({ error: 'Authentication failed' });
   }
 });
