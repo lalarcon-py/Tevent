@@ -300,8 +300,7 @@ const registerCommands = async () => {
 // Helper function to authenticate and get a session
 async function getAuthSession() {
   try {
-    // Force IPv4 and ensure correct endpoint path
-    const loginResponse = await axios.post(`${API_URL}/api/auth/bot-login`, {
+    const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
       botSecret: process.env.BOT_SECRET
     }, {
       httpAgent: new require('http').Agent({ family: 4 }),
