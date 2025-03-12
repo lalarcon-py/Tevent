@@ -35,7 +35,7 @@ const client = new Client({
   ] 
 });
 
-const API_URL = process.env.API_URL || 'https://tevent.app';
+const API_URL = process.env.BACKEND_URL || 'https://tevent.app';
 
 // Collection to store commands
 client.commands = new Collection();
