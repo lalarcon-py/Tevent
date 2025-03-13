@@ -6,6 +6,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const { sequelize } = require('../config/database');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 
 
@@ -375,75 +377,318 @@ async function getGuildMapping(discordGuildId) {
 }
 
 // Slash command handler
+// Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isCommand()) return;
-
   try {
-    const { commandName, options } = interaction;
-    
-    // Handle link-guild command (special case)
-    if (commandName === 'link-guild') {
-      await handleLinkGuildCommand(interaction);
-      return;
-    }
-    
-    // For all other commands, check if this Discord server is linked
-    const discordGuildId = interaction.guild.id;
-    const appGuildId = await getGuildMapping(discordGuildId);
-    
-    if (!appGuildId) {
-      return await interaction.reply({ 
-        content: 'This Discord server is not linked to an application guild. An admin needs to use the setup process.',
-        ephemeral: true 
-      });
-    }
-    
-    // Handle other commands
-    if (commandName === 'storage') {
-      await handleStorageCommand(interaction, appGuildId);
-    }
-    else if (commandName === 'events') {
-      await handleEventsCommand(interaction, appGuildId);
-    }
-    else if (commandName === 'event-signup') {
-      await handleEventSignupCommand(interaction, appGuildId);
-    }
-    else if (commandName === 'teams') {
-      await handleTeamsCommand(interaction, appGuildId);
-    }
-    else if (commandName === 'members') {
-      await handleMembersCommand(interaction, appGuildId);
-    }
-    else if (commandName === 'check-connection') {
-      await interaction.deferReply();
+    // Handle different interaction types
+    if (interaction.isCommand()) {
+      const { commandName, options } = interaction;
       
-      try {
-        const discordGuildId = interaction.guild.id;
-        console.log(`Running connection check for Discord guild: ${discordGuildId}`);
+      // Handle link-guild command (special case)
+      if (commandName === 'link-guild') {
+        await handleLinkGuildCommand(interaction);
+        return;
+      }
+      
+      // Handle setup command (special case)
+      if (commandName === 'setup') {
+        await handleSetupCommand(interaction);
+        return;
+      }
+      
+      // Handle help command (no guild required)
+      if (commandName === 'help') {
+        const embed = new EmbedBuilder()
+          .setTitle('Tevent Guild Management Bot')
+          .setColor('#90caf9')
+          .setDescription('Manage your Tevent guild directly from Discord')
+          .addFields([
+            { name: '/setup', value: 'Link this Discord server to your Tevent guild (Admin only)' },
+            { name: '/storage', value: 'Display items in the guild storage' },
+            { name: '/events', value: 'View upcoming events' },
+            { name: '/event-signup', value: 'Sign up for an event' },
+            { name: '/teams', value: 'View teams for an event' },
+            { name: '/members', value: 'View guild members' },
+            { name: '/help', value: 'Show this help message' }
+          ])
+          .setFooter({ text: 'Tevent.app - Guild Management Made Easy' });
         
-        // First try direct database check
-        const appGuildId = await getGuildMapping(discordGuildId);
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+      
+      // For all other commands, check if this Discord server is linked
+      const discordGuildId = interaction.guild?.id;
+      
+      if (!discordGuildId) {
+        return await interaction.reply({ 
+          content: 'This command must be used in a Discord server.',
+          ephemeral: true 
+        });
+      }
+      
+      // Get linked guild ID from database
+      const appGuildId = await getGuildMapping(discordGuildId);
+      
+      if (!appGuildId) {
+        return await interaction.reply({ 
+          content: 'This Discord server is not linked to an application guild. An admin needs to use the `/setup` command first.',
+          ephemeral: true 
+        });
+      }
+      
+      // Handle commands with direct DB access
+      if (commandName === 'storage') {
+        await handleStorageCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'events') {
+        await handleEventsCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'event-signup') {
+        await handleEventSignupCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'teams') {
+        await handleTeamsCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'members') {
+        await handleMembersCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'check-connection') {
+        await interaction.deferReply();
         
-        if (appGuildId) {
-          await interaction.editReply({
-            content: `✅ **Connection Success!**\nThis Discord server is connected to guild ID: \`${appGuildId}\``
-          });
-        } else {
-          await interaction.editReply({
-            content: `❌ **Not Connected**\nThis Discord server (ID: ${discordGuildId}) is not connected to any guild yet.\n\nAn admin needs to complete the connection setup.`
+        try {
+          console.log(`Running connection check for Discord guild: ${discordGuildId}`);
+          
+          // First try direct database check
+          if (appGuildId) {
+            // Check if guild exists
+            const [guild] = await sequelize.query(`
+              SELECT id, name, created_at FROM guilds WHERE id = $1
+            `, {
+              bind: [appGuildId],
+              type: sequelize.QueryTypes.SELECT
+            });
+            
+            if (guild) {
+              const createdDate = new Date(guild.created_at).toLocaleDateString();
+              
+              // Count members
+              const [memberCount] = await sequelize.query(`
+                SELECT COUNT(*) as count FROM guild_members WHERE guild_id = $1
+              `, {
+                bind: [appGuildId],
+                type: sequelize.QueryTypes.SELECT
+              });
+              
+              await interaction.editReply({
+                content: `✅ **Connection Success!**\n\nDiscord Server: \`${interaction.guild.name}\`\nLinked Guild: \`${guild.name}\`\nGuild ID: \`${appGuildId}\`\nCreated: ${createdDate}\nMembers: ${memberCount.count}`
+              });
+            } else {
+              await interaction.editReply({
+                content: `⚠️ **Partial Connection**\n\nThis Discord server is mapped to guild ID \`${appGuildId}\`, but that guild no longer exists in the database.`
+              });
+            }
+          } else {
+            await interaction.editReply({
+              content: `❌ **Not Connected**\nThis Discord server (ID: ${discordGuildId}) is not connected to any guild yet.\n\nAn admin needs to complete the connection setup using \`/setup\`.`
+            });
+          }
+        } catch (error) {
+          console.error('Check connection error:', error);
+          await interaction.editReply(`❌ **Error Checking Connection**\n${error.message}`);
+        }
+      }
+    }
+    // Handle button interactions
+    else if (interaction.isButton()) {
+      const customId = interaction.customId;
+      
+      // Handle setup wizard button
+      if (customId === 'setup_wizard') {
+        // Respond with the setup link
+        const setupUrl = `${process.env.FRONTEND_URL}/discord/setup?guildId=${interaction.guild.id}`;
+        
+        await interaction.reply({
+          content: `Click the link below to connect this Discord server to your application guild:`,
+          components: [
+            new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setURL(setupUrl)
+                  .setLabel('Open Setup Page')
+                  .setStyle(ButtonStyle.Link)
+              )
+          ],
+          ephemeral: true
+        });
+        return;
+      }
+      
+      // Handle loot approval/denial buttons
+      if (customId.startsWith('approve_loot_') || customId.startsWith('deny_loot_')) {
+        const requestId = customId.replace(/^(approve_loot_|deny_loot_)/, '');
+        const isApprove = customId.startsWith('approve_loot_');
+        
+        // Check guild mapping first
+        const discordGuildId = interaction.guild?.id;
+        if (!discordGuildId) {
+          return await interaction.reply({
+            content: 'This button must be used in a Discord server.',
+            ephemeral: true
           });
         }
-      } catch (error) {
-        console.error('Check connection error:', error);
-        await interaction.editReply(`❌ **Error Checking Connection**\n${error.message}`);
+        
+        const appGuildId = await getGuildMapping(discordGuildId);
+        if (!appGuildId) {
+          return await interaction.reply({
+            content: 'This Discord server is not linked to an application guild.',
+            ephemeral: true
+          });
+        }
+        
+        await interaction.deferReply();
+        
+        try {
+          // Get request details first
+          const [request] = await sequelize.query(`
+            SELECT lr.*, 
+                  gsi.quantity, 
+                  i.name as item_name,
+                  u.username, u.discord_id
+            FROM loot_requests lr
+            JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
+            JOIN items i ON gsi.item_id = i.id
+            JOIN users u ON lr.user_id = u.id
+            WHERE lr.id = $1 AND lr.guild_id = $2
+          `, {
+            bind: [requestId, appGuildId],
+            type: sequelize.QueryTypes.SELECT
+          });
+          
+          if (!request) {
+            return await interaction.editReply('Request not found or already processed.');
+          }
+          
+          if (isApprove) {
+            // Check if item is still available
+            if (request.quantity < 1) {
+              return await interaction.editReply('Item is no longer available in storage.');
+            }
+            
+            // Update request and decrement quantity in a transaction
+            await sequelize.transaction(async (t) => {
+              // Update request status
+              await sequelize.query(`
+                UPDATE loot_requests 
+                SET status = 'Approved', updated_at = NOW()
+                WHERE id = $1
+              `, {
+                bind: [requestId],
+                type: sequelize.QueryTypes.UPDATE,
+                transaction: t
+              });
+              
+              // Decrement quantity
+              await sequelize.query(`
+                UPDATE guild_storage_items
+                SET quantity = quantity - 1, updated_at = NOW()
+                WHERE id = $1 AND quantity > 0
+              `, {
+                bind: [request.storage_item_id],
+                type: sequelize.QueryTypes.UPDATE,
+                transaction: t
+              });
+            });
+            
+            // Send notification to user if possible
+            if (request.discord_id) {
+              try {
+                const user = await interaction.client.users.fetch(request.discord_id);
+                await user.send(`✅ Your request for **${request.item_name}** has been approved!`);
+              } catch (dmError) {
+                console.error(`Failed to DM user: ${dmError.message}`);
+              }
+            }
+            
+            await interaction.editReply({
+              content: `✅ Loot request approved successfully. **${request.item_name}** will be given to **${request.username}**.`
+            });
+          } else {
+            // Deny request
+            await sequelize.query(`
+              UPDATE loot_requests 
+              SET status = 'Denied', updated_at = NOW()
+              WHERE id = $1
+            `, {
+              bind: [requestId],
+              type: sequelize.QueryTypes.UPDATE
+            });
+            
+            // Send notification to user if possible
+            if (request.discord_id) {
+              try {
+                const user = await interaction.client.users.fetch(request.discord_id);
+                await user.send(`❌ Your request for **${request.item_name}** has been denied.`);
+              } catch (dmError) {
+                console.error(`Failed to DM user: ${dmError.message}`);
+              }
+            }
+            
+            await interaction.editReply({
+              content: `❌ Loot request from **${request.username}** for **${request.item_name}** has been denied.`
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing loot request:`, error);
+          await interaction.editReply(`Failed to process loot request: ${error.message}`);
+        }
+      }
+      
+      // Handle event signup buttons
+      if (customId.startsWith('signup_')) {
+        const [_, eventId, role] = customId.split('_');
+        
+        // Check guild mapping first
+        const discordGuildId = interaction.guild?.id;
+        if (!discordGuildId) {
+          return await interaction.reply({
+            content: 'This button must be used in a Discord server.',
+            ephemeral: true
+          });
+        }
+        
+        const appGuildId = await getGuildMapping(discordGuildId);
+        if (!appGuildId) {
+          return await interaction.reply({
+            content: 'This Discord server is not linked to an application guild.',
+            ephemeral: true
+          });
+        }
+        
+        // Create a fake interaction options object to reuse the signup handler
+        interaction.options = {
+          getString: (name) => {
+            if (name === 'event_id') return eventId;
+            if (name === 'role') return role;
+            return null;
+          }
+        };
+        
+        await handleEventSignupCommand(interaction, appGuildId);
       }
     }
   } catch (error) {
-    console.error('Error handling command:', error);
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: 'There was an error executing this command.', ephemeral: true });
-    } else {
-      await interaction.reply({ content: 'There was an error executing this command.', ephemeral: true });
+    console.error('Error handling interaction:', error);
+    try {
+      const errorMessage = 'There was an error processing your request.';
+      
+      if (interaction.deferred) {
+        await interaction.editReply({ content: errorMessage, ephemeral: true });
+      } else if (!interaction.replied) {
+        await interaction.reply({ content: errorMessage, ephemeral: true });
+      }
+    } catch (replyError) {
+      console.error('Error sending error response:', replyError);
     }
   }
 });
@@ -482,37 +727,37 @@ async function handleStorageCommand(interaction, appGuildId) {
   await interaction.deferReply();
   
   try {
-    const searchQuery = interaction.options.getString('item');
+    // Use direct database query instead of API auth
+    console.log(`Fetching storage items directly from database for guild: ${appGuildId}`);
     
-    // Authenticate
-    const authHeader = await getAuthSession();
-    if (!authHeader) {
-      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
-    }
-    
-    // Determine if we got a token or cookie
-    const isToken = authHeader[0]?.startsWith('Authorization');
-    const headers = isToken ? 
-      { Authorization: authHeader[0].split('=')[1] } : 
-      { Cookie: authHeader };
-    
-    const response = await axios.get(`${API_URL}/api/guild-storage/items?guildId=${appGuildId}`, {
-      headers: headers
+    const items = await sequelize.query(`
+      SELECT gsi.*, i.name, i.type, i.icon 
+      FROM guild_storage_items gsi
+      LEFT JOIN items i ON gsi.item_id = i.id
+      WHERE gsi.guild_id = $1
+    `, { 
+      bind: [appGuildId],
+      type: sequelize.QueryTypes.SELECT
     });
     
-    let items = response.data;
+    // Format the items similar to the API response
+    const formattedItems = items.map(item => ({
+      id: item.id,
+      item_id: item.item_id,
+      quantity: item.quantity || 0,
+      trait: item.trait,
+      dkp_cost: item.dkp_cost || 0,
+      Item: {
+        name: item.name,
+        type: item.type || 'Unknown',
+        icon: item.icon
+      }
+    }));
     
-    // Filter by search query if provided
-    if (searchQuery) {
-      items = items.filter(item => 
-        item.Item?.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
-    // Create embeds for items (max 10 items per page)
+    // Create embeds for items (max 10 per page)
     const embeds = [];
-    for (let i = 0; i < Math.min(items.length, 10); i++) {
-      const item = items[i];
+    for (let i = 0; i < Math.min(formattedItems.length, 10); i++) {
+      const item = formattedItems[i];
       const embed = new EmbedBuilder()
         .setTitle(item.Item?.name || 'Unknown Item')
         .setDescription(`Quantity: ${item.quantity}`)
@@ -537,7 +782,7 @@ async function handleStorageCommand(interaction, appGuildId) {
       await interaction.editReply('No items found in storage.');
     } else {
       await interaction.editReply({ 
-        content: `Found ${items.length} items in guild storage:`,
+        content: `Found ${formattedItems.length} items in guild storage:`,
         embeds: embeds
       });
     }
@@ -553,48 +798,72 @@ async function handleEventsCommand(interaction, appGuildId) {
   try {
     const eventId = interaction.options.getString('id');
     
-    // Authenticate
-    const authHeader = await getAuthSession();
-    if (!authHeader) {
-      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
-    }
-    
-    // Determine if we got a token or cookie
-    const isToken = authHeader[0]?.startsWith('Authorization');
-    const headers = isToken ? 
-      { Authorization: authHeader[0].split('=')[1] } : 
-      { Cookie: authHeader };
-    
-    const response = await axios.get(`${API_URL}/api/events?guildId=${appGuildId}`, {
-      headers: headers
-    });
-    
-    let events = response.data;
-    
     // If specific event ID is requested
     if (eventId) {
-      const event = events.find(e => e.id === eventId);
+      const [event] = await sequelize.query(`
+        SELECT e.*, 
+               (SELECT COUNT(*) FROM event_participants ep 
+                WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+               (SELECT COUNT(*) FROM event_participants ep 
+                WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+               (SELECT COUNT(*) FROM event_participants ep 
+                WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+        FROM events e
+        WHERE e.id = $1 AND e.guild_id = $2
+      `, {
+        bind: [eventId, appGuildId],
+        type: sequelize.QueryTypes.SELECT
+      });
+      
       if (!event) {
         return await interaction.editReply('Event not found.');
       }
       
-      const embed = createEventEmbed(event);
+      const embed = createEventEmbed({
+        ...event,
+        participants: {
+          tank_count: event.tank_count,
+          healer_count: event.healer_count,
+          dps_count: event.dps_count
+        }
+      });
+      
       await interaction.editReply({ embeds: [embed] });
       return;
     }
     
-    // Filter to upcoming events only
+    // Get all upcoming events
     const now = new Date();
-    events = events.filter(event => new Date(event.event_time) > now)
-                   .sort((a, b) => new Date(a.event_time) - new Date(b.event_time))
-                   .slice(0, 5); // Show next 5 events
+    const events = await sequelize.query(`
+      SELECT e.*, 
+             (SELECT COUNT(*) FROM event_participants ep 
+              WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+             (SELECT COUNT(*) FROM event_participants ep 
+              WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+             (SELECT COUNT(*) FROM event_participants ep 
+              WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+      FROM events e
+      WHERE e.guild_id = $1 AND e.event_time > $2
+      ORDER BY e.event_time ASC
+      LIMIT 5
+    `, {
+      bind: [appGuildId, now],
+      type: sequelize.QueryTypes.SELECT
+    });
     
     if (events.length === 0) {
       await interaction.editReply('No upcoming events found.');
       return;
     }
     
-    const embeds = events.map(event => createEventEmbed(event));
+    const embeds = events.map(event => createEventEmbed({
+      ...event,
+      participants: {
+        tank_count: event.tank_count,
+        healer_count: event.healer_count,
+        dps_count: event.dps_count
+      }
+    }));
     
     await interaction.editReply({ 
       content: 'Upcoming events:',
@@ -639,48 +908,115 @@ async function handleEventSignupCommand(interaction, appGuildId) {
   try {
     const eventId = interaction.options.getString('event_id');
     const role = interaction.options.getString('role');
+    const discordUserId = interaction.user.id;
     
-    // Authenticate
-    const authHeader = await getAuthSession();
-    if (!authHeader) {
-      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
-    }
-    
-    // Determine if we got a token or cookie
-    const isToken = authHeader[0]?.startsWith('Authorization');
-    const headers = isToken ? 
-      { Authorization: authHeader[0].split('=')[1] } : 
-      { Cookie: authHeader };
-    
-    // First, check if the event exists
-    const eventResponse = await axios.get(`${API_URL}/api/events?guildId=${appGuildId}`, {
-      headers: headers
+    // Check if event exists
+    const [event] = await sequelize.query(`
+      SELECT * FROM events WHERE id = $1 AND guild_id = $2
+    `, {
+      bind: [eventId, appGuildId],
+      type: sequelize.QueryTypes.SELECT
     });
     
-    const event = eventResponse.data.find(e => e.id === eventId);
     if (!event) {
       return await interaction.editReply(`Event with ID ${eventId} not found.`);
     }
     
-    // Sign up for the event
-    await axios.post(`${API_URL}/api/events/${eventId}/signup`, {
-      role,
-      guildId: appGuildId,
-      userId: interaction.user.id
-    }, {
-      headers: { Cookie: cookies }
+    // Get user ID from discord ID
+    const [user] = await sequelize.query(`
+      SELECT id, username FROM users WHERE discord_id = $1
+    `, {
+      bind: [discordUserId],
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    if (!user) {
+      return await interaction.editReply('Your user account was not found. Please log in to the website first.');
+    }
+    
+    // Check if already signed up
+    const [existingSignup] = await sequelize.query(`
+      SELECT id, role FROM event_participants 
+      WHERE event_id = $1 AND user_id = $2 AND guild_id = $3
+    `, {
+      bind: [eventId, user.id, appGuildId],
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    if (existingSignup) {
+      // Update existing signup
+      await sequelize.query(`
+        UPDATE event_participants SET role = $1
+        WHERE id = $2
+      `, {
+        bind: [role, existingSignup.id],
+        type: sequelize.QueryTypes.UPDATE
+      });
+      
+      return await interaction.editReply(`You've updated your role for "${event.title}" to ${role}.`);
+    }
+    
+    // Check role capacity
+    const [roleCounts] = await sequelize.query(`
+      SELECT 
+        SUM(CASE WHEN role = 'TANK' THEN 1 ELSE 0 END) as tank_count,
+        SUM(CASE WHEN role = 'HEALER' THEN 1 ELSE 0 END) as healer_count,
+        SUM(CASE WHEN role = 'DPS' THEN 1 ELSE 0 END) as dps_count
+      FROM event_participants
+      WHERE event_id = $1
+    `, {
+      bind: [eventId],
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    // Verify there's room for this role
+    const roleLimits = {
+      'TANK': event.tanks || 0,
+      'HEALER': event.healers || 0,
+      'DPS': event.dps || 0
+    };
+    
+    const currentCounts = {
+      'TANK': parseInt(roleCounts?.tank_count || 0),
+      'HEALER': parseInt(roleCounts?.healer_count || 0),
+      'DPS': parseInt(roleCounts?.dps_count || 0)
+    };
+    
+    if (currentCounts[role] >= roleLimits[role]) {
+      return await interaction.editReply(`Sorry, the ${role} spots are full for this event.`);
+    }
+    
+    // Create new signup
+    await sequelize.query(`
+      INSERT INTO event_participants 
+        (id, guild_id, event_id, user_id, role, created_at, updated_at)
+      VALUES
+        (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())
+    `, {
+      bind: [appGuildId, eventId, user.id, role],
+      type: sequelize.QueryTypes.INSERT
     });
     
     await interaction.editReply(`You've been signed up for "${event.title}" as ${role}.`);
+    
+    // Post a public confirmation
+    try {
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('New Event Signup')
+        .setDescription(`${interaction.user.username} has signed up for "${event.title}" as ${role}`)
+        .setColor('#00FF00')
+        .setTimestamp();
+      
+      await interaction.followUp({
+        embeds: [confirmEmbed],
+        ephemeral: false
+      });
+    } catch (followupError) {
+      console.error('Error sending signup confirmation:', followupError);
+    }
   } catch (error) {
     console.error('Error signing up for event:', error);
-    
-    let errorMessage = 'Failed to sign up for the event.';
-    if (error.response && error.response.data && error.response.data.error) {
-      errorMessage = error.response.data.error;
-    }
-    
-    await interaction.editReply(errorMessage);
+    await interaction.editReply('Failed to sign up for the event.');
   }
 }
 
@@ -690,68 +1026,70 @@ async function handleTeamsCommand(interaction, appGuildId) {
   try {
     const eventId = interaction.options.getString('event_id');
     
-    // Authenticate
-    const authHeader = await getAuthSession();
-    if (!authHeader) {
-      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
-    }
-
-    // Determine if we got a token or cookie
-    const isToken = authHeader[0]?.startsWith('Authorization');
-    const headers = isToken ? 
-      { Authorization: authHeader[0].split('=')[1] } : 
-      { Cookie: authHeader };
-    
-    // Get teams for this event
-    const teamsResponse = await axios.get(`${API_URL}/api/teams/event/${eventId}?guildId=${appGuildId}`, {
-      headers: headers
+    // Check if event exists
+    const [event] = await sequelize.query(`
+      SELECT * FROM events WHERE id = $1 AND guild_id = $2
+    `, {
+      bind: [eventId, appGuildId],
+      type: sequelize.QueryTypes.SELECT
     });
     
-    const teams = teamsResponse.data;
+    if (!event) {
+      return await interaction.editReply(`Event with ID ${eventId} not found.`);
+    }
     
-    if (!teams || teams.length === 0) {
+    // Get teams for this event
+    const teams = await sequelize.query(`
+      SELECT t.id, t.name, t.created_at
+      FROM teams t
+      WHERE t.event_id = $1 AND t.guild_id = $2
+      ORDER BY t.name
+    `, {
+      bind: [eventId, appGuildId],
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    if (teams.length === 0) {
       return await interaction.editReply('No teams found for this event.');
     }
     
-    // Create an embed for each team
-    const embeds = teams.map(team => {
+    // For each team, get members
+    const embeds = [];
+    
+    for (const team of teams) {
+      // Get team members with roles
+      const members = await sequelize.query(`
+        SELECT tm.role, u.username 
+        FROM team_members tm
+        JOIN users u ON tm.user_id = u.id
+        WHERE tm.team_id = $1
+        ORDER BY tm.position
+      `, {
+        bind: [team.id],
+        type: sequelize.QueryTypes.SELECT
+      });
+      
+      // Group members by role
+      const tanks = members.filter(m => m.role === 'TANK').map(m => m.username);
+      const healers = members.filter(m => m.role === 'HEALER').map(m => m.username);
+      const dps = members.filter(m => m.role === 'DPS').map(m => m.username);
+      
       const embed = new EmbedBuilder()
-        .setTitle(team.name)
-        .setDescription(`Members: ${team.members?.length || 0}`);
+        .setTitle(`Team: ${team.name}`)
+        .setColor('#0099ff')
+        .addFields(
+          { name: 'Tanks', value: tanks.length > 0 ? tanks.join('\n') : 'None', inline: true },
+          { name: 'Healers', value: healers.length > 0 ? healers.join('\n') : 'None', inline: true },
+          { name: 'DPS', value: dps.length > 0 ? dps.join('\n') : 'None', inline: true }
+        )
+        .setFooter({ text: `Team ID: ${team.id}` })
+        .setTimestamp(new Date(team.created_at));
       
-      // Add team member details
-      if (team.members && team.members.length > 0) {
-        const tankMembers = team.members.filter(m => m.role === 'TANK');
-        const healerMembers = team.members.filter(m => m.role === 'HEALER');
-        const dpsMembers = team.members.filter(m => m.role === 'DPS');
-        
-        if (tankMembers.length > 0) {
-          embed.addFields({
-            name: 'Tanks',
-            value: tankMembers.map(m => m.User?.username || m.username).join('\n')
-          });
-        }
-        
-        if (healerMembers.length > 0) {
-          embed.addFields({
-            name: 'Healers',
-            value: healerMembers.map(m => m.User?.username || m.username).join('\n')
-          });
-        }
-        
-        if (dpsMembers.length > 0) {
-          embed.addFields({
-            name: 'DPS',
-            value: dpsMembers.map(m => m.User?.username || m.username).join('\n')
-          });
-        }
-      }
-      
-      return embed;
-    });
+      embeds.push(embed);
+    }
     
     await interaction.editReply({
-      content: `Teams for event ID ${eventId}:`,
+      content: `Teams for event "${event.title}":`,
       embeds: embeds.slice(0, 10) // Discord limits to 10 embeds
     });
   } catch (error) {
@@ -764,26 +1102,24 @@ async function handleMembersCommand(interaction, appGuildId) {
   await interaction.deferReply();
   
   try {
-    // Authenticate
-    const authHeader = await getAuthSession();
-    if (!authHeader) {
-      return await interaction.editReply('Authentication failed. Please contact the bot administrator.');
-    }
-
-    // Determine if we got a token or cookie
-    const isToken = authHeader[0]?.startsWith('Authorization');
-    const headers = isToken ? 
-      { Authorization: authHeader[0].split('=')[1] } : 
-      { Cookie: authHeader };
-    
-    // Get guild members
-    const membersResponse = await axios.get(`${API_URL}/api/guilds/${appGuildId}/members`, {
-      headers: headers
+    // Get guild members with roles
+    const members = await sequelize.query(`
+      SELECT gm.role, u.username, u.discord_id, u.avatar_url
+      FROM guild_members gm
+      JOIN users u ON gm.user_id = u.id
+      WHERE gm.guild_id = $1
+      ORDER BY CASE
+        WHEN gm.role = 'Guild Master' THEN 1
+        WHEN gm.role = 'Guild Advisor' THEN 2
+        WHEN gm.role = 'Guild Guardian' THEN 3
+        ELSE 4
+      END, u.username
+    `, {
+      bind: [appGuildId],
+      type: sequelize.QueryTypes.SELECT
     });
     
-    const members = membersResponse.data;
-    
-    if (!members || members.length === 0) {
+    if (members.length === 0) {
       return await interaction.editReply('No members found for this guild.');
     }
     
@@ -791,31 +1127,38 @@ async function handleMembersCommand(interaction, appGuildId) {
     const guildMasters = members.filter(m => m.role === 'Guild Master');
     const advisors = members.filter(m => m.role === 'Guild Advisor');
     const guardians = members.filter(m => m.role === 'Guild Guardian');
-    const regularMembers = members.filter(m => !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(m.role));
+    const regularMembers = members.filter(m => 
+      !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(m.role)
+    );
     
     // Create embed
     const embed = new EmbedBuilder()
       .setTitle('Guild Members')
-      .setDescription(`Total members: ${members.length}`);
+      .setDescription(`Total members: ${members.length}`)
+      .setColor('#0099ff')
+      .setTimestamp();
     
     if (guildMasters.length > 0) {
       embed.addFields({
         name: 'Guild Masters',
-        value: guildMasters.map(m => m.username).join('\n')
+        value: guildMasters.map(m => m.username).join('\n'),
+        inline: false
       });
     }
     
     if (advisors.length > 0) {
       embed.addFields({
         name: 'Guild Advisors',
-        value: advisors.map(m => m.username).join('\n')
+        value: advisors.map(m => m.username).join('\n'),
+        inline: false
       });
     }
     
     if (guardians.length > 0) {
       embed.addFields({
         name: 'Guild Guardians',
-        value: guardians.map(m => m.username).join('\n')
+        value: guardians.map(m => m.username).join('\n'),
+        inline: false
       });
     }
     
@@ -824,7 +1167,8 @@ async function handleMembersCommand(interaction, appGuildId) {
       embed.addFields({
         name: 'Guild Members',
         value: regularMembers.slice(0, 20).map(m => m.username).join('\n') + 
-               (regularMembers.length > 20 ? `\n...and ${regularMembers.length - 20} more` : '')
+               (regularMembers.length > 20 ? `\n...and ${regularMembers.length - 20} more` : ''),
+        inline: false
       });
     }
     
@@ -833,6 +1177,33 @@ async function handleMembersCommand(interaction, appGuildId) {
     console.error('Error fetching guild members:', error);
     await interaction.editReply('Failed to fetch guild members.');
   }
+}
+
+function createEventEmbed(event) {
+  // Format event time
+  const eventDate = new Date(event.event_time);
+  const dateString = eventDate.toLocaleDateString();
+  const timeString = eventDate.toLocaleTimeString();
+  
+  // Get participant counts
+  const tankCount = parseInt(event.tank_count || event.participants?.tank_count || 0);
+  const healerCount = parseInt(event.healer_count || event.participants?.healer_count || 0);
+  const dpsCount = parseInt(event.dps_count || event.participants?.dps_count || 0);
+  
+  return new EmbedBuilder()
+    .setTitle(event.title)
+    .setDescription(event.description || 'No description provided')
+    .addFields(
+      { name: 'Date', value: dateString, inline: true },
+      { name: 'Time', value: timeString, inline: true },
+      { name: 'Location', value: event.location || 'Not specified', inline: true },
+      { name: 'Tanks', value: `${tankCount}/${event.tanks}`, inline: true },
+      { name: 'Healers', value: `${healerCount}/${event.healers}`, inline: true },
+      { name: 'DPS', value: `${dpsCount}/${event.dps}`, inline: true },
+      { name: 'Event ID', value: event.id, inline: false }
+    )
+    .setColor('#00cc99')
+    .setFooter({ text: `Use /event-signup to join - Event ID: ${event.id}` });
 }
 
 // Initialize bot
