@@ -34,7 +34,9 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.MessageContent 
   ] 
 });
 
@@ -276,11 +278,43 @@ const registerCommands = async () => {
         description: 'View guild members',
         options: []
       },
+      // Connection check
       {
         name: 'check-connection',
         description: 'Check if this Discord server is connected to a guild',
         options: []
       },
+      // Channel configuration
+      {
+        name: 'config-channel',
+        description: 'Configure which channels to send notifications to',
+        options: [
+          {
+            name: 'type',
+            description: 'Type of notification',
+            type: 3, // STRING
+            required: true,
+            choices: [
+              { name: 'Storage/Items', value: 'storage' },
+              { name: 'Events', value: 'events' },
+              { name: 'Loot Requests', value: 'loot' },
+              { name: 'Announcements', value: 'announcements' }
+            ]
+          },
+          {
+            name: 'channel',
+            description: 'The channel to send notifications to',
+            type: 7, // CHANNEL
+            required: true
+          },
+          {
+            name: 'enabled',
+            description: 'Enable or disable notifications',
+            type: 5, // BOOLEAN
+            required: false
+          }
+        ]
+      }
     ];
 
     const CLIENT_ID = '1333905158496587816';
@@ -390,12 +424,6 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
       
-      // Handle setup command (special case)
-      if (commandName === 'setup') {
-        await handleSetupCommand(interaction);
-        return;
-      }
-      
       // Handle help command (no guild required)
       if (commandName === 'help') {
         const embed = new EmbedBuilder()
@@ -452,6 +480,9 @@ client.on('interactionCreate', async (interaction) => {
       }
       else if (commandName === 'members') {
         await handleMembersCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'config-channel') {
+        await handleConfigChannelCommand(interaction, appGuildId);
       }
       else if (commandName === 'check-connection') {
         await interaction.deferReply();
@@ -724,38 +755,6 @@ async function handleLinkGuildCommand(interaction) {
 }
 
 // Setup command handler
-async function handleSetupCommand(interaction) {
-  // Only server admins can use this command
-  if (!interaction.member.permissions.has('Administrator')) {
-    return await interaction.reply({ 
-      content: 'Only server administrators can set up the bot.', 
-      ephemeral: true 
-    });
-  }
-  
-  await interaction.deferReply({ ephemeral: true });
-  
-  // Generate auth token for this setup session (simplified)
-  const token = Buffer.from(`${interaction.guild.id}-${Date.now()}`).toString('base64');
-  
-  // Create the auth URL
-  const setupUrl = `${process.env.FRONTEND_URL}/discord/setup?guildId=${interaction.guild.id}&token=${token}`;
-  
-  // Create a button for the auth link
-  const linkButton = new ButtonBuilder()
-    .setLabel('Link your Tevent Guild')
-    .setURL(setupUrl)
-    .setStyle(ButtonStyle.Link);
-  
-  const row = new ActionRowBuilder().addComponents(linkButton);
-  
-  return interaction.editReply({
-    content: `Please click the button below to link this Discord server to your Tevent guild. Only Guild Masters can complete this process.`,
-    components: [row]
-  });
-}
-
-// Command handlers for other commands
 async function handleStorageCommand(interaction, appGuildId) {
   await interaction.deferReply();
   
@@ -795,7 +794,123 @@ async function handleStorageCommand(interaction, appGuildId) {
       );
     }
     
-    // Create embeds for items (max 10 per page)
+    // For single item display, add reactions for requesting
+    if (displayItems.length === 1 || (searchQuery && displayItems.length === 1)) {
+      const item = displayItems[0];
+      const embed = new EmbedBuilder()
+        .setTitle(item.Item?.name || 'Unknown Item')
+        .setDescription(`**Request this item by reacting with ✅**\n\nQuantity: ${item.quantity}`)
+        .addFields(
+          { name: 'Type', value: item.Item?.type || 'Unknown', inline: true },
+          { name: 'DKP Cost', value: `${item.dkp_cost || 0}`, inline: true }
+        )
+        .setColor('#0099ff')
+        .setFooter({ text: `Item ID: ${item.id}` });
+      
+      if (item.trait) {
+        embed.addFields({ name: 'Trait', value: item.trait, inline: true });
+      }
+      
+      if (item.Item?.icon) {
+        embed.setThumbnail(item.Item.icon);
+      }
+      
+      // Send message with embed
+      const message = await interaction.editReply({ 
+        content: 'Item details:',
+        embeds: [embed],
+        fetchReply: true
+      });
+      
+      // Add request reactions
+      await message.react('✅'); // Request item
+      
+      // Set up reaction collector (30 minute timeout)
+      const filter = (reaction, user) => {
+        return reaction.emoji.name === '✅' && !user.bot;
+      };
+      
+      const collector = message.createReactionCollector({ filter, time: 1800000 });
+      
+      collector.on('collect', async (reaction, user) => {
+        try {
+          // Get user info
+          const userResult = await pool.query(
+            'SELECT id FROM users WHERE discord_id = $1',
+            [user.id]
+          );
+          
+          if (!userResult.rows.length) {
+            // DM the user that they need to register
+            try {
+              await user.send(`You need to register on the website first before requesting items.`);
+            } catch (dmError) {
+              console.error(`Could not DM user ${user.id}:`, dmError);
+            }
+            return;
+          }
+          
+          const userId = userResult.rows[0].id;
+          
+          // Check if user already has a pending request for this item
+          const existingRequestResult = await pool.query(
+            `SELECT id FROM loot_requests 
+             WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
+            [item.id, userId]
+          );
+          
+          if (existingRequestResult.rows.length) {
+            // DM the user they already have a request
+            try {
+              await user.send(`You already have a pending request for **${item.Item.name}**.`);
+            } catch (dmError) {
+              console.error(`Could not DM user ${user.id}:`, dmError);
+            }
+            return;
+          }
+          
+          // Create request
+          await pool.query(
+            `INSERT INTO loot_requests
+             (id, guild_id, storage_item_id, user_id, status, created_at, updated_at)
+             VALUES
+             (gen_random_uuid(), $1, $2, $3, 'Pending', NOW(), NOW())`,
+            [appGuildId, item.id, userId]
+          );
+          
+          // DM the user confirmation
+          try {
+            await user.send(`Your request for **${item.Item.name}** has been submitted!`);
+          } catch (dmError) {
+            console.error(`Could not DM user ${user.id}:`, dmError);
+          }
+          
+          // Post the request to the configured channel if available
+          await sendNotificationToConfiguredChannel(
+            appGuildId, 
+            interaction.guild.id, 
+            'loot', 
+            new EmbedBuilder()
+              .setTitle('New Loot Request')
+              .setDescription(`**${user.username}** has requested **${item.Item.name}**`)
+              .setColor('#9c27b0')
+              .setTimestamp()
+          );
+        } catch (error) {
+          console.error('Error processing item request:', error);
+          // Try to notify the user of the error
+          try {
+            await user.send(`There was an error processing your request for **${item.Item.name}**.`);
+          } catch (dmError) {
+            console.error(`Could not DM user ${user.id}:`, dmError);
+          }
+        }
+      });
+      
+      return;
+    }
+    
+    // If multiple items, display as before
     const embeds = [];
     for (let i = 0; i < Math.min(displayItems.length, 10); i++) {
       const item = displayItems[i];
@@ -823,7 +938,7 @@ async function handleStorageCommand(interaction, appGuildId) {
       await interaction.editReply('No items found in storage.');
     } else {
       await interaction.editReply({ 
-        content: `Found ${displayItems.length} items in guild storage:`,
+        content: `Found ${displayItems.length} items in guild storage. Search for a specific item to request it.`,
         embeds: embeds
       });
     }
@@ -839,7 +954,7 @@ async function handleEventsCommand(interaction, appGuildId) {
   try {
     const eventId = interaction.options.getString('id');
     
-    // If specific event ID is requested
+    // If specific event ID is requested, add reactions for role signups
     if (eventId) {
       const eventResult = await pool.query(
         `SELECT e.*, 
@@ -868,7 +983,226 @@ async function handleEventsCommand(interaction, appGuildId) {
         }
       });
       
-      await interaction.editReply({ embeds: [embed] });
+      // Add instruction for reaction signups
+      embed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+      
+      // Send message with reaction options
+      const message = await interaction.editReply({ 
+        embeds: [embed],
+        fetchReply: true
+      });
+      
+      // Add role reactions
+      await message.react('🛡️'); // Tank
+      await message.react('💚'); // Healer
+      await message.react('⚔️'); // DPS
+      await message.react('❌'); // Absent
+      
+      // Set up reaction collector (24 hour timeout)
+      const filter = (reaction, user) => {
+        return ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
+      };
+      
+      const collector = message.createReactionCollector({ filter, time: 86400000 });
+      
+      collector.on('collect', async (reaction, user) => {
+        try {
+          // Get user from database
+          const userResult = await pool.query(
+            'SELECT id, username FROM users WHERE discord_id = $1',
+            [user.id]
+          );
+          
+          if (!userResult.rows.length) {
+            // DM the user that they need to register
+            try {
+              await user.send(`You need to register on the website first before signing up for events.`);
+            } catch (dmError) {
+              console.error(`Could not DM user ${user.id}:`, dmError);
+            }
+            return;
+          }
+          
+          const dbUser = userResult.rows[0];
+          let role, action;
+          
+          switch(reaction.emoji.name) {
+            case '🛡️':
+              role = 'TANK';
+              action = 'signup';
+              break;
+            case '💚':
+              role = 'HEALER';
+              action = 'signup';
+              break;
+            case '⚔️':
+              role = 'DPS';
+              action = 'signup';
+              break;
+            case '❌':
+              action = 'absent';
+              break;
+          }
+          
+          if (action === 'signup') {
+            // Check if already signed up
+            const existingSignupResult = await pool.query(
+              'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, dbUser.id]
+            );
+            
+            if (existingSignupResult.rows.length) {
+              // Update role
+              await pool.query(
+                'UPDATE event_participants SET role = $1 WHERE id = $2',
+                [role, existingSignupResult.rows[0].id]
+              );
+              
+              try {
+                await user.send(`You've updated your role for "${event.title}" to ${role}.`);
+              } catch (dmError) {}
+            } else {
+              // Check if role is full
+              const roleLimits = {
+                'TANK': event.tanks || 0,
+                'HEALER': event.healers || 0,
+                'DPS': event.dps || 0
+              };
+              
+              const roleCountsResult = await pool.query(
+                `SELECT 
+                  SUM(CASE WHEN role = 'TANK' THEN 1 ELSE 0 END) as tank_count,
+                  SUM(CASE WHEN role = 'HEALER' THEN 1 ELSE 0 END) as healer_count,
+                  SUM(CASE WHEN role = 'DPS' THEN 1 ELSE 0 END) as dps_count
+                FROM event_participants
+                WHERE event_id = $1`,
+                [eventId]
+              );
+              
+              const roleCounts = roleCountsResult.rows[0];
+              const currentCounts = {
+                'TANK': parseInt(roleCounts?.tank_count || 0),
+                'HEALER': parseInt(roleCounts?.healer_count || 0),
+                'DPS': parseInt(roleCounts?.dps_count || 0)
+              };
+              
+              if (currentCounts[role] >= roleLimits[role]) {
+                try {
+                  await user.send(`Sorry, the ${role} spots are full for "${event.title}".`);
+                } catch (dmError) {}
+                return;
+              }
+              
+              // Create new signup
+              await pool.query(
+                `INSERT INTO event_participants 
+                  (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                VALUES
+                  (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                [appGuildId, eventId, dbUser.id, role]
+              );
+              
+              try {
+                await user.send(`You've been signed up for "${event.title}" as ${role}.`);
+              } catch (dmError) {}
+              
+              // Post to event channel
+              await sendNotificationToConfiguredChannel(
+                appGuildId, 
+                interaction.guild.id, 
+                'events', 
+                new EmbedBuilder()
+                  .setTitle('Event Signup')
+                  .setDescription(`**${user.username}** has signed up for **${event.title}** as **${role}**`)
+                  .setColor('#00FF00')
+                  .setTimestamp()
+              );
+            }
+          } else if (action === 'absent') {
+            // Mark as absent
+            // First delete any existing signup
+            await pool.query(
+              'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, dbUser.id]
+            );
+            
+            // Then add to absentees (if table exists)
+            try {
+              await pool.query(
+                `INSERT INTO event_absentees
+                 (id, guild_id, event_id, user_id, created_at, updated_at)
+                 VALUES
+                 (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                 ON CONFLICT (event_id, user_id) DO NOTHING`,
+                [appGuildId, eventId, dbUser.id]
+              );
+            } catch (insertError) {
+              // Table might not exist - try to create it
+              try {
+                await pool.query(`
+                  CREATE TABLE IF NOT EXISTS event_absentees (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    guild_id UUID NOT NULL,
+                    event_id UUID NOT NULL,
+                    user_id UUID NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(event_id, user_id)
+                  )
+                `);
+                
+                // Try insert again
+                await pool.query(
+                  `INSERT INTO event_absentees
+                   (id, guild_id, event_id, user_id, created_at, updated_at)
+                   VALUES
+                   (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
+                  [appGuildId, eventId, dbUser.id]
+                );
+              } catch (tableError) {
+                console.error('Error creating absentees table:', tableError);
+              }
+            }
+            
+            try {
+              await user.send(`You've been marked as absent for "${event.title}".`);
+            } catch (dmError) {}
+          }
+          
+          // Update the embed with new counts
+          const updatedEventResult = await pool.query(
+            `SELECT e.*, 
+                  (SELECT COUNT(*) FROM event_participants ep 
+                   WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+                  (SELECT COUNT(*) FROM event_participants ep 
+                   WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+                  (SELECT COUNT(*) FROM event_participants ep 
+                   WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+            FROM events e
+            WHERE e.id = $1`,
+            [eventId]
+          );
+          
+          if (updatedEventResult.rows.length) {
+            const updatedEvent = updatedEventResult.rows[0];
+            const updatedEmbed = createEventEmbed({
+              ...updatedEvent,
+              participants: {
+                tank_count: updatedEvent.tank_count,
+                healer_count: updatedEvent.healer_count,
+                dps_count: updatedEvent.dps_count
+              }
+            });
+            
+            updatedEmbed.setDescription(`${updatedEvent.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+            
+            await message.edit({ embeds: [updatedEmbed] });
+          }
+        } catch (error) {
+          console.error('Error processing role signup reaction:', error);
+        }
+      });
+      
       return;
     }
     
@@ -905,12 +1239,136 @@ async function handleEventsCommand(interaction, appGuildId) {
     }));
     
     await interaction.editReply({ 
-      content: 'Upcoming events:',
+      content: 'Upcoming events: (Use /events with an event ID to sign up with reactions)',
       embeds: embeds
     });
   } catch (error) {
     console.error('Error fetching events:', error);
     await interaction.editReply('Failed to fetch events.');
+  }
+}
+
+async function handleConfigChannelCommand(interaction, appGuildId) {
+  // Only admins can configure channels
+  if (!interaction.member.permissions.has('Administrator')) {
+    return await interaction.reply({ 
+      content: 'Only server administrators can configure notification channels.', 
+      ephemeral: true 
+    });
+  }
+  
+  await interaction.deferReply({ ephemeral: true });
+  
+  const type = interaction.options.getString('type');
+  const channel = interaction.options.getChannel('channel');
+  const enabled = interaction.options.getBoolean('enabled') ?? true;
+  
+  // Check if channel is a text channel
+  if (channel.type !== 0) {
+    return await interaction.editReply({
+      content: 'Please select a text channel for notifications.',
+      ephemeral: true
+    });
+  }
+  
+  try {
+    // First, check if we need to create the table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS discord_channel_config (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        guild_id UUID NOT NULL,
+        discord_guild_id VARCHAR(255) NOT NULL,
+        channel_id VARCHAR(255) NOT NULL,
+        channel_type VARCHAR(50) NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    
+    // Check if configuration already exists
+    const existingConfig = await pool.query(
+      `SELECT id FROM discord_channel_config 
+       WHERE guild_id = $1 AND channel_type = $2`,
+      [appGuildId, type]
+    );
+    
+    if (existingConfig.rows.length > 0) {
+      // Update existing config
+      await pool.query(
+        `UPDATE discord_channel_config 
+         SET channel_id = $1, enabled = $2, updated_at = NOW()
+         WHERE guild_id = $3 AND channel_type = $4`,
+        [channel.id, enabled, appGuildId, type]
+      );
+    } else {
+      // Create new config
+      await pool.query(
+        `INSERT INTO discord_channel_config 
+         (guild_id, discord_guild_id, channel_id, channel_type, enabled)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [appGuildId, interaction.guild.id, channel.id, type, enabled]
+      );
+    }
+    
+    await interaction.editReply({
+      content: `Successfully configured ${enabled ? 'enabled' : 'disabled'} ${type} notifications in ${channel}.`,
+      ephemeral: true
+    });
+    
+    // Test notification
+    const embed = new EmbedBuilder()
+      .setTitle('Channel Configuration Test')
+      .setDescription(`This is a test notification for ${type} events.`)
+      .setColor('#4CAF50')
+      .setTimestamp();
+    
+    try {
+      await channel.send({ embeds: [embed] });
+    } catch (sendError) {
+      await interaction.followUp({
+        content: `⚠️ Warning: Failed to send test message to ${channel}. Please check bot permissions.`,
+        ephemeral: true
+      });
+    }
+  } catch (error) {
+    console.error('Error configuring channel:', error);
+    await interaction.editReply({
+      content: `Failed to configure notification channel: ${error.message}`,
+      ephemeral: true
+    });
+  }
+}
+
+async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type, embed) {
+  try {
+    // Get channel configuration
+    const configResult = await pool.query(
+      `SELECT channel_id, enabled FROM discord_channel_config
+       WHERE guild_id = $1 AND channel_type = $2 AND enabled = true`,
+      [guildId, type]
+    );
+    
+    if (!configResult.rows.length) {
+      return false; // No channel configured
+    }
+    
+    const channelId = configResult.rows[0].channel_id;
+    
+    // Get the channel
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    
+    if (!channel) {
+      console.error(`Channel ${channelId} not found`);
+      return false;
+    }
+    
+    // Send notification
+    await channel.send({ embeds: [embed] });
+    return true;
+  } catch (error) {
+    console.error(`Error sending notification to channel:`, error);
+    return false;
   }
 }
 
