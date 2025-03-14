@@ -13,6 +13,8 @@ console.log('Environment Check:', {
   TOKEN_LENGTH: process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.length : 0
 });
 
+
+
 const { Pool } = require('pg');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -39,6 +41,101 @@ const client = new Client({
     GatewayIntentBits.MessageContent 
   ] 
 });
+
+
+// Add to your scheduled postings
+function setupScheduledPostings(client) {
+  // Events posting
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      // Get all guild mappings
+      const mappingsResult = await pool.query('SELECT * FROM discord_guild_mappings');
+      
+      for (const mapping of mappingsResult.rows) {
+        const appGuildId = mapping.app_guild_id;
+        const discordGuildId = mapping.discord_guild_id;
+        
+        // Get configured channel for events
+        const channelConfigResult = await pool.query(
+          `SELECT channel_id FROM discord_channel_config 
+           WHERE guild_id = $1 AND channel_type = 'events' AND enabled = true`,
+          [appGuildId]
+        );
+        
+        if (!channelConfigResult.rows.length) continue;
+        
+        const channelId = channelConfigResult.rows[0].channel_id;
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) continue;
+        
+        // Fetch upcoming events
+        const now = new Date();
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() + 7); // Events in next 7 days
+        
+        const eventsResult = await pool.query(
+          `SELECT e.*, 
+                 (SELECT COUNT(*) FROM event_participants ep 
+                  WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+                 (SELECT COUNT(*) FROM event_participants ep 
+                  WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+                 (SELECT COUNT(*) FROM event_participants ep 
+                  WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+          FROM events e
+          WHERE e.guild_id = $1 AND e.event_time > $2 AND e.event_time < $3
+          ORDER BY e.event_time ASC`,
+          [appGuildId, now, cutoff]
+        );
+        
+        if (!eventsResult.rows.length) continue;
+        
+        // Post upcoming events message
+        const mainEmbed = new EmbedBuilder()
+          .setTitle('📅 Upcoming Events')
+          .setDescription('React to an event message to sign up for that event.')
+          .setColor('#00cc99')
+          .setTimestamp();
+        
+        await channel.send({ embeds: [mainEmbed] });
+        
+        // Post each event as a separate message with reactions
+        for (const event of eventsResult.rows) {
+          const eventEmbed = createEventEmbed({
+            ...event,
+            participants: {
+              tank_count: event.tank_count,
+              healer_count: event.healer_count, 
+              dps_count: event.dps_count
+            }
+          });
+          
+          // Add react instructions
+          eventEmbed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+          
+          const message = await channel.send({ embeds: [eventEmbed] });
+          
+          // Add role reactions
+          await message.react('🛡️'); // Tank
+          await message.react('💚'); // Healer
+          await message.react('⚔️'); // DPS
+          await message.react('❌'); // Absent
+          
+          // Set up collector for signups
+          const filter = (reaction, user) => ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
+          const collector = message.createReactionCollector({ filter, time: 7 * 24 * 60 * 60 * 1000 });
+          
+          // Handle reactions
+          collector.on('collect', async (reaction, user) => {
+            // Same reaction handler code as in your handleEventsCommand function
+            // (Copy from your existing code)
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error in scheduled events posting:', error);
+    }
+  });
+}
 
 const API_URL = process.env.BACKEND_URL || 'https://tevent.app';
 
@@ -72,6 +169,86 @@ app.listen(PORT, () => {
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();
+
+  setupScheduledPostings(client);
+});
+
+app.post('/webhook/new-item', async (req, res) => {
+  try {
+    const { guildId, itemId, secret } = req.body;
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Fetch the item
+    const itemResult = await pool.query(
+      `SELECT gsi.*, i.name, i.type, i.icon 
+       FROM guild_storage_items gsi
+       LEFT JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.id = $1`,
+      [itemId]
+    );
+    
+    if (!itemResult.rows.length) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    
+    const item = itemResult.rows[0];
+    
+    // Get Discord guild ID
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Send notification to storage channel
+    const embed = new EmbedBuilder()
+      .setTitle('🆕 New Item Added to Storage')
+      .setDescription(`**${item.name}** has been added to storage!`)
+      .addFields(
+        { name: 'Type', value: item.type || 'Unknown', inline: true },
+        { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
+        { name: 'ID', value: item.id, inline: false }
+      )
+      .setColor('#4CAF50')
+      .setTimestamp();
+    
+    if (item.icon) {
+      embed.setThumbnail(item.icon);
+    }
+    
+    await sendNotificationToConfiguredChannel(guildId, discordGuildId, 'storage', embed);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error processing new item webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/webhook/new-event', async (req, res) => {
+  try {
+    const { guildId, eventId, secret } = req.body;
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Similar flow to post the new event to the events channel
+    // (Implementation details similar to above)
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error processing new event webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Handle when the bot joins a new server
