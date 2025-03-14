@@ -6,6 +6,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const cron = require('node-cron');
 
 console.log('Environment Check:', {
   CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',
