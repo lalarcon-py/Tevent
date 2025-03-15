@@ -1605,6 +1605,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle loot approval/denial buttons
+      // Handle loot approval/denial buttons
       if (customId.startsWith('approve_loot_') || customId.startsWith('deny_loot_')) {
         const requestId = customId.replace(/^(approve_loot_|deny_loot_)/, '');
         const isApprove = customId.startsWith('approve_loot_');
@@ -1668,13 +1669,45 @@ client.on('interactionCreate', async (interaction) => {
                 [requestId]
               );
               
-              // Decrement quantity
-              await client.query(
-                `UPDATE guild_storage_items
-                SET quantity = quantity - 1, updated_at = NOW()
-                WHERE id = $1 AND quantity > 0`,
+              // Get current quantity first
+              const quantityResult = await client.query(
+                `SELECT quantity FROM guild_storage_items WHERE id = $1`,
                 [request.storage_item_id]
               );
+              
+              if (!quantityResult.rows.length || quantityResult.rows[0].quantity <= 0) {
+                await client.query('ROLLBACK');
+                return await interaction.editReply('Item is no longer available in storage.');
+              }
+              
+              const newQuantity = quantityResult.rows[0].quantity - 1;
+              
+              // If quantity will reach zero, handle deletion and related requests
+              if (newQuantity === 0) {
+                // First update all other pending requests to "Denied - Out of Stock"
+                await client.query(
+                  `UPDATE loot_requests 
+                  SET status = 'Denied - Out of Stock' 
+                  WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+                  [request.storage_item_id, requestId]
+                );
+                
+                // Delete the item from storage
+                await client.query(
+                  `DELETE FROM guild_storage_items WHERE id = $1`,
+                  [request.storage_item_id]
+                );
+                
+                console.log(`Deleted storage item ${request.storage_item_id} (quantity reached 0)`);
+              } else {
+                // Just decrement quantity
+                await client.query(
+                  `UPDATE guild_storage_items
+                  SET quantity = quantity - 1, updated_at = NOW()
+                  WHERE id = $1`,
+                  [request.storage_item_id]
+                );
+              }
               
               await client.query('COMMIT');
             } catch (error) {
