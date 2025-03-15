@@ -453,6 +453,24 @@ app.post('/webhook/new-event', async (req, res) => {
       console.error(`[ERROR] Invalid webhook secret provided`);
       return res.status(403).json({ error: 'Unauthorized' });
     }
+
+    try {
+      // Create table to track Discord messages for events
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS discord_event_messages (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guild_id UUID NOT NULL,
+          event_id UUID NOT NULL,
+          channel_id VARCHAR(255) NOT NULL,
+          message_id VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(event_id)
+        )
+      `);
+    } catch (tableError) {
+      console.error(`[ERROR] Error creating discord_event_messages table: ${tableError.message}`);
+      // Continue even if table creation fails
+    }
     
     // Get Discord guild ID
     const mappingResult = await pool.query(
@@ -482,6 +500,19 @@ app.post('/webhook/new-event', async (req, res) => {
     
     const channelId = channelConfigResult.rows[0].channel_id;
     console.log(`[INFO] Using events channel: ${channelId}`);
+    
+    // Create absentees table if it doesn't exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS event_absentees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        guild_id UUID NOT NULL,
+        event_id UUID NOT NULL,
+        user_id UUID NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(event_id, user_id)
+      )
+    `);
     
     // Fetch the newly created event
     const event = await pool.query(
@@ -516,6 +547,8 @@ app.post('/webhook/new-event', async (req, res) => {
        ORDER BY ea.created_at ASC`,
       [eventId]
     );
+    
+    console.log(`[DEBUG] Absences query returned ${absenteesResult.rows.length} rows`);
     
     // Group participants by role
     const participants = {
@@ -552,7 +585,7 @@ app.post('/webhook/new-event', async (req, res) => {
       .setDescription(description)
       .addFields(
         { 
-          name: `${totalSignups} (${eventData.tanks + eventData.healers + eventData.dps - totalSignups > 0 ? '+' + (eventData.tanks + eventData.healers + eventData.dps - totalSignups) : '0'})`, 
+          name: `${totalSignups} (${absentees.length})`, 
           value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
           inline: false 
         },
@@ -582,8 +615,8 @@ app.post('/webhook/new-event', async (req, res) => {
     // Add absence section if there are any
     if (absentees.length > 0) {
       embed.addFields({ 
-        name: `🚫 Absence (${absentees.length})`, 
-        value: absentees.map((name, i) => `${name}`).join(', '), 
+        name: `⛔ Absence (${absentees.length})`, 
+        value: absentees.join(', '), 
         inline: false 
       });
     }
@@ -605,6 +638,23 @@ app.post('/webhook/new-event', async (req, res) => {
         content: `**${eventData.title || 'New Event'}**`,
         embeds: [embed]
       });
+
+      try {
+        await pool.query(
+          `INSERT INTO discord_event_messages 
+           (guild_id, event_id, channel_id, message_id)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (event_id) 
+           DO UPDATE SET 
+             channel_id = $3,
+             message_id = $4`,
+          [guildId, eventId, channelId, message.id]
+        );
+        console.log(`[INFO] Stored Discord message ID ${message.id} for event ${eventId}`);
+      } catch (storeError) {
+        console.error(`[ERROR] Failed to store Discord message ID: ${storeError.message}`);
+        // Continue even if storing fails
+      }
       
       console.log(`[INFO] Event message sent successfully`);
       
@@ -612,13 +662,13 @@ app.post('/webhook/new-event', async (req, res) => {
       await message.react('🛡️'); // Tank
       await message.react('⚔️'); // DPS
       await message.react('💚'); // Healer
-      await message.react('🚫'); // Absence
+      await message.react('⛔'); // Absence
       
       console.log(`[INFO] Added reactions to event message`);
       
       // Set up reaction collector (7 days)
       const filter = (reaction, user) => {
-        return ['🛡️', '⚔️', '💚', '🚫'].includes(reaction.emoji.name) && !user.bot;
+        return ['🛡️', '⚔️', '💚', '⛔'].includes(reaction.emoji.name) && !user.bot;
       };
       
       const collector = message.createReactionCollector({ filter, time: 604800000 });
@@ -661,7 +711,7 @@ app.post('/webhook/new-event', async (req, res) => {
               role = 'HEALER';
               action = 'signup';
               break;
-            case '🚫':
+            case '⛔':
               action = 'absent';
               break;
           }
@@ -741,36 +791,19 @@ app.post('/webhook/new-event', async (req, res) => {
             );
             
             // Add to absentees
+            await pool.query(
+              `INSERT INTO event_absentees (id, guild_id, event_id, user_id, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+               ON CONFLICT (event_id, user_id) DO NOTHING`,
+              [guildId, eventId, dbUser.id]
+            );
+            
+            console.log(`[INFO] User marked as absent successfully`);
+            
             try {
-              // Ensure table exists
-              await pool.query(`
-                CREATE TABLE IF NOT EXISTS event_absentees (
-                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                  guild_id UUID NOT NULL,
-                  event_id UUID NOT NULL,
-                  user_id UUID NOT NULL,
-                  created_at TIMESTAMP DEFAULT NOW(),
-                  updated_at TIMESTAMP DEFAULT NOW(),
-                  UNIQUE(event_id, user_id)
-                )
-              `);
-              
-              await pool.query(
-                `INSERT INTO event_absentees (id, guild_id, event_id, user_id, created_at, updated_at)
-                 VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-                 ON CONFLICT (event_id, user_id) DO NOTHING`,
-                [guildId, eventId, dbUser.id]
-              );
-              
-              console.log(`[INFO] User marked as absent successfully`);
-              
-              try {
-                await user.send(`You've been marked as absent for "${eventData.title}".`);
-              } catch (dmError) {
-                console.log(`[INFO] Could not send confirmation DM: ${dmError.message}`);
-              }
-            } catch (absenteeError) {
-              console.error(`[ERROR] Error marking user as absent:`, absenteeError);
+              await user.send(`You've been marked as absent for "${eventData.title}".`);
+            } catch (dmError) {
+              console.log(`[INFO] Could not send confirmation DM: ${dmError.message}`);
             }
           }
           
@@ -793,6 +826,8 @@ app.post('/webhook/new-event', async (req, res) => {
              ORDER BY ea.created_at ASC`,
             [eventId]
           );
+          
+          console.log(`[DEBUG] Updated absences query returned ${updatedAbsenteesResult.rows.length} rows`);
           
           // Group participants by role
           const updatedParticipants = {
@@ -821,7 +856,7 @@ app.post('/webhook/new-event', async (req, res) => {
             .setDescription(description)
             .addFields(
               { 
-                name: `${updatedTotalSignups} (${eventData.tanks + eventData.healers + eventData.dps - updatedTotalSignups > 0 ? '+' + (eventData.tanks + eventData.healers + eventData.dps - updatedTotalSignups) : '0'})`, 
+                name: `${updatedTotalSignups} (${updatedAbsentees.length})`, 
                 value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
                 inline: false 
               },
@@ -851,8 +886,8 @@ app.post('/webhook/new-event', async (req, res) => {
           // Add absence section if there are any
           if (updatedAbsentees.length > 0) {
             updatedEmbed.addFields({ 
-              name: `🚫 Absence (${updatedAbsentees.length})`, 
-              value: updatedAbsentees.map((name, i) => `${name}`).join(', '), 
+              name: `⛔ Absence (${updatedAbsentees.length})`, 
+              value: updatedAbsentees.join(', '), 
               inline: false 
             });
           }
@@ -876,6 +911,69 @@ app.post('/webhook/new-event', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error(`[ERROR] Error processing new event webhook:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/webhook/delete-event', async (req, res) => {
+  try {
+    const { guildId, eventId, secret } = req.body;
+    
+    console.log(`[INFO] Received delete event webhook - Guild: ${guildId}, Event: ${eventId}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get the message information
+    const messageResult = await pool.query(
+      `SELECT channel_id, message_id FROM discord_event_messages WHERE event_id = $1`,
+      [eventId]
+    );
+    
+    if (!messageResult.rows.length) {
+      console.log(`[INFO] No Discord message found for event ${eventId}`);
+      return res.json({ success: true, message: 'No Discord message found' });
+    }
+    
+    const { channel_id, message_id } = messageResult.rows[0];
+    console.log(`[INFO] Found Discord message ${message_id} in channel ${channel_id}`);
+    
+    try {
+      // Get the channel
+      const channel = await client.channels.fetch(channel_id);
+      
+      if (!channel) {
+        console.error(`[ERROR] Channel not found: ${channel_id}`);
+        return res.status(404).json({ error: 'Channel not found' });
+      }
+      
+      // Get the message
+      const message = await channel.messages.fetch(message_id);
+      
+      if (!message) {
+        console.error(`[ERROR] Message not found: ${message_id}`);
+        return res.status(404).json({ error: 'Message not found' });
+      }
+      
+      // Delete the message
+      await message.delete();
+      console.log(`[INFO] Successfully deleted Discord message for event ${eventId}`);
+    } catch (discordError) {
+      console.error(`[ERROR] Error deleting Discord message:`, discordError);
+      // Continue even if Discord delete fails
+    }
+    
+    // Remove the message from the database
+    await pool.query(
+      `DELETE FROM discord_event_messages WHERE event_id = $1`,
+      [eventId]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`[ERROR] Error processing delete event webhook:`, error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -345,6 +345,25 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
     }
 
     await t.commit();
+
+    try {
+      // Use the Railway internal URL for the Discord bot
+      const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+      
+      console.log(`[INFO] Notifying Discord bot about deleted event ${eventId}`);
+      
+      await axios.post(`${discordBotUrl}/webhook/delete-event`, {
+        guildId: guildId,
+        eventId: eventId,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`[INFO] Successfully notified Discord bot about deleted event ${eventId}`);
+    } catch (webhookError) {
+      console.error(`[ERROR] Failed to notify Discord bot about deleted event:`, webhookError);
+      // Don't throw error - event was successfully deleted
+    }
+    
     res.status(200).json({ message: 'Event deleted successfully' });
   } catch (error) {
     await t.rollback();
