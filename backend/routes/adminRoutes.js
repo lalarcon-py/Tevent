@@ -339,54 +339,73 @@ router.post('/guilds/:guildId/storage', async (req, res) => {
 });
 
 // Update guild storage item
-router.put('/guilds/:guildId/storage/:id', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const { guildId, id } = req.params;
-    const { quantity, dkp_cost, trait } = req.body;
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     
-    // Find the storage item
-    const storageItem = await db.GuildStorageItem.findOne({
-      where: {
-        id,
-        guild_id: guildId
-      },
-      include: [{ model: db.Item }]
+    const { id } = req.params;
+    const { quantity, dkp_cost, trait, guildId } = req.body;
+    
+    // Require guild ID
+    if (!guildId && !req.query.guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Verify user has permission
+    const guildMember = await db.GuildMember.findOne({
+      where: { 
+        guild_id: guildId || req.query.guildId, 
+        user_id: req.user.id 
+      }
     });
     
+    if (!guildMember || !['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    const storageItem = await db.GuildStorageItem.findByPk(id);
     if (!storageItem) {
       return res.status(404).json({ error: 'Storage item not found' });
     }
     
-    // Update fields
-    await storageItem.update({
-      quantity: quantity !== undefined ? parseInt(quantity) : storageItem.quantity,
-      dkp_cost: dkp_cost !== undefined ? dkp_cost : storageItem.dkp_cost,
-      trait: trait !== undefined ? trait : storageItem.trait
+    // Update fields if provided with validation
+    if (quantity !== undefined) {
+      // Ensure quantity is not negative
+      storageItem.quantity = Math.max(0, parseInt(quantity, 10));
+    }
+    
+    if (dkp_cost !== undefined) storageItem.dkp_cost = dkp_cost;
+    if (trait !== undefined) storageItem.trait = trait;
+    
+    // Delete the item if quantity is 0
+    if (storageItem.quantity === 0) {
+      // First, delete any associated loot requests
+      await db.LootRequest.destroy({
+        where: { storage_item_id: id }
+      });
+      
+      // Then delete the storage item
+      await storageItem.destroy();
+      
+      return res.json({ 
+        message: 'Storage item deleted due to zero quantity',
+        deleted: true
+      });
+    }
+    
+    await storageItem.save();
+    
+    // Get the full item with its associations
+    const fullItem = await db.GuildStorageItem.findByPk(id, {
+      include: [db.Item]
     });
     
-    // Log admin action
-    await logAdminAction(
-      req.user.id,
-      'UPDATE_STORAGE_ITEM',
-      'storage_item',
-      storageItem.id,
-      { 
-        guild_id: guildId,
-        item_name: storageItem.Item?.name,
-        quantity: quantity !== undefined ? parseInt(quantity) : storageItem.quantity,
-        dkp_cost: dkp_cost
-      }
-    );
-    
-    // Return updated item
-    const updatedItem = await db.GuildStorageItem.findByPk(id, {
-      include: [{ model: db.Item }]
-    });
-    
-    res.json(updatedItem);
+    res.json(fullItem);
   } catch (error) {
-    console.error('Admin update storage item error:', error);
-    res.status(500).json({ error: 'Failed to update storage item' });
+    console.error('Error updating storage item:', error);
+    res.status(500).json({ error: 'Failed to update storage item', details: error.message });
   }
 });
 

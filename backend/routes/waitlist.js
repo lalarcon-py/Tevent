@@ -106,11 +106,7 @@ router.put('/:id', async (req, res) => {
       // Decrement quantity
       const newQuantity = Math.max(0, request.storageItem.quantity - 1);
       
-      // Update the quantity
-      await request.storageItem.update({ quantity: newQuantity });
-      console.log(`Updated item ${request.storageItem.id} quantity to ${newQuantity}`);
-      
-      // If quantity reaches 0, don't delete but mark as out of stock
+      // If quantity reaches 0, handle related requests and delete the item
       if (newQuantity === 0) {
         // Find all pending requests for this item
         const pendingRequests = await db.LootRequest.findAll({
@@ -128,6 +124,14 @@ router.put('/:id', async (req, res) => {
             { where: { id: pendingRequests.map(req => req.id) } }
           );
         }
+        
+        // Delete the item from storage
+        await request.storageItem.destroy();
+        console.log(`Deleted item ${request.storageItem.id} from storage (quantity reached 0)`);
+      } else {
+        // Update the quantity
+        await request.storageItem.update({ quantity: newQuantity });
+        console.log(`Updated item ${request.storageItem.id} quantity to ${newQuantity}`);
       }
     }
     
