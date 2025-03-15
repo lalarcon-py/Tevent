@@ -196,4 +196,74 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Add this route at the end of the file
+router.post('/setup-discord-channel', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { guildId, channelId, type } = req.body;
+    
+    if (!guildId || !channelId) {
+      return res.status(400).json({ error: 'Guild ID and channel ID are required' });
+    }
+    
+    // Check for existing configuration
+    const existingConfig = await db.sequelize.query(
+      `SELECT id FROM discord_channel_config 
+       WHERE guild_id = ? AND channel_type = ?`, 
+      { 
+        replacements: [guildId, type || 'storage'],
+        type: db.sequelize.QueryTypes.SELECT
+      }
+    );
+    
+    if (existingConfig.length > 0) {
+      // Update existing config
+      await db.sequelize.query(
+        `UPDATE discord_channel_config 
+         SET channel_id = ?, enabled = true, updated_at = NOW()
+         WHERE guild_id = ? AND channel_type = ?`,
+        { 
+          replacements: [channelId, guildId, type || 'storage'],
+          type: db.sequelize.QueryTypes.UPDATE
+        }
+      );
+    } else {
+      // Create table if doesn't exist
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS discord_channel_config (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guild_id UUID NOT NULL,
+          discord_guild_id VARCHAR(255),
+          channel_id VARCHAR(255) NOT NULL,
+          channel_type VARCHAR(50) NOT NULL,
+          enabled BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      // Create new config
+      await db.sequelize.query(
+        `INSERT INTO discord_channel_config 
+         (guild_id, channel_id, channel_type, enabled)
+         VALUES (?, ?, ?, true)`,
+        { 
+          replacements: [guildId, channelId, type || 'storage'],
+          type: db.sequelize.QueryTypes.INSERT
+        }
+      );
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error setting up Discord channel:', error);
+    res.status(500).json({ error: 'Failed to set up Discord channel' });
+  }
+});
+
+module.exports = router;
+
 module.exports = router;

@@ -2395,6 +2395,8 @@ async function handleConfigChannelCommand(interaction, appGuildId) {
 // Updated sendNotificationToConfiguredChannel function
 async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type, embed, content = null) {
   try {
+    console.log(`[INFO] Attempting to send ${type} notification for guild ${guildId}`);
+    
     // Get channel configuration
     const configResult = await pool.query(
       `SELECT channel_id FROM discord_channel_config 
@@ -2402,31 +2404,109 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
       [guildId, type]
     );
     
+    // If no channel is configured for this type, try to find a general channel
     if (!configResult.rows.length) {
-      console.log(`No ${type} channel configured for guild ${guildId}`);
-      return false; // No channel configured
+      console.log(`[INFO] No ${type} channel configured, checking for general channel`);
+      
+      const generalResult = await pool.query(
+        `SELECT channel_id FROM discord_channel_config 
+         WHERE guild_id = $1 AND channel_type = 'general' AND enabled = true`,
+        [guildId]
+      );
+      
+      if (!generalResult.rows.length) {
+        console.log(`[INFO] No general channel configured, trying to find any channel`);
+        
+        // If no general channel either, try the first configured channel of any type
+        const anyChannelResult = await pool.query(
+          `SELECT channel_id FROM discord_channel_config 
+           WHERE guild_id = $1 AND enabled = true
+           LIMIT 1`,
+          [guildId]
+        );
+        
+        if (!anyChannelResult.rows.length) {
+          console.log(`[INFO] No channels configured at all for guild ${guildId}`);
+          
+          // Last resort: try to find a system channel in the Discord guild
+          try {
+            const guild = await client.guilds.fetch(discordGuildId);
+            if (guild && guild.systemChannel) {
+              console.log(`[INFO] Using system channel ${guild.systemChannel.id}`);
+              const message = await guild.systemChannel.send({
+                content: content || '',
+                embeds: [embed]
+              });
+              return message;
+            }
+          } catch (discordError) {
+            console.error(`[ERROR] Could not fetch Discord guild:`, discordError);
+          }
+          
+          return false; // No channel configured or found
+        }
+        
+        const channelId = anyChannelResult.rows[0].channel_id;
+        console.log(`[INFO] Using fallback channel: ${channelId}`);
+        
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) {
+          console.error(`[ERROR] Fallback channel ${channelId} not found`);
+          return false;
+        }
+        
+        const message = await channel.send({
+          content: content ? content : `📢 New ${type} notification:`,
+          embeds: [embed]
+        });
+        
+        console.log(`[INFO] Sent ${type} notification to fallback channel ${channelId}`);
+        return message;
+      }
+      
+      const generalChannelId = generalResult.rows[0].channel_id;
+      console.log(`[INFO] Using general channel: ${generalChannelId}`);
+      
+      const generalChannel = await client.channels.fetch(generalChannelId).catch(() => null);
+      if (!generalChannel) {
+        console.error(`[ERROR] General channel ${generalChannelId} not found`);
+        return false;
+      }
+      
+      const message = await generalChannel.send({
+        content: content ? content : `📢 New ${type} notification:`,
+        embeds: [embed]
+      });
+      
+      console.log(`[INFO] Sent ${type} notification to general channel ${generalChannelId}`);
+      return message;
     }
     
     const channelId = configResult.rows[0].channel_id;
+    console.log(`[INFO] Using configured channel for ${type}: ${channelId}`);
     
     // Get the channel
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+    const channel = await client.channels.fetch(channelId).catch((err) => {
+      console.error(`[ERROR] Error fetching channel ${channelId}:`, err);
+      return null;
+    });
     
     if (!channel) {
-      console.error(`Channel ${channelId} not found for guild ${guildId}, type ${type}`);
+      console.error(`[ERROR] Channel ${channelId} not found`);
       return false;
     }
     
     // Send notification
+    console.log(`[INFO] Sending message to channel ${channelId}`);
     const message = await channel.send({
       content: content || '',
       embeds: [embed]
     });
     
-    console.log(`Sent ${type} notification to channel ${channelId} in guild ${discordGuildId}`);
-    return message; // Return the message object for further processing if needed
+    console.log(`[INFO] Successfully sent ${type} notification to channel ${channelId}`);
+    return message;
   } catch (error) {
-    console.error(`Error sending notification to ${type} channel:`, error);
+    console.error(`[ERROR] Error sending notification to ${type} channel:`, error);
     return false;
   }
 }
@@ -3216,11 +3296,192 @@ app.post('/webhook/update-event-signup', async (req, res) => {
   }
 });
 
+function startItemPolling() {
+  console.log(`Initial item poll time set to: ${lastItemPoll.toISOString()}`);
+  
+  // Poll every 30 seconds
+  setInterval(async () => {
+    try {
+      // Format the date for SQL query
+      const formattedDate = lastItemPoll.toISOString();
+      console.log(`Checking for new items since ${formattedDate}...`);
+      
+      // Query for new items
+      const newItemsResult = await pool.query(
+        `SELECT gsi.*, i.name, i.type, i.icon, g.id as guild_id, dgm.discord_guild_id 
+         FROM guild_storage_items gsi
+         JOIN items i ON gsi.item_id = i.id
+         JOIN guilds g ON gsi.guild_id = g.id
+         JOIN discord_guild_mappings dgm ON g.id = dgm.app_guild_id
+         WHERE gsi.created_at > $1 OR gsi.updated_at > $1
+         ORDER BY gsi.created_at DESC`,
+        [formattedDate]
+      );
+      
+      // Update the last poll time
+      lastItemPoll = new Date();
+      
+      const newItems = newItemsResult.rows;
+      console.log(`Found ${newItems.length} new or updated items.`);
+      
+      // Process each new item
+      for (const item of newItems) {
+        try {
+          console.log(`Processing new item: ${item.name} (ID: ${item.id})`);
+          
+          // Create a modern embed with reaction instructions
+          const embed = new EmbedBuilder()
+            .setTitle('🆕 New Item Added to Storage')
+            .setDescription(`**React with a number to request this item:**\n\n1️⃣ - Request 1\n2️⃣ - Request 2\n3️⃣ - Request 3\n4️⃣ - Request 4\n5️⃣ - Request 5`)
+            .addFields(
+              { name: '📦 Item', value: `**${item.name}**`, inline: false },
+              { name: 'Type', value: item.type || 'Unknown', inline: true },
+              { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
+              { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true }
+            )
+            .setColor('#4CAF50')
+            .setTimestamp()
+            .setFooter({ text: `Item ID: ${item.id}` });
+          
+          if (item.trait) {
+            embed.addFields({ name: 'Trait', value: item.trait, inline: true });
+          }
+          
+          if (item.icon) {
+            embed.setThumbnail(item.icon);
+          }
+          
+          // Send to channel
+          const message = await sendNotificationToConfiguredChannel(
+            item.guild_id, 
+            item.discord_guild_id, 
+            'storage', 
+            embed
+          );
+          
+          // Add reactions if message was sent
+          if (message) {
+            await message.react('1️⃣');
+            await message.react('2️⃣');
+            await message.react('3️⃣');
+            await message.react('4️⃣');
+            await message.react('5️⃣');
+            
+            // Set up reaction collector
+            const filter = (reaction, user) => {
+              return ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'].includes(reaction.emoji.name) && !user.bot;
+            };
+            
+            const collector = message.createReactionCollector({ filter, time: 604800000 });
+            
+            collector.on('collect', async (reaction, user) => {
+              try {
+                // Determine quantity from reaction
+                let quantity = 1;
+                switch(reaction.emoji.name) {
+                  case '2️⃣': quantity = 2; break;
+                  case '3️⃣': quantity = 3; break;
+                  case '4️⃣': quantity = 4; break;
+                  case '5️⃣': quantity = 5; break;
+                }
+                
+                // Get user from database
+                const userResult = await pool.query(
+                  'SELECT id, username FROM users WHERE discord_id = $1',
+                  [user.id]
+                );
+                
+                if (!userResult.rows.length) {
+                  try {
+                    await user.send(`You need to register on the website first before requesting items.`);
+                  } catch (dmError) {
+                    console.error(`Could not DM user ${user.id}:`, dmError);
+                  }
+                  return;
+                }
+                
+                const userId = userResult.rows[0].id;
+                
+                // Check item availability
+                const currentItemResult = await pool.query(
+                  `SELECT quantity FROM guild_storage_items WHERE id = $1`,
+                  [item.id]
+                );
+                
+                if (!currentItemResult.rows.length || currentItemResult.rows[0].quantity < quantity) {
+                  try {
+                    await user.send(`Sorry, "${item.name}" is not available in the requested quantity.`);
+                  } catch (dmError) {
+                    console.error(`Could not DM user ${user.id}:`, dmError);
+                  }
+                  return;
+                }
+                
+                // Check for existing request
+                const existingRequestResult = await pool.query(
+                  `SELECT id FROM loot_requests 
+                   WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
+                  [item.id, userId]
+                );
+                
+                if (existingRequestResult.rows.length) {
+                  try {
+                    await user.send(`You already have a pending request for "${item.name}".`);
+                  } catch (dmError) {
+                    console.error(`Could not DM user ${user.id}:`, dmError);
+                  }
+                  return;
+                }
+                
+                // Create loot request
+                await pool.query(
+                  `INSERT INTO loot_requests
+                   (id, guild_id, storage_item_id, user_id, status, created_at, updated_at)
+                   VALUES
+                   (gen_random_uuid(), $1, $2, $3, 'Pending', NOW(), NOW())`,
+                  [item.guild_id, item.id, userId]
+                );
+                
+                // Notify user
+                try {
+                  await user.send(`Your request for ${quantity}x "${item.name}" has been submitted!`);
+                } catch (dmError) {
+                  console.error(`Could not DM user ${user.id}:`, dmError);
+                }
+                
+                // Notify loot channel
+                const requestEmbed = new EmbedBuilder()
+                  .setTitle('New Loot Request')
+                  .setDescription(`**${user.username}** has requested **${quantity}x ${item.name}**`)
+                  .setColor('#9c27b0')
+                  .setTimestamp()
+                  .setFooter({ text: `Item ID: ${item.id}` });
+                
+                await sendNotificationToConfiguredChannel(item.guild_id, item.discord_guild_id, 'loot', requestEmbed);
+              } catch (error) {
+                console.error(`Error processing reaction:`, error);
+              }
+            });
+          }
+        } catch (itemError) {
+          console.error(`Error processing item ${item.id}:`, itemError);
+          // Continue with next item
+        }
+      }
+    } catch (error) {
+      console.error('Error in item polling:', error);
+    }
+  }, 30000); // Poll every 30 seconds
+}
+
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();
   setupScheduledPostings(client);
   verifyEventChannelConfigurations();
+  
+  console.log('Starting storage item polling...');
+  startItemPolling();
 });
 
 // Initialize bot
