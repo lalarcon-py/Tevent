@@ -137,6 +137,37 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
     }, { transaction: t });
 
     await t.commit();
+    
+    // Notify Discord bot about the signup
+    try {
+      // Get user details for the notification
+      const user = await db.User.findByPk(req.body.userId || req.user.id);
+      
+      // Use the Railway internal URL for the Discord bot
+      const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+      
+      console.log(`[INFO] Notifying Discord bot about signup for event ${eventId}`);
+      
+      await axios.post(`${discordBotUrl}/webhook/update-event-signup`, {
+        guildId,
+        eventId,
+        userId: req.body.userId || req.user.id,
+        username: user.username,
+        action: 'signup',
+        role,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`[INFO] Successfully notified Discord bot about signup update`);
+    } catch (webhookError) {
+      console.error('Failed to notify Discord bot about signup update:', {
+        message: webhookError.message,
+        stack: webhookError.stack,
+        eventId
+      });
+      // Don't fail the request if Discord notification fails
+    }
+    
     res.status(200).json(participant);
   } catch (error) {
     await t.rollback();
@@ -199,6 +230,36 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
     }
 
     await t.commit();
+    
+    // Notify Discord bot about the signup change
+    try {
+      // Get user details for the notification
+      const user = await db.User.findByPk(userId);
+      
+      // Use the Railway internal URL for the Discord bot
+      const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+      
+      console.log(`[INFO] Notifying Discord bot about signup change for event ${eventId}`);
+      
+      await axios.post(`${discordBotUrl}/webhook/update-event-signup`, {
+        guildId,
+        eventId,
+        userId,
+        username: user.username,
+        action: isMarkingAbsent ? 'absent' : 'remove',
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`[INFO] Successfully notified Discord bot about signup update`);
+    } catch (webhookError) {
+      console.error('Failed to notify Discord bot about signup change:', {
+        message: webhookError.message,
+        stack: webhookError.stack,
+        eventId
+      });
+      // Don't fail the request if Discord notification fails
+    }
+
     res.status(200).json({ message: 'Participant removed successfully' });
   } catch (error) {
     await t.rollback();
@@ -206,6 +267,8 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
     res.status(500).json({ error: 'Failed to remove participant' });
   }
 });
+
+
 
 router.put('/:id', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();

@@ -2936,6 +2936,163 @@ app.post('/webhook/announce-teams', async (req, res) => {
   }
 });
 
+app.post('/webhook/update-event-signup', async (req, res) => {
+  try {
+    const { guildId, eventId, userId, username, action, role, secret } = req.body;
+    
+    console.log(`[INFO] Received event signup update webhook - Event: ${eventId}, User: ${username}, Action: ${action}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Find the Discord message for this event
+    const messageResult = await pool.query(
+      `SELECT channel_id, message_id FROM discord_event_messages WHERE event_id = $1`,
+      [eventId]
+    );
+    
+    if (!messageResult.rows.length) {
+      console.log(`[INFO] No Discord message found for event ${eventId} - cannot update signup`);
+      return res.json({ success: false, message: 'No Discord message found for this event' });
+    }
+    
+    const { channel_id, message_id } = messageResult.rows[0];
+    
+    // Get the channel and message
+    try {
+      const channel = await client.channels.fetch(channel_id);
+      
+      if (!channel) {
+        console.error(`[ERROR] Channel not found: ${channel_id}`);
+        return res.status(404).json({ error: 'Channel not found' });
+      }
+      
+      const message = await channel.messages.fetch(message_id);
+      
+      if (!message) {
+        console.error(`[ERROR] Message not found: ${message_id}`);
+        return res.status(404).json({ error: 'Message not found' });
+      }
+      
+      // Get updated participant counts to refresh the embed
+      const participantsResult = await pool.query(
+        `SELECT ep.role, u.username, u.discord_id 
+         FROM event_participants ep
+         JOIN users u ON ep.user_id = u.id
+         WHERE ep.event_id = $1
+         ORDER BY ep.created_at ASC`,
+        [eventId]
+      );
+      
+      // Get updated absences
+      const absenteesResult = await pool.query(
+        `SELECT ea.user_id, u.username
+         FROM event_absentees ea
+         JOIN users u ON ea.user_id = u.id
+         WHERE ea.event_id = $1
+         ORDER BY ea.created_at ASC`,
+        [eventId]
+      );
+      
+      // Group participants by role
+      const participants = {
+        TANK: [],
+        HEALER: [],
+        DPS: []
+      };
+      
+      participantsResult.rows.forEach(p => {
+        if (participants[p.role]) {
+          participants[p.role].push(p.username);
+        }
+      });
+      
+      const absentees = absenteesResult.rows.map(a => a.username);
+      
+      // Get the event details
+      const eventResult = await pool.query(
+        `SELECT * FROM events WHERE id = $1`,
+        [eventId]
+      );
+      
+      if (!eventResult.rows.length) {
+        console.error(`[ERROR] Event not found: ${eventId}`);
+        return res.status(404).json({ error: 'Event not found' });
+      }
+      
+      const event = eventResult.rows[0];
+      
+      // Format date and time
+      const eventDate = new Date(event.event_time);
+      const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+      const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+      
+      // Calculate total signup count
+      const totalSignups = Object.values(participants).reduce((sum, list) => sum + list.length, 0);
+      
+      // Create updated embed
+      const updatedEmbed = new EmbedBuilder()
+        .setTitle(`${event.title || 'Event'}`)
+        .setColor('#1a64f3')
+        .setDescription(event.description || 'No description provided')
+        .addFields(
+          { 
+            name: `${totalSignups} (${absentees.length})`, 
+            value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
+            inline: false 
+          },
+          { 
+            name: `🛡️ Tank (${participants.TANK.length})`, 
+            value: participants.TANK.length > 0 ? 
+              participants.TANK.map((name, i) => `${i+1} ${name}`).join('\n') : 
+              '—', 
+            inline: true 
+          },
+          { 
+            name: `⚔️ Dps (${participants.DPS.length})`, 
+            value: participants.DPS.length > 0 ? 
+              participants.DPS.map((name, i) => `${i+1} ${name}`).join('\n') : 
+              '—', 
+            inline: true 
+          },
+          { 
+            name: `💚 Healer (${participants.HEALER.length})`, 
+            value: participants.HEALER.length > 0 ? 
+              participants.HEALER.map((name, i) => `${i+1} ${name}`).join('\n') : 
+              '—', 
+            inline: true 
+          }
+        );
+      
+      // Add absence section if there are any
+      if (absentees.length > 0) {
+        updatedEmbed.addFields({ 
+          name: `⛔ Absence (${absentees.length})`, 
+          value: absentees.join(', '), 
+          inline: false 
+        });
+      }
+      
+      // Add footer
+      updatedEmbed.setFooter({ text: `Event ID: ${eventId}` });
+      
+      // Update the embed
+      await message.edit({ embeds: [updatedEmbed] });
+      
+      console.log(`[INFO] Updated Discord message with new signup data`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error(`[ERROR] Error updating Discord message:`, error);
+      return res.status(500).json({ error: 'Error updating Discord message' });
+    }
+  } catch (error) {
+    console.error(`[ERROR] Error processing event signup update:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();
