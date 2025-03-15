@@ -104,6 +104,8 @@ router.post('/announce-teams', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
     
+    console.log(`Starting team announcement for event ${eventId} in guild ${guildId}`);
+    
     // Get event details
     const event = await db.Event.findOne({
       where: { 
@@ -113,16 +115,8 @@ router.post('/announce-teams', async (req, res) => {
     });
     
     if (!event) {
+      console.error(`Event not found: ${eventId}`);
       return res.status(404).json({ error: 'Event not found' });
-    }
-    
-    // Get Discord guild mapping
-    const mapping = await db.DiscordGuildMapping.findOne({
-      where: { app_guild_id: guildId }
-    });
-    
-    if (!mapping) {
-      return res.status(404).json({ error: 'Discord server not linked to this guild' });
     }
     
     // Format the event and team data
@@ -134,18 +128,36 @@ router.post('/announce-teams', async (req, res) => {
       location: event.location
     };
     
-    // Send to Discord bot
-    const botUrl = process.env.DISCORD_BOT_URL || "http://heartfelt-sparkle.railway.internal:3300";
+    // IMPORTANT: Use the Railway internal URL like in your events.js
+    const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
     
-    const response = await axios.post(`${botUrl}/webhook/announce-teams`, {
-      guildId,
-      eventId,
-      eventData,
-      teams,
-      secret: process.env.BOT_WEBHOOK_SECRET
-    });
-    
-    res.json({ success: true });
+    try {
+      console.log(`Sending team announcement to Discord bot: ${discordBotUrl}/webhook/announce-teams`);
+      
+      // Send to Discord bot using the same approach as your working events code
+      await axios.post(`${discordBotUrl}/webhook/announce-teams`, {
+        guildId,
+        eventId,
+        eventData,
+        teams,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`Successfully sent team announcement to Discord bot`);
+      res.json({ success: true });
+    } catch (webhookError) {
+      // Log error but don't fail the request completely - similar to your event code
+      console.error('Failed to notify Discord bot about teams:', {
+        message: webhookError.message,
+        stack: webhookError.stack,
+        response: webhookError.response?.data
+      });
+      
+      return res.status(500).json({ 
+        error: 'Failed to send team announcement to Discord',
+        details: webhookError.message
+      });
+    }
   } catch (error) {
     console.error('Error announcing teams:', error);
     res.status(500).json({ 

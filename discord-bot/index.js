@@ -2764,6 +2764,7 @@ app.post('/webhook/announce-teams', async (req, res) => {
     }
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    console.log(`[INFO] Found Discord guild mapping: ${discordGuildId}`);
     
     // Get the channel configuration for events
     const channelConfigResult = await pool.query(
@@ -2778,6 +2779,7 @@ app.post('/webhook/announce-teams', async (req, res) => {
     }
     
     const channelId = channelConfigResult.rows[0].channel_id;
+    console.log(`[INFO] Using channel ID: ${channelId}`);
     
     try {
       const channel = await client.channels.fetch(channelId);
@@ -2785,6 +2787,20 @@ app.post('/webhook/announce-teams', async (req, res) => {
       if (!channel) {
         console.error(`[ERROR] Channel not found: ${channelId}`);
         return res.status(404).json({ error: 'Channel not found' });
+      }
+      
+      console.log(`[INFO] Successfully fetched channel: ${channel.name}`);
+      
+      // Send a simple test message first to verify permissions
+      try {
+        await channel.send(`**Team announcement preparation...**`);
+        console.log(`[INFO] Successfully sent test message to channel`);
+      } catch (testError) {
+        console.error(`[ERROR] Failed to send test message to channel:`, testError);
+        return res.status(500).json({ 
+          error: 'Error sending to channel', 
+          details: 'Bot may not have permission to send messages' 
+        });
       }
       
       // Format date and time
@@ -2807,6 +2823,8 @@ app.post('/webhook/announce-teams', async (req, res) => {
         content: `**Team assignments** for **${eventData.title}**`, 
         embeds: [headerEmbed] 
       });
+      
+      console.log(`[INFO] Sent event header. Processing ${teams.length} teams...`);
       
       // Send each team
       for (let i = 0; i < teams.length; i++) {
@@ -2842,8 +2860,10 @@ app.post('/webhook/announce-teams', async (req, res) => {
           allowedMentions: { parse: [] } // Prevent mentions
         });
         
+        console.log(`[INFO] Sent group ${groupNumber}: ${team.name}`);
+        
         // Add a small delay to keep messages in order
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
       
       // Send a footer message
@@ -2854,6 +2874,7 @@ app.post('/webhook/announce-teams', async (req, res) => {
       
       await channel.send({ embeds: [footerEmbed] });
       
+      console.log(`[INFO] Team announcements completed successfully for event ${eventId}`);
       res.json({ success: true });
       
     } catch (channelError) {
