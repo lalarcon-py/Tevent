@@ -3,6 +3,7 @@ const router = express.Router();
 const { Event, User, EventParticipant, Team, TeamMember } = require('../models');
 const db = require('../models');
 const { sequelize } = require('../config/database');
+const axios = require('axios');
 
 // Authentication middleware
 const isAuthenticated = (req, res, next) => {
@@ -352,11 +353,10 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
   }
 });
 
-// Create event
+// Create an event
 router.post('/', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
-
     // Try to get guildId from multiple places
     let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
     
@@ -376,6 +376,7 @@ router.post('/', isAuthenticated, async (req, res) => {
       await t.rollback();
       return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
     }
+    
     const event = await Event.create({
       guild_id: guildId,
       title: req.body.title,
@@ -404,6 +405,30 @@ router.post('/', isAuthenticated, async (req, res) => {
         }]
       }]
     });
+
+    // Notify Discord bot about the new event
+    try {
+      // Use the Railway internal URL for the Discord bot
+      const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+      
+      console.log(`Notifying Discord bot about new event ${event.id}`);
+      
+      // Send the webhook notification
+      await axios.post(`${discordBotUrl}/webhook/new-event`, {
+        guildId: event.guild_id,
+        eventId: event.id,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`Successfully notified Discord bot about event ${event.id}`);
+    } catch (webhookError) {
+      // Just log the error but don't fail the request
+      console.error('Failed to notify Discord bot about new event:', {
+        message: webhookError.message,
+        stack: webhookError.stack,
+        eventId: event.id
+      });
+    }
 
     res.status(201).json(createdEvent);
   } catch (error) {

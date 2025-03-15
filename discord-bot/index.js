@@ -237,20 +237,16 @@ app.post('/webhook/new-item', async (req, res) => {
   }
 });
 
-// Complete webhook endpoint function for new-event
+// Replace the existing app.post('/webhook/new-event'...) function with this:
 app.post('/webhook/new-event', async (req, res) => {
   try {
     const { guildId, eventId, secret } = req.body;
     
+    console.log(`[INFO] Received new event webhook - Guild: ${guildId}, Event: ${eventId}`);
+    
     if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
       return res.status(403).json({ error: 'Unauthorized' });
-    }
-    
-    // Fetch the newly created event
-    const event = await database.getEventById(eventId);
-    
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
     }
     
     // Get Discord guild ID
@@ -260,41 +256,103 @@ app.post('/webhook/new-event', async (req, res) => {
     );
     
     if (!mappingResult.rows.length) {
+      console.error(`[ERROR] Discord guild mapping not found for guild: ${guildId}`);
       return res.status(404).json({ error: 'Discord guild mapping not found' });
     }
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    console.log(`[INFO] Found Discord guild mapping: ${discordGuildId}`);
+    
+    // Get the channel configuration
+    const channelConfigResult = await pool.query(
+      `SELECT channel_id FROM discord_channel_config 
+       WHERE guild_id = $1 AND channel_type = 'events' AND enabled = true`,
+      [guildId]
+    );
+    
+    if (!channelConfigResult.rows.length) {
+      console.error(`[ERROR] No events channel configured for guild: ${guildId}`);
+      return res.status(404).json({ error: 'No events channel configured' });
+    }
+    
+    const channelId = channelConfigResult.rows[0].channel_id;
+    console.log(`[INFO] Using events channel: ${channelId}`);
+    
+    // Fetch the newly created event
+    const eventsResult = await pool.query(
+      `SELECT e.*, 
+             (SELECT COUNT(*) FROM event_participants ep 
+              WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+             (SELECT COUNT(*) FROM event_participants ep 
+              WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+             (SELECT COUNT(*) FROM event_participants ep 
+              WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+      FROM events e
+      WHERE e.id = $1`,
+      [eventId]
+    );
+    
+    if (!eventsResult.rows.length) {
+      console.error(`[ERROR] Event not found: ${eventId}`);
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    
+    const event = eventsResult.rows[0];
+    console.log(`[INFO] Successfully fetched event: ${event.title}`);
     
     // Create the event embed
-    const embed = createEventEmbed(event);
+    const embed = createEventEmbed({
+      ...event,
+      participants: {
+        tank_count: event.tank_count,
+        healer_count: event.healer_count,
+        dps_count: event.dps_count
+      }
+    });
     
     // Add instruction for reaction signups
     embed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
     
-    // Send notification to the configured channel
-    const message = await sendNotificationToConfiguredChannel(
-      guildId, 
-      discordGuildId, 
-      'events', 
-      embed, 
-      `📢 **New Event Created**\n${event.title}`
-    );
+    // Update footer to remove command reference
+    embed.setFooter({ text: `React with emojis below to sign up • Event ID: ${event.id}` });
     
-    if (message) {
+    // Get the channel and send the message
+    try {
+      const channel = await client.channels.fetch(channelId);
+      
+      if (!channel) {
+        console.error(`[ERROR] Channel not found: ${channelId}`);
+        return res.status(404).json({ error: 'Channel not found' });
+      }
+      
+      console.log(`[INFO] Sending event to channel: ${channel.name}`);
+      
+      const message = await channel.send({
+        content: `📢 **New Event Created**\n${event.title}`,
+        embeds: [embed]
+      });
+      
+      console.log(`[INFO] Event message sent successfully`);
+      
       // Add role reactions
       await message.react('🛡️'); // Tank
       await message.react('💚'); // Healer
       await message.react('⚔️'); // DPS
       await message.react('❌'); // Absent
       
-      // Set up reaction collector (24 hour timeout)
+      console.log(`[INFO] Added reactions to event message`);
+      
+      // Set up reaction collector (30 days timeout instead of 24 hours)
       const filter = (reaction, user) => {
         return ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
       };
       
-      const collector = message.createReactionCollector({ filter, time: 86400000 });
+      // Increase timeout to 30 days (2592000000 ms)
+      const collector = message.createReactionCollector({ filter, time: 2592000000 });
       
       collector.on('collect', async (reaction, user) => {
+        console.log(`[INFO] Reaction collected: ${reaction.emoji.name} from user: ${user.tag}`);
+        
         try {
           // Get user from database
           const userResult = await pool.query(
@@ -303,11 +361,12 @@ app.post('/webhook/new-event', async (req, res) => {
           );
           
           if (!userResult.rows.length) {
+            console.log(`[INFO] User not registered: ${user.tag}`);
             // DM the user that they need to register
             try {
               await user.send(`You need to register on the website first before signing up for events.`);
             } catch (dmError) {
-              console.error(`Could not DM user ${user.id}:`, dmError);
+              console.error(`[ERROR] Could not DM user ${user.id}: ${dmError.message}`);
             }
             return;
           }
@@ -351,6 +410,37 @@ app.post('/webhook/new-event', async (req, res) => {
                 await user.send(`You've updated your role for "${event.title}" to ${role}.`);
               } catch (dmError) {}
             } else {
+              // Check if role is full
+              const roleLimits = {
+                'TANK': event.tanks || 0,
+                'HEALER': event.healers || 0,
+                'DPS': event.dps || 0
+              };
+              
+              const roleCountsResult = await pool.query(
+                `SELECT 
+                  SUM(CASE WHEN role = 'TANK' THEN 1 ELSE 0 END) as tank_count,
+                  SUM(CASE WHEN role = 'HEALER' THEN 1 ELSE 0 END) as healer_count,
+                  SUM(CASE WHEN role = 'DPS' THEN 1 ELSE 0 END) as dps_count
+                FROM event_participants
+                WHERE event_id = $1`,
+                [eventId]
+              );
+              
+              const roleCounts = roleCountsResult.rows[0];
+              const currentCounts = {
+                'TANK': parseInt(roleCounts?.tank_count || 0),
+                'HEALER': parseInt(roleCounts?.healer_count || 0),
+                'DPS': parseInt(roleCounts?.dps_count || 0)
+              };
+              
+              if (currentCounts[role] >= roleLimits[role]) {
+                try {
+                  await user.send(`Sorry, the ${role} spots are full for "${event.title}".`);
+                } catch (dmError) {}
+                return;
+              }
+              
               // Create new signup
               await pool.query(
                 `INSERT INTO event_participants 
@@ -416,6 +506,7 @@ app.post('/webhook/new-event', async (req, res) => {
             });
             
             updatedEmbed.setDescription(`${updatedEvent.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+            updatedEmbed.setFooter({ text: `React with emojis below to sign up • Event ID: ${event.id}` });
             
             await message.edit({ embeds: [updatedEmbed] });
           }
@@ -423,11 +514,15 @@ app.post('/webhook/new-event', async (req, res) => {
           console.error('Error processing role signup reaction:', error);
         }
       });
+      
+    } catch (channelError) {
+      console.error(`[ERROR] Error sending to channel: ${channelError.message}`);
+      return res.status(500).json({ error: 'Error sending to channel' });
     }
     
     res.json({ success: true });
   } catch (error) {
-    console.error('Error processing new event webhook:', error);
+    console.error(`[ERROR] Error processing new event webhook: ${error.message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1724,6 +1819,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
     );
     
     if (!configResult.rows.length) {
+      console.log(`No ${type} channel configured for guild ${guildId}`);
       return false; // No channel configured
     }
     
@@ -1733,7 +1829,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
     const channel = await client.channels.fetch(channelId).catch(() => null);
     
     if (!channel) {
-      console.error(`Channel ${channelId} not found`);
+      console.error(`Channel ${channelId} not found for guild ${guildId}, type ${type}`);
       return false;
     }
     
@@ -1743,9 +1839,10 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
       embeds: [embed]
     });
     
-    return message; // Return the message object
+    console.log(`Sent ${type} notification to channel ${channelId} in guild ${discordGuildId}`);
+    return message; // Return the message object for further processing if needed
   } catch (error) {
-    console.error(`Error sending notification to channel:`, error);
+    console.error(`Error sending notification to ${type} channel:`, error);
     return false;
   }
 }
@@ -2041,12 +2138,96 @@ function createEventEmbed(event) {
       { name: 'Location', value: event.location || 'Not specified', inline: true },
       { name: 'Tanks', value: `${tankCount}/${event.tanks}`, inline: true },
       { name: 'Healers', value: `${healerCount}/${event.healers}`, inline: true },
-      { name: 'DPS', value: `${dpsCount}/${event.dps}`, inline: true },
-      { name: 'Event ID', value: event.id, inline: false }
+      { name: 'DPS', value: `${dpsCount}/${event.dps}`, inline: true }
     )
     .setColor('#00cc99')
-    .setFooter({ text: `Use /event-signup to join - Event ID: ${event.id}` });
+    .setFooter({ text: `React with emojis below to sign up • Event ID: ${event.id}` });
 }
+
+async function verifyEventChannelConfigurations() {
+  try {
+    console.log(`[INFO] Verifying event channel configurations`);
+    
+    // Get all guild mappings
+    const mappingsResult = await pool.query('SELECT * FROM discord_guild_mappings');
+    
+    for (const mapping of mappingsResult.rows) {
+      const appGuildId = mapping.app_guild_id;
+      const discordGuildId = mapping.discord_guild_id;
+      
+      // Check if this guild has an events channel configured
+      const channelConfigResult = await pool.query(
+        `SELECT channel_id FROM discord_channel_config 
+         WHERE guild_id = $1 AND channel_type = 'events'`,
+        [appGuildId]
+      );
+      
+      if (!channelConfigResult.rows.length) {
+        console.warn(`[WARN] Guild ${appGuildId} has no events channel configured`);
+        
+        // Try to find a suitable channel automatically
+        try {
+          const guild = await client.guilds.fetch(discordGuildId);
+          const generalChannel = guild.channels.cache.find(
+            c => c.name.includes('general') && c.type === 0
+          );
+          
+          if (generalChannel) {
+            console.log(`[INFO] Found potential channel for guild ${appGuildId}: ${generalChannel.name}`);
+            
+            // Create a message in the general channel to notify admins
+            await generalChannel.send({
+              content: `⚠️ **Notice to Admins**: This server doesn't have an events channel configured for the bot. Please use the \`/config-channel\` command to set up an events channel so that new events can be posted automatically.`
+            });
+          }
+        } catch (guildError) {
+          console.error(`[ERROR] Error checking guild ${discordGuildId}: ${guildError.message}`);
+        }
+      } else {
+        const channelId = channelConfigResult.rows[0].channel_id;
+        console.log(`[INFO] Guild ${appGuildId} has events channel: ${channelId}`);
+        
+        // Verify the channel exists and bot has access
+        try {
+          const channel = await client.channels.fetch(channelId);
+          if (!channel) {
+            console.warn(`[WARN] Channel ${channelId} for guild ${appGuildId} not found`);
+          } else {
+            // Check permissions
+            const permissions = channel.permissionsFor(client.user);
+            if (!permissions.has('SendMessages') || 
+                !permissions.has('EmbedLinks') || 
+                !permissions.has('AddReactions')) {
+              console.warn(`[WARN] Missing permissions in channel ${channelId} for guild ${appGuildId}`);
+              
+              // Try to notify in the channel if we can send messages
+              if (permissions.has('SendMessages')) {
+                await channel.send({
+                  content: `⚠️ **Warning**: I don't have all the permissions I need in this channel. Please make sure I have permissions to send messages, embed links, and add reactions.`
+                });
+              }
+            } else {
+              console.log(`[INFO] Channel ${channelId} for guild ${appGuildId} is properly configured`);
+            }
+          }
+        } catch (channelError) {
+          console.error(`[ERROR] Error checking channel ${channelId}: ${channelError.message}`);
+        }
+      }
+    }
+    
+    console.log(`[INFO] Event channel verification complete`);
+  } catch (error) {
+    console.error(`[ERROR] Error verifying channel configurations: ${error.message}`);
+  }
+}
+
+client.on('ready', () => {
+  console.log(`Logged in as ${client.user.tag}!`);
+  registerCommands();
+  setupScheduledPostings(client);
+  verifyEventChannelConfigurations();
+});
 
 // Initialize bot
 client.login(process.env.DISCORD_BOT_TOKEN);
