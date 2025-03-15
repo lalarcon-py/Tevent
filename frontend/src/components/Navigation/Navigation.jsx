@@ -32,9 +32,9 @@ const Navigation = ({ guildId }) => {
   const [loading, setLoading] = useState(true);
   const [discordConnected, setDiscordConnected] = useState(false);
   
-  // Fetch the user's guild-specific role
+  // Fetch the user's guild-specific role and Discord connection status
   useEffect(() => {
-    const fetchGuildRole = async () => {
+    const fetchGuildData = async () => {
       if (!user) return;
       
       try {
@@ -61,12 +61,19 @@ const Navigation = ({ guildId }) => {
           console.log('Found guild role:', currentMember.role);
           setGuildRole(currentMember.role);
           
-          // Check if Discord is connected
+          // Check if Discord is connected by looking in the discord_guild_mappings table
           try {
-            const discordStatus = await axiosInstance.get(`/api/discord-setup/status?guildId=${currentGuildId}`);
-            setDiscordConnected(discordStatus.data.connected);
+            // This endpoint should check if there's a mapping between this guild and a Discord server
+            const discordMappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mappings?guildId=${currentGuildId}`);
+            
+            // If a mapping exists, the guild is connected to Discord
+            setDiscordConnected(discordMappingResponse.data && 
+                               discordMappingResponse.data.length > 0 && 
+                               discordMappingResponse.data.some(mapping => mapping.app_guild_id === currentGuildId));
+                               
+            console.log('Discord connection status:', discordConnected);
           } catch (err) {
-            console.error('Failed to check Discord status:', err);
+            console.error('Failed to check Discord mapping:', err);
             setDiscordConnected(false);
           }
         } else {
@@ -80,7 +87,7 @@ const Navigation = ({ guildId }) => {
       }
     };
     
-    fetchGuildRole();
+    fetchGuildData();
   }, [user, guildId]);
   
   // Close mobile drawer when route changes
@@ -188,7 +195,7 @@ const Navigation = ({ guildId }) => {
       path: '/billing'
     });
     
-    // Add Discord menu item with appropriate behavior based on connection status
+    // Add Discord menu item conditionally based on connection status
     if (discordConnected) {
       baseMenuItems.push({
         text: 'Discord Settings',
@@ -228,6 +235,9 @@ const Navigation = ({ guildId }) => {
       <Box sx={{ px: 2, py: 1, bgcolor: 'rgba(0,0,0,0.2)' }}>
         <Typography variant="caption" color="text.secondary">
           Guild Role: {loading ? 'Loading...' : (guildRole || 'None')}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block">
+          Discord: {loading ? 'Loading...' : (discordConnected ? 'Connected' : 'Not Connected')}
         </Typography>
       </Box>
       
