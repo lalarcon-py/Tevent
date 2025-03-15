@@ -3296,6 +3296,17 @@ app.post('/webhook/update-event-signup', async (req, res) => {
   }
 });
 
+
+client.on('ready', () => {
+  console.log(`Logged in as ${client.user.tag}!`);
+  registerCommands();
+  setupScheduledPostings(client);
+  verifyEventChannelConfigurations();
+  
+  console.log('Starting storage item polling...');
+  startItemPolling();
+});
+
 function startItemPolling() {
   console.log(`Initial item poll time set to: ${lastItemPoll.toISOString()}`);
   
@@ -3473,16 +3484,6 @@ function startItemPolling() {
     }
   }, 30000); // Poll every 30 seconds
 }
-
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-  registerCommands();
-  setupScheduledPostings(client);
-  verifyEventChannelConfigurations();
-  
-  console.log('Starting storage item polling...');
-  startItemPolling();
-});
 
 // Initialize bot
 client.login(process.env.DISCORD_BOT_TOKEN);
