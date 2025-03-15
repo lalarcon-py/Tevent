@@ -1,4 +1,5 @@
 const db = require('../models');
+const axios = require('axios');
 
 // Get guild storage items
 const getGuildStorageItems = async (req, res) => {
@@ -39,6 +40,7 @@ const getGuildStorageItems = async (req, res) => {
   }
 };
 
+// Add item to storage
 // Add item to storage
 const addItemToStorage = async (req, res) => {
   try {
@@ -121,6 +123,29 @@ const addItemToStorage = async (req, res) => {
         required: false
       }]
     });
+    
+    // Notify Discord bot about the new item
+    try {
+      // Use the Railway internal URL for the Discord bot
+      const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+      
+      console.log(`[INFO] Notifying Discord bot about new storage item ${storageItem.id}`);
+      
+      await axios.post(`${discordBotUrl}/webhook/new-item`, {
+        guildId: guildId,
+        itemId: storageItem.id,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`[INFO] Successfully notified Discord bot about new item`);
+    } catch (webhookError) {
+      console.error('Failed to notify Discord bot about new item:', {
+        message: webhookError.message,
+        stack: webhookError.stack,
+        itemId: storageItem.id
+      });
+      // Don't fail the request if Discord notification fails
+    }
     
     res.status(201).json(fullItem);
   } catch (error) {
