@@ -2871,7 +2871,7 @@ app.post('/webhook/announce-teams', async (req, res) => {
             }
             
             batchEmbed.addFields({
-              name: `Group ${groupNumber}: ${team.name}`,
+              name: `${team.name}`,
               value: teamText || 'No members assigned',
               inline: false
             });
