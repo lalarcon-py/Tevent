@@ -507,6 +507,16 @@ app.post('/webhook/new-event', async (req, res) => {
       [eventId]
     );
     
+    // Get absences
+    const absenteesResult = await pool.query(
+      `SELECT ea.user_id, u.username
+       FROM event_absentees ea
+       JOIN users u ON ea.user_id = u.id
+       WHERE ea.event_id = $1
+       ORDER BY ea.created_at ASC`,
+      [eventId]
+    );
+    
     // Group participants by role
     const participants = {
       TANK: [],
@@ -520,42 +530,66 @@ app.post('/webhook/new-event', async (req, res) => {
       }
     });
     
-    // Convert event time to Unix timestamp for Discord's dynamic time format
-    const eventTime = new Date(eventData.event_time).getTime() / 1000; // Convert to seconds
+    const absentees = absenteesResult.rows.map(a => a.username);
+    
+    // Format date
+    const eventDate = new Date(eventData.event_time);
+    const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+    
+    // Format time
+    const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+    
+    // Calculate total signup count
+    const totalSignups = participantsResult.rows.length;
+    
+    // Build event description
+    const description = [eventData.description || eventData.title || 'Event'].join('\n\n');
     
     // Create embed
     const embed = new EmbedBuilder()
-      .setTitle(`📅 ${eventData.title}`)
-      .setColor('#00cc99')
-      .setDescription(eventData.description || 'No description provided')
+      .setTitle(`${eventData.title || 'Event'}`)
+      .setColor('#1a64f3') // Raid-Helper blue color
+      .setDescription(description)
       .addFields(
         { 
-          name: '⏰ Event Time', 
-          value: `<t:${Math.floor(eventTime)}:F>\n(<t:${Math.floor(eventTime)}:R>)`,
+          name: `${totalSignups} (${eventData.tanks + eventData.healers + eventData.dps - totalSignups > 0 ? '+' + (eventData.tanks + eventData.healers + eventData.dps - totalSignups) : '0'})`, 
+          value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
           inline: false 
         },
         { 
-          name: `🛡️ Tanks (${participants.TANK.length}/${eventData.tanks})`, 
-          value: participants.TANK.length > 0 ? participants.TANK.join('\n') : '—', 
-          inline: false 
+          name: `🛡️ Tank (${participants.TANK.length})`, 
+          value: participants.TANK.length > 0 ? 
+            participants.TANK.map((name, i) => `${i+1} ${name}`).join('\n') : 
+            '—', 
+          inline: true 
         },
         { 
-          name: `💚 Healers (${participants.HEALER.length}/${eventData.healers})`, 
-          value: participants.HEALER.length > 0 ? participants.HEALER.join('\n') : '—', 
-          inline: false 
+          name: `⚔️ Dps (${participants.DPS.length})`, 
+          value: participants.DPS.length > 0 ? 
+            participants.DPS.map((name, i) => `${i+1} ${name}`).join('\n') : 
+            '—', 
+          inline: true 
         },
         { 
-          name: `⚔️ DPS (${participants.DPS.length}/${eventData.dps})`, 
-          value: participants.DPS.length > 0 ? participants.DPS.join('\n') : '—', 
-          inline: false 
+          name: `💚 Healer (${participants.HEALER.length})`, 
+          value: participants.HEALER.length > 0 ? 
+            participants.HEALER.map((name, i) => `${i+1} ${name}`).join('\n') : 
+            '—', 
+          inline: true 
         }
-      )
-      .setFooter({ text: `🛡️ = Tank | 💚 = Healer | ⚔️ = DPS | ❌ = Absent • ID: ${eventId}` });
+      );
     
-    // Add location if specified
-    if (eventData.location && eventData.location !== 'Not specified') {
-      embed.addFields({ name: '📍 Location', value: eventData.location, inline: false });
+    // Add absence section if there are any
+    if (absentees.length > 0) {
+      embed.addFields({ 
+        name: `🚫 Absence (${absentees.length})`, 
+        value: absentees.map((name, i) => `${name}`).join(', '), 
+        inline: false 
+      });
     }
+    
+    // Add footer
+    embed.setFooter({ text: `Event ID: ${eventId}` });
     
     try {
       const channel = await client.channels.fetch(channelId);
@@ -568,7 +602,7 @@ app.post('/webhook/new-event', async (req, res) => {
       console.log(`[INFO] Sending event to channel: ${channel.name}`);
       
       const message = await channel.send({
-        content: `📢 **New Event: ${eventData.title}**\nReact below to sign up!`,
+        content: `**${eventData.title || 'New Event'}**`,
         embeds: [embed]
       });
       
@@ -576,15 +610,15 @@ app.post('/webhook/new-event', async (req, res) => {
       
       // Add role reactions
       await message.react('🛡️'); // Tank
-      await message.react('💚'); // Healer
       await message.react('⚔️'); // DPS
-      await message.react('❌'); // Absent
+      await message.react('💚'); // Healer
+      await message.react('🚫'); // Absence
       
       console.log(`[INFO] Added reactions to event message`);
       
       // Set up reaction collector (7 days)
       const filter = (reaction, user) => {
-        return ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
+        return ['🛡️', '⚔️', '💚', '🚫'].includes(reaction.emoji.name) && !user.bot;
       };
       
       const collector = message.createReactionCollector({ filter, time: 604800000 });
@@ -619,15 +653,15 @@ app.post('/webhook/new-event', async (req, res) => {
               role = 'TANK';
               action = 'signup';
               break;
-            case '💚':
-              role = 'HEALER';
-              action = 'signup';
-              break;
             case '⚔️':
               role = 'DPS';
               action = 'signup';
               break;
-            case '❌':
+            case '💚':
+              role = 'HEALER';
+              action = 'signup';
+              break;
+            case '🚫':
               action = 'absent';
               break;
           }
@@ -677,6 +711,12 @@ app.post('/webhook/new-event', async (req, res) => {
               return;
             }
             
+            // Remove from absentees if present
+            await pool.query(
+              'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+              [eventId, dbUser.id]
+            );
+            
             // Insert new signup
             await pool.query(
               `INSERT INTO event_participants (id, guild_id, event_id, user_id, role, created_at, updated_at)
@@ -691,12 +731,6 @@ app.post('/webhook/new-event', async (req, res) => {
             } catch (dmError) {
               console.log(`[INFO] Could not send confirmation DM: ${dmError.message}`);
             }
-            
-            // Remove from absentees if present
-            await pool.query(
-              'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-              [eventId, dbUser.id]
-            );
           } else if (action === 'absent') {
             console.log(`[INFO] Marking user ${dbUser.username} as absent`);
             
@@ -750,6 +784,16 @@ app.post('/webhook/new-event', async (req, res) => {
             [eventId]
           );
           
+          // Get updated absences
+          const updatedAbsenteesResult = await pool.query(
+            `SELECT ea.user_id, u.username
+             FROM event_absentees ea
+             JOIN users u ON ea.user_id = u.id
+             WHERE ea.event_id = $1
+             ORDER BY ea.created_at ASC`,
+            [eventId]
+          );
+          
           // Group participants by role
           const updatedParticipants = {
             TANK: [],
@@ -763,41 +807,58 @@ app.post('/webhook/new-event', async (req, res) => {
             }
           });
           
-          console.log(`[INFO] Updated participants - Tanks: ${updatedParticipants.TANK.length}, Healers: ${updatedParticipants.HEALER.length}, DPS: ${updatedParticipants.DPS.length}`);
+          const updatedAbsentees = updatedAbsenteesResult.rows.map(a => a.username);
+          
+          console.log(`[INFO] Updated participants - Tanks: ${updatedParticipants.TANK.length}, Healers: ${updatedParticipants.HEALER.length}, DPS: ${updatedParticipants.DPS.length}, Absences: ${updatedAbsentees.length}`);
+          
+          // Calculate new total signup count
+          const updatedTotalSignups = updatedParticipantsResult.rows.length;
           
           // Create updated embed
           const updatedEmbed = new EmbedBuilder()
-            .setTitle(`📅 ${eventData.title}`)
-            .setColor('#00cc99')
-            .setDescription(eventData.description || 'No description provided')
+            .setTitle(`${eventData.title || 'Event'}`)
+            .setColor('#1a64f3') // Raid-Helper blue color
+            .setDescription(description)
             .addFields(
               { 
-                name: '⏰ Event Time', 
-                value: `<t:${Math.floor(eventTime)}:F>\n(<t:${Math.floor(eventTime)}:R>)`,
+                name: `${updatedTotalSignups} (${eventData.tanks + eventData.healers + eventData.dps - updatedTotalSignups > 0 ? '+' + (eventData.tanks + eventData.healers + eventData.dps - updatedTotalSignups) : '0'})`, 
+                value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
                 inline: false 
               },
               { 
-                name: `🛡️ Tanks (${updatedParticipants.TANK.length}/${eventData.tanks})`, 
-                value: updatedParticipants.TANK.length > 0 ? updatedParticipants.TANK.join('\n') : '—', 
-                inline: false 
+                name: `🛡️ Tank (${updatedParticipants.TANK.length})`, 
+                value: updatedParticipants.TANK.length > 0 ? 
+                  updatedParticipants.TANK.map((name, i) => `${i+1} ${name}`).join('\n') : 
+                  '—', 
+                inline: true 
               },
               { 
-                name: `💚 Healers (${updatedParticipants.HEALER.length}/${eventData.healers})`, 
-                value: updatedParticipants.HEALER.length > 0 ? updatedParticipants.HEALER.join('\n') : '—', 
-                inline: false 
+                name: `⚔️ Dps (${updatedParticipants.DPS.length})`, 
+                value: updatedParticipants.DPS.length > 0 ? 
+                  updatedParticipants.DPS.map((name, i) => `${i+1} ${name}`).join('\n') : 
+                  '—', 
+                inline: true 
               },
               { 
-                name: `⚔️ DPS (${updatedParticipants.DPS.length}/${eventData.dps})`, 
-                value: updatedParticipants.DPS.length > 0 ? updatedParticipants.DPS.join('\n') : '—', 
-                inline: false 
+                name: `💚 Healer (${updatedParticipants.HEALER.length})`, 
+                value: updatedParticipants.HEALER.length > 0 ? 
+                  updatedParticipants.HEALER.map((name, i) => `${i+1} ${name}`).join('\n') : 
+                  '—', 
+                inline: true 
               }
-            )
-            .setFooter({ text: `🛡️ = Tank | 💚 = Healer | ⚔️ = DPS | ❌ = Absent • ID: ${eventId}` });
+            );
           
-          // Add location if specified
-          if (eventData.location && eventData.location !== 'Not specified') {
-            updatedEmbed.addFields({ name: '📍 Location', value: eventData.location, inline: false });
+          // Add absence section if there are any
+          if (updatedAbsentees.length > 0) {
+            updatedEmbed.addFields({ 
+              name: `🚫 Absence (${updatedAbsentees.length})`, 
+              value: updatedAbsentees.map((name, i) => `${name}`).join(', '), 
+              inline: false 
+            });
           }
+          
+          // Add footer
+          updatedEmbed.setFooter({ text: `Event ID: ${eventId}` });
           
           await message.edit({ embeds: [updatedEmbed] });
           console.log(`[INFO] Updated event message with current participants`);
