@@ -6,7 +6,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
-const cron = require('node-cron');
+const cron = require('node-cron'); // Added missing import
 
 console.log('Environment Check:', {
   CLIENT_ID: process.env.DISCORD_CLIENT_ID || 'missing',
@@ -14,6 +14,9 @@ console.log('Environment Check:', {
   TOKEN_LENGTH: process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.length : 0
 });
 
+// New environment variables
+const IS_DEV = process.env.NODE_ENV === 'development';
+const TEST_GUILD_ID = process.env.TEST_GUILD_ID;
 
 
 const { Pool } = require('pg');
@@ -495,18 +498,33 @@ const registerCommands = async () => {
       }
     ];
 
-    const CLIENT_ID = '1333905158496587816';
-
-    // Register commands with Discord
+    const CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1333905158496587816';
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+    
     console.log('Started refreshing application (/) commands.');
     
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: commands },
-    );
-
-    console.log('Successfully reloaded application (/) commands.');
+    // Updated with dual registration logic
+    if (IS_DEV && TEST_GUILD_ID) {
+      // Development: Register to test guild for instant updates
+      console.log(`Registering commands to test guild: ${TEST_GUILD_ID}`);
+      
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, TEST_GUILD_ID),
+        { body: commands },
+      );
+      
+      console.log('Successfully reloaded guild commands for development.');
+    } else {
+      // Production: Register globally (takes up to an hour to propagate)
+      console.log('Registering global commands...');
+      
+      await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        { body: commands },
+      );
+      
+      console.log('Successfully reloaded global application commands.');
+    }
   } catch (error) {
     console.error('Error registering commands:', error);
   }
