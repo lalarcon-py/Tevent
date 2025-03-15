@@ -668,7 +668,15 @@ app.post('/webhook/new-event', async (req, res) => {
       
       // Set up reaction collector (7 days)
       const filter = (reaction, user) => {
-        return ['🛡️', '⚔️', '💚', '⛔'].includes(reaction.emoji.name) && !user.bot;
+        const validEmojis = ['🛡️', '⚔️', '💚', '⛔'];
+        if (!validEmojis.includes(reaction.emoji.name) && !user.bot) {
+          // Remove invalid reactions
+          reaction.users.remove(user).catch(error => 
+            console.error(`Failed to remove invalid reaction: ${error}`)
+          );
+          return false;
+        }
+        return validEmojis.includes(reaction.emoji.name) && !user.bot;
       };
       
       const collector = message.createReactionCollector({ filter, time: 604800000 });
@@ -2091,12 +2099,14 @@ async function handleEventsCommand(interaction, appGuildId) {
           // Update the embed with new counts
           const updatedEventResult = await pool.query(
             `SELECT e.*, 
-                  (SELECT COUNT(*) FROM event_participants ep 
-                   WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
-                  (SELECT COUNT(*) FROM event_participants ep 
-                   WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
-                  (SELECT COUNT(*) FROM event_participants ep 
-                   WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+                   (SELECT COUNT(*) FROM event_participants ep 
+                    WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+                   (SELECT COUNT(*) FROM event_participants ep 
+                    WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+                   (SELECT COUNT(*) FROM event_participants ep 
+                    WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count,
+                   (SELECT COUNT(*) FROM event_absentees ea
+                    WHERE ea.event_id = e.id) as absent_count
             FROM events e
             WHERE e.id = $1`,
             [eventId]
@@ -2570,29 +2580,87 @@ async function handleMembersCommand(interaction, appGuildId) {
 }
 
 function createEventEmbed(event) {
-  // Format event time
+  // Format date
   const eventDate = new Date(event.event_time);
-  const dateString = eventDate.toLocaleDateString();
-  const timeString = eventDate.toLocaleTimeString();
+  const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+  
+  // Format time
+  const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
   
   // Get participant counts
   const tankCount = parseInt(event.tank_count || event.participants?.tank_count || 0);
   const healerCount = parseInt(event.healer_count || event.participants?.healer_count || 0);
   const dpsCount = parseInt(event.dps_count || event.participants?.dps_count || 0);
+  const totalSignups = tankCount + healerCount + dpsCount;
+  const absentCount = parseInt(event.absent_count || 0);
   
-  return new EmbedBuilder()
-    .setTitle(event.title)
+  const embed = new EmbedBuilder()
+    .setTitle(`${event.title || 'Event'}`)
+    .setColor('#1a64f3') // Raid-Helper blue color
     .setDescription(event.description || 'No description provided')
     .addFields(
-      { name: 'Date', value: dateString, inline: true },
-      { name: 'Time', value: timeString, inline: true },
-      { name: 'Location', value: event.location || 'Not specified', inline: true },
-      { name: 'Tanks', value: `${tankCount}/${event.tanks}`, inline: true },
-      { name: 'Healers', value: `${healerCount}/${event.healers}`, inline: true },
-      { name: 'DPS', value: `${dpsCount}/${event.dps}`, inline: true }
-    )
-    .setColor('#00cc99')
-    .setFooter({ text: `React with emojis below to sign up • Event ID: ${event.id}` });
+      { 
+        name: `${totalSignups} (${absentCount})`, 
+        value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
+        inline: false 
+      }
+    );
+    
+  // Add role fields with numbered participants
+  let tankValue = '—';
+  let dpsValue = '—';
+  let healerValue = '—';
+  
+  // We'd normally populate these with actual participant names from the database
+  // This is a placeholder for the embed structure
+  if (event.participants) {
+    const tankParticipants = event.participants.filter(p => p.role === 'TANK').map(p => p.User.username);
+    const dpsParticipants = event.participants.filter(p => p.role === 'DPS').map(p => p.User.username);
+    const healerParticipants = event.participants.filter(p => p.role === 'HEALER').map(p => p.User.username);
+    
+    if (tankParticipants.length > 0) {
+      tankValue = tankParticipants.map((name, i) => `${i+1} ${name}`).join('\n');
+    }
+    
+    if (dpsParticipants.length > 0) {
+      dpsValue = dpsParticipants.map((name, i) => `${i+1} ${name}`).join('\n');
+    }
+    
+    if (healerParticipants.length > 0) {
+      healerValue = healerParticipants.map((name, i) => `${i+1} ${name}`).join('\n');
+    }
+  }
+  
+  embed.addFields(
+    { 
+      name: `🛡️ Tank (${tankCount})`, 
+      value: tankValue, 
+      inline: true 
+    },
+    { 
+      name: `⚔️ Dps (${dpsCount})`, 
+      value: dpsValue, 
+      inline: true 
+    },
+    { 
+      name: `💚 Healer (${healerCount})`, 
+      value: healerValue, 
+      inline: true 
+    }
+  );
+  
+  // Add absence section if there are any absentees
+  if (event.absentees && event.absentees.length > 0) {
+    embed.addFields({ 
+      name: `⛔ Absence (${event.absentees.length})`, 
+      value: event.absentees.map(a => a.User.username).join(', '), 
+      inline: false 
+    });
+  }
+  
+  embed.setFooter({ text: `Event ID: ${event.id}` });
+  
+  return embed;
 }
 
 async function verifyEventChannelConfigurations() {

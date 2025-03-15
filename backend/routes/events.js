@@ -40,14 +40,24 @@ router.get('/', async (req, res) => {
     
     const events = await Event.findAll({
       where: { guild_id: guildId },
-      include: [{
-        model: EventParticipant,
-        as: 'participants',
-        include: [{
-          model: User,
-          attributes: ['id', 'username', 'avatar_url']
-        }]
-      }],
+      include: [
+        {
+          model: EventParticipant,
+          as: 'participants',
+          include: [{
+            model: User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        },
+        {
+          model: db.EventAbsentee,
+          as: 'absentees',
+          include: [{
+            model: User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        }
+      ],
       order: [['event_time', 'ASC']]
     });
     res.json(events);
@@ -363,7 +373,7 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
       console.error(`[ERROR] Failed to notify Discord bot about deleted event:`, webhookError);
       // Don't throw error - event was successfully deleted
     }
-    
+
     res.status(200).json({ message: 'Event deleted successfully' });
   } catch (error) {
     await t.rollback();
