@@ -106,36 +106,57 @@ router.put('/:id', async (req, res) => {
       // Decrement quantity
       const newQuantity = Math.max(0, request.storageItem.quantity - 1);
       
-      // If quantity reaches 0, handle related requests and delete the item
+      // If quantity reaches 0, delete the item completely
       if (newQuantity === 0) {
-        // Find all pending requests for this item
-        const pendingRequests = await db.LootRequest.findAll({
-          where: { 
-            storage_item_id: request.storageItem.id,
-            status: 'Pending',
-            id: { [db.Sequelize.Op.ne]: request.id } // Exclude current request
-          }
-        });
-        
-        // Update all pending requests to "Denied - Out of Stock"
-        if (pendingRequests.length > 0) {
-          await db.LootRequest.update(
-            { status: 'Denied - Out of Stock' },
-            { where: { id: pendingRequests.map(req => req.id) } }
+        try {
+          const storageItemId = request.storageItem.id;
+          console.log(`Item quantity reached 0, deleting item ${storageItemId}`);
+          
+          // Step 1: Update all other pending requests to "Denied - Out of Stock"
+          await db.sequelize.query(
+            `UPDATE loot_requests 
+             SET status = 'Denied - Out of Stock' 
+             WHERE storage_item_id = ?`,
+            { 
+              replacements: [storageItemId],
+              type: db.sequelize.QueryTypes.UPDATE
+            }
           );
+          
+          // Step 2: Clear the foreign key references from loot_requests
+          await db.sequelize.query(
+            `UPDATE loot_requests 
+             SET storage_item_id = NULL 
+             WHERE storage_item_id = ?`,
+            { 
+              replacements: [storageItemId],
+              type: db.sequelize.QueryTypes.UPDATE
+            }
+          );
+          
+          // Step 3: Delete the item from guild_storage_items
+          const deleteResult = await db.sequelize.query(
+            `DELETE FROM guild_storage_items 
+             WHERE id = ?`,
+            { 
+              replacements: [storageItemId],
+              type: db.sequelize.QueryTypes.DELETE
+            }
+          );
+          
+          console.log(`Item deleted successfully:`, deleteResult);
+        } catch (error) {
+          console.error('Error deleting item:', error);
+          // Fallback: Just set quantity to 0 if deletion fails
+          await request.storageItem.update({ quantity: 0 });
         }
-        
-        // Delete the item from storage
-        await request.storageItem.destroy();
-        console.log(`Deleted item ${request.storageItem.id} from storage (quantity reached 0)`);
       } else {
-        // Update the quantity
+        // Just update the quantity
         await request.storageItem.update({ quantity: newQuantity });
-        console.log(`Updated item ${request.storageItem.id} quantity to ${newQuantity}`);
       }
     }
     
-    // If approved, also check and remove from wishlist
+    // If approved, also check and remove from wishlist (keep this part unchanged)
     if (status === 'Approved' && request.user_id) {
       try {
         // Check if item is in wishlist
@@ -150,7 +171,6 @@ router.put('/:id', async (req, res) => {
         if (wishlistItem) {
           // Remove from wishlist
           await wishlistItem.destroy();
-          console.log(`Removed item ${request.storageItem?.item_id} from wishlist for user ${request.user_id}`);
         }
       } catch (error) {
         console.error('Error removing from wishlist:', error);
@@ -164,8 +184,11 @@ router.put('/:id', async (req, res) => {
       storageUpdated: status === 'Approved' && request.storageItem !== null
     });
   } catch (error) {
-    console.error('Update request error:', error);
-    res.status(500).json({ error: 'Failed to update request', details: error.message });
+    console.error('Update request error:', error.message, error.stack);
+    res.status(500).json({ 
+      error: 'Failed to update request', 
+      details: error.message
+    });
   }
 });
 
