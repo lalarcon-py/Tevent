@@ -61,19 +61,16 @@ const Navigation = ({ guildId }) => {
           console.log('Found guild role:', currentMember.role);
           setGuildRole(currentMember.role);
           
-          // Check if Discord is connected by looking in the discord_guild_mappings table
+          // Use the discord-setup/status endpoint directly instead of checking mappings
           try {
-            // This endpoint should check if there's a mapping between this guild and a Discord server
-            const discordMappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mappings?guildId=${currentGuildId}`);
+            // This endpoint should directly tell us if Discord is connected
+            const statusResponse = await axiosInstance.get(`/api/discord-setup/status?guildId=${currentGuildId}`);
+            console.log('Discord status response:', statusResponse.data);
             
-            // If a mapping exists, the guild is connected to Discord
-            setDiscordConnected(discordMappingResponse.data && 
-                               discordMappingResponse.data.length > 0 && 
-                               discordMappingResponse.data.some(mapping => mapping.app_guild_id === currentGuildId));
-                               
-            console.log('Discord connection status:', discordConnected);
+            // Set connected status based on the response
+            setDiscordConnected(statusResponse.data && statusResponse.data.connected === true);
           } catch (err) {
-            console.error('Failed to check Discord mapping:', err);
+            console.error('Failed to check Discord status:', err);
             setDiscordConnected(false);
           }
         } else {
