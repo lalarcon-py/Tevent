@@ -2801,35 +2801,15 @@ app.post('/webhook/announce-teams', async (req, res) => {
     // Verify permissions
     try {
       const permissions = channel.permissionsFor(client.user);
-      if (!permissions.has('SendMessages')) {
-        console.error(`[ERROR] Bot lacks permission to send messages in channel ${channelId}`);
+      if (!permissions.has('SendMessages') || !permissions.has('EmbedLinks')) {
+        console.error(`[ERROR] Bot lacks permissions in channel ${channelId}`);
         return res.status(403).json({ 
           error: 'Permission denied',
-          details: 'Bot does not have permission to send messages in this channel'
-        });
-      }
-      
-      if (!permissions.has('EmbedLinks')) {
-        console.error(`[ERROR] Bot lacks permission to embed links in channel ${channelId}`);
-        return res.status(403).json({ 
-          error: 'Permission denied',
-          details: 'Bot does not have permission to embed links in this channel'
+          details: 'Bot requires SendMessages and EmbedLinks permissions'
         });
       }
     } catch (permError) {
       console.error(`[ERROR] Error checking permissions: ${permError.message}`);
-    }
-    
-    // Send a simple test message first to verify permissions
-    try {
-      await channel.send(`Preparing team announcements...`);
-      console.log(`[INFO] Successfully sent test message to channel`);
-    } catch (testError) {
-      console.error(`[ERROR] Failed to send test message: ${testError.message}`);
-      return res.status(500).json({ 
-        error: 'Error sending to channel', 
-        details: `Failed to send test message: ${testError.message}` 
-      });
     }
     
     try {
@@ -2838,59 +2818,93 @@ app.post('/webhook/announce-teams', async (req, res) => {
       const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       
-      // Send the main event message
-      const content = `**Team assignments for ${eventData.title}**\n📅 ${dateFormatted} ⏱️ ${timeFormatted}\n${eventData.location ? `📍 ${eventData.location}` : ''}`;
+      // Send the main event embed
+      const headerEmbed = new EmbedBuilder()
+        .setTitle(`${eventData.title} - Team Assignments`)
+        .setDescription(eventData.description || 'Group assignments for this event')
+        .addFields([
+          { name: 'Event Time', value: `📅 ${dateFormatted} at ${timeFormatted}`, inline: false },
+          { name: 'Location', value: eventData.location || 'Not specified', inline: false }
+        ])
+        .setColor('#1a64f3')
+        .setTimestamp()
+        .setFooter({ text: `Boonstone + Interserver + Open World PvP` });
       
-      await channel.send({ content });
+      await channel.send({ embeds: [headerEmbed] });
+      
+      // Team colors - a palette of modern colors for different teams
+      const teamColors = [
+        '#3498db', '#2ecc71', '#9b59b6', '#e74c3c', '#f1c40f', 
+        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#d35400'
+      ];
       
       console.log(`[INFO] Processing ${teams.length} teams...`);
       
-      // Send each team
+      // Send each team as a separate embed
       for (let i = 0; i < teams.length; i++) {
         const team = teams[i];
         const groupNumber = i + 1;
+        const teamColor = teamColors[i % teamColors.length];
         
         // Group members by role
         const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
         const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
         const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
         
-        // Create content for team message
-        let teamContent = `**Group ${groupNumber}: ${team.name}**\n\n`;
+        // Create team embed
+        const teamEmbed = new EmbedBuilder()
+          .setTitle(`Group ${groupNumber}: ${team.name}`)
+          .setColor(teamColor)
+          .setDescription(`*Team members: ${team.members.length}*`);
         
-        // Add tanks with emoji
+        // Add fields for each role with formatting
         if (tanks.length > 0) {
-          teamContent += `**🛡️ Tanks:**\n${tanks.map((m, idx) => `${idx+1}. ${m.username}`).join('\n')}\n\n`;
-        }
-        
-        // Add healers with emoji
-        if (healers.length > 0) {
-          teamContent += `**💚 Healers:**\n${healers.map((m, idx) => `${idx+1}. ${m.username}`).join('\n')}\n\n`;
-        }
-        
-        // Add DPS with emoji
-        if (dps.length > 0) {
-          teamContent += `**⚔️ DPS:**\n${dps.map((m, idx) => `${idx+1}. ${m.username}`).join('\n')}`;
-        }
-        
-        // Send the team message - simpler approach without embeds
-        try {
-          await channel.send({ 
-            content: teamContent,
-            allowedMentions: { parse: [] } // Prevent mentions
+          teamEmbed.addFields({
+            name: `🛡️ Tanks (${tanks.length})`,
+            value: tanks.map((m, idx) => `\`${idx+1}.\` ${m.username}`).join('\n'),
+            inline: false
           });
+        }
+        
+        if (healers.length > 0) {
+          teamEmbed.addFields({
+            name: `💚 Healers (${healers.length})`,
+            value: healers.map((m, idx) => `\`${idx+1}.\` ${m.username}`).join('\n'),
+            inline: false
+          });
+        }
+        
+        if (dps.length > 0) {
+          teamEmbed.addFields({
+            name: `⚔️ DPS (${dps.length})`,
+            value: dps.map((m, idx) => `\`${idx+1}.\` ${m.username}`).join('\n'),
+            inline: false
+          });
+        }
+        
+        // Add total count
+        const totalMembers = tanks.length + healers.length + dps.length;
+        teamEmbed.setFooter({ text: `Total Members: ${totalMembers}` });
+        
+        // Send the team embed
+        try {
+          await channel.send({ embeds: [teamEmbed] });
           console.log(`[INFO] Sent group ${groupNumber}: ${team.name}`);
         } catch (teamError) {
           console.error(`[ERROR] Failed to send team ${groupNumber}: ${teamError.message}`);
-          // Continue with other teams
         }
         
-        // Add a small delay to avoid rate limits
+        // Small delay to prevent rate limits
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      // Send a footer message
-      await channel.send(`**Team assignments complete!**`);
+      // Send a footer embed to complete the announcement
+      const footerEmbed = new EmbedBuilder()
+        .setDescription(`Team assignments complete for **${eventData.title}**`)
+        .setColor('#4CAF50')
+        .setTimestamp();
+      
+      await channel.send({ embeds: [footerEmbed] });
       
       console.log(`[INFO] Team announcements completed successfully for event ${eventId}`);
       res.json({ success: true });
