@@ -237,6 +237,7 @@ app.post('/webhook/new-item', async (req, res) => {
   }
 });
 
+// Complete webhook endpoint function for new-event
 app.post('/webhook/new-event', async (req, res) => {
   try {
     const { guildId, eventId, secret } = req.body;
@@ -245,8 +246,184 @@ app.post('/webhook/new-event', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
     
-    // Similar flow to post the new event to the events channel
-    // (Implementation details similar to above)
+    // Fetch the newly created event
+    const event = await database.getEventById(eventId);
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    
+    // Get Discord guild ID
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Create the event embed
+    const embed = createEventEmbed(event);
+    
+    // Add instruction for reaction signups
+    embed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+    
+    // Send notification to the configured channel
+    const message = await sendNotificationToConfiguredChannel(
+      guildId, 
+      discordGuildId, 
+      'events', 
+      embed, 
+      `📢 **New Event Created**\n${event.title}`
+    );
+    
+    if (message) {
+      // Add role reactions
+      await message.react('🛡️'); // Tank
+      await message.react('💚'); // Healer
+      await message.react('⚔️'); // DPS
+      await message.react('❌'); // Absent
+      
+      // Set up reaction collector (24 hour timeout)
+      const filter = (reaction, user) => {
+        return ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
+      };
+      
+      const collector = message.createReactionCollector({ filter, time: 86400000 });
+      
+      collector.on('collect', async (reaction, user) => {
+        try {
+          // Get user from database
+          const userResult = await pool.query(
+            'SELECT id, username FROM users WHERE discord_id = $1',
+            [user.id]
+          );
+          
+          if (!userResult.rows.length) {
+            // DM the user that they need to register
+            try {
+              await user.send(`You need to register on the website first before signing up for events.`);
+            } catch (dmError) {
+              console.error(`Could not DM user ${user.id}:`, dmError);
+            }
+            return;
+          }
+          
+          const dbUser = userResult.rows[0];
+          let role, action;
+          
+          switch(reaction.emoji.name) {
+            case '🛡️':
+              role = 'TANK';
+              action = 'signup';
+              break;
+            case '💚':
+              role = 'HEALER';
+              action = 'signup';
+              break;
+            case '⚔️':
+              role = 'DPS';
+              action = 'signup';
+              break;
+            case '❌':
+              action = 'absent';
+              break;
+          }
+          
+          if (action === 'signup') {
+            // Check if already signed up
+            const existingSignupResult = await pool.query(
+              'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, dbUser.id]
+            );
+            
+            if (existingSignupResult.rows.length) {
+              // Update role
+              await pool.query(
+                'UPDATE event_participants SET role = $1 WHERE id = $2',
+                [role, existingSignupResult.rows[0].id]
+              );
+              
+              try {
+                await user.send(`You've updated your role for "${event.title}" to ${role}.`);
+              } catch (dmError) {}
+            } else {
+              // Create new signup
+              await pool.query(
+                `INSERT INTO event_participants 
+                  (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                VALUES
+                  (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                [guildId, eventId, dbUser.id, role]
+              );
+              
+              try {
+                await user.send(`You've been signed up for "${event.title}" as ${role}.`);
+              } catch (dmError) {}
+            }
+          } else if (action === 'absent') {
+            // Delete any existing signup
+            await pool.query(
+              'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, dbUser.id]
+            );
+            
+            // Add to absentees
+            try {
+              await pool.query(
+                `INSERT INTO event_absentees
+                 (id, guild_id, event_id, user_id, created_at, updated_at)
+                 VALUES
+                 (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                 ON CONFLICT (event_id, user_id) DO NOTHING`,
+                [guildId, eventId, dbUser.id]
+              );
+              
+              try {
+                await user.send(`You've been marked as absent for "${event.title}".`);
+              } catch (dmError) {}
+            } catch (insertError) {
+              console.error('Error marking as absent:', insertError);
+            }
+          }
+          
+          // Update the embed with new counts
+          const updatedEventResult = await pool.query(
+            `SELECT e.*, 
+                  (SELECT COUNT(*) FROM event_participants ep 
+                   WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
+                  (SELECT COUNT(*) FROM event_participants ep 
+                   WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
+                  (SELECT COUNT(*) FROM event_participants ep 
+                   WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
+            FROM events e
+            WHERE e.id = $1`,
+            [eventId]
+          );
+          
+          if (updatedEventResult.rows.length) {
+            const updatedEvent = updatedEventResult.rows[0];
+            const updatedEmbed = createEventEmbed({
+              ...updatedEvent,
+              participants: {
+                tank_count: updatedEvent.tank_count,
+                healer_count: updatedEvent.healer_count,
+                dps_count: updatedEvent.dps_count
+              }
+            });
+            
+            updatedEmbed.setDescription(`${updatedEvent.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+            
+            await message.edit({ embeds: [updatedEmbed] });
+          }
+        } catch (error) {
+          console.error('Error processing role signup reaction:', error);
+        }
+      });
+    }
     
     res.json({ success: true });
   } catch (error) {
@@ -1536,7 +1713,8 @@ async function handleConfigChannelCommand(interaction, appGuildId) {
   }
 }
 
-async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type, embed) {
+// Updated sendNotificationToConfiguredChannel function
+async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type, embed, content = null) {
   try {
     // Get channel configuration
     const configResult = await pool.query(
@@ -1560,8 +1738,12 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
     }
     
     // Send notification
-    await channel.send({ embeds: [embed] });
-    return true;
+    const message = await channel.send({
+      content: content || '',
+      embeds: [embed]
+    });
+    
+    return message; // Return the message object
   } catch (error) {
     console.error(`Error sending notification to channel:`, error);
     return false;

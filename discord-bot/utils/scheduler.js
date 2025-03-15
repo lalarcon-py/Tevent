@@ -298,44 +298,33 @@ module.exports = (client) => {
   });
   
   // Helper functions for creating embeds
-  function createEventEmbed(event) {
-    try {
-      // Convert event_time to Date if it's a string
-      const eventTime = typeof event.event_time === 'string' 
-        ? new Date(event.event_time) 
-        : event.event_time;
-      
-      // Handle case where participants might be undefined
-      const participants = event.participants || [];
-      
-      const tankCount = participants.filter(p => p.role === 'TANK').length || 0;
-      const healerCount = participants.filter(p => p.role === 'HEALER').length || 0;
-      const dpsCount = participants.filter(p => p.role === 'DPS').length || 0;
-      
-      const embed = new EmbedBuilder()
-        .setTitle(`📅 ${event.title || 'Unnamed Event'}`)
-        .setDescription(event.description || 'No description provided')
-        .setColor('#3498db')
-        .addFields(
-          { name: '⏰ Time', value: eventTime.toLocaleString(), inline: false },
-          { name: '📍 Location', value: event.location || 'Not specified', inline: false },
-          { name: '🛡️ Tanks', value: `${tankCount}/${event.tanks || 0}`, inline: true },
-          { name: '💚 Healers', value: `${healerCount}/${event.healers || 0}`, inline: true },
-          { name: '⚔️ DPS', value: `${dpsCount}/${event.dps || 0}`, inline: true }
-        )
-        .setFooter({ text: `ID: ${event.id}` })
-        .setTimestamp();
-      
-      return embed;
-    } catch (error) {
-      console.error('Error creating event embed:', error);
-      // Return a simple fallback embed if there's an error
-      return new EmbedBuilder()
-        .setTitle('Event Details')
-        .setDescription('Error creating detailed event information')
-        .setColor('#ff0000');
-    }
-  }
+  // Complete createEventEmbed function
+function createEventEmbed(event) {
+  // Format event time
+  const eventDate = new Date(event.event_time);
+  const dateString = eventDate.toLocaleDateString();
+  const timeString = eventDate.toLocaleTimeString();
+  
+  // Get participant counts
+  const tankCount = parseInt(event.tank_count || event.participants?.tank_count || 0);
+  const healerCount = parseInt(event.healer_count || event.participants?.healer_count || 0);
+  const dpsCount = parseInt(event.dps_count || event.participants?.dps_count || 0);
+  
+  return new EmbedBuilder()
+    .setTitle(event.title)
+    .setDescription(event.description || 'No description provided')
+    .addFields(
+      { name: 'Date', value: dateString, inline: true },
+      { name: 'Time', value: timeString, inline: true },
+      { name: 'Location', value: event.location || 'Not specified', inline: true },
+      { name: 'Tanks', value: `${tankCount}/${event.tanks}`, inline: true },
+      { name: 'Healers', value: `${healerCount}/${event.healers}`, inline: true },
+      { name: 'DPS', value: `${dpsCount}/${event.dps}`, inline: true },
+      { name: 'Event ID', value: event.id, inline: false }
+    )
+    .setColor('#00cc99')
+    .setFooter({ text: `Event ID: ${event.id}` });
+}
   
   function createAttendanceEmbed(stats) {
     try {
