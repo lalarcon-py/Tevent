@@ -2741,6 +2741,132 @@ async function verifyEventChannelConfigurations() {
   }
 }
 
+app.post('/webhook/announce-teams', async (req, res) => {
+  try {
+    const { guildId, eventId, eventData, teams, secret } = req.body;
+    
+    console.log(`[INFO] Received announce teams webhook - Guild: ${guildId}, Event: ${eventId}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get Discord guild ID from app guild ID
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      console.error(`[ERROR] Discord guild mapping not found for guild: ${guildId}`);
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Get the channel configuration for events
+    const channelConfigResult = await pool.query(
+      `SELECT channel_id FROM discord_channel_config 
+       WHERE guild_id = $1 AND channel_type = 'events' AND enabled = true`,
+      [guildId]
+    );
+    
+    if (!channelConfigResult.rows.length) {
+      console.error(`[ERROR] No events channel configured for guild: ${guildId}`);
+      return res.status(404).json({ error: 'No events channel configured' });
+    }
+    
+    const channelId = channelConfigResult.rows[0].channel_id;
+    
+    try {
+      const channel = await client.channels.fetch(channelId);
+      
+      if (!channel) {
+        console.error(`[ERROR] Channel not found: ${channelId}`);
+        return res.status(404).json({ error: 'Channel not found' });
+      }
+      
+      // Format date and time
+      const eventDate = new Date(eventData.event_time);
+      const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+      const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+      
+      // Send the header message
+      const headerEmbed = new EmbedBuilder()
+        .setTitle(`${eventData.title} - Team Assignments`)
+        .setDescription(`${eventData.description || ''}`)
+        .addFields(
+          { name: 'Event Time', value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, inline: false },
+          { name: 'Location', value: eventData.location || 'Not specified', inline: false }
+        )
+        .setColor('#1a64f3')
+        .setTimestamp();
+      
+      await channel.send({ 
+        content: `**Team assignments** for **${eventData.title}**`, 
+        embeds: [headerEmbed] 
+      });
+      
+      // Send each team
+      for (let i = 0; i < teams.length; i++) {
+        const team = teams[i];
+        const groupNumber = i + 1;
+        
+        // Group members by role
+        const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
+        const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
+        const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
+        
+        // Create content for team message
+        let content = `**Group ${groupNumber}: ${team.name}**\n\n`;
+        
+        // Add tanks with emoji
+        if (tanks.length > 0) {
+          content += `**🛡️ Tanks:**\n${tanks.map((m, idx) => `${idx+1}. ${m.username}`).join('\n')}\n\n`;
+        }
+        
+        // Add healers with emoji
+        if (healers.length > 0) {
+          content += `**💚 Healers:**\n${healers.map((m, idx) => `${idx+1}. ${m.username}`).join('\n')}\n\n`;
+        }
+        
+        // Add DPS with emoji
+        if (dps.length > 0) {
+          content += `**⚔️ DPS:**\n${dps.map((m, idx) => `${idx+1}. ${m.username}`).join('\n')}`;
+        }
+        
+        // Send the team message
+        await channel.send({
+          content: content,
+          allowedMentions: { parse: [] } // Prevent mentions
+        });
+        
+        // Add a small delay to keep messages in order
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Send a footer message
+      const footerEmbed = new EmbedBuilder()
+        .setDescription(`Team assignments complete for ${eventData.title}`)
+        .setColor('#4CAF50')
+        .setFooter({ text: `Boonstone + Interserver + Open World PvP` });
+      
+      await channel.send({ embeds: [footerEmbed] });
+      
+      res.json({ success: true });
+      
+    } catch (channelError) {
+      console.error(`[ERROR] Error sending team announcements:`, channelError);
+      return res.status(500).json({ error: 'Error sending to channel' });
+    }
+    
+  } catch (error) {
+    console.error(`[ERROR] Error processing announce teams webhook:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();

@@ -91,4 +91,67 @@ router.get('/guilds/:guildId/verify', async (req, res) => {
   }
 });
 
+router.post('/announce-teams', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { eventId, guildId, teams } = req.body;
+    
+    if (!eventId || !guildId || !teams) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    // Get event details
+    const event = await db.Event.findOne({
+      where: { 
+        id: eventId,
+        guild_id: guildId
+      }
+    });
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    
+    // Get Discord guild mapping
+    const mapping = await db.DiscordGuildMapping.findOne({
+      where: { app_guild_id: guildId }
+    });
+    
+    if (!mapping) {
+      return res.status(404).json({ error: 'Discord server not linked to this guild' });
+    }
+    
+    // Format the event and team data
+    const eventData = {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      event_time: event.event_time,
+      location: event.location
+    };
+    
+    // Send to Discord bot
+    const botUrl = process.env.DISCORD_BOT_URL || "http://heartfelt-sparkle.railway.internal:3300";
+    
+    const response = await axios.post(`${botUrl}/webhook/announce-teams`, {
+      guildId,
+      eventId,
+      eventData,
+      teams,
+      secret: process.env.BOT_WEBHOOK_SECRET
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error announcing teams:', error);
+    res.status(500).json({ 
+      error: 'Failed to announce teams',
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;

@@ -14,6 +14,9 @@ import {
   ListItem,
   ListItemText
 } from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import Alert from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
 import { useParams } from 'react-router-dom';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -332,6 +335,8 @@ const TeamPlanner = () => {
   const [presetName, setPresetName] = useState('');
   const [guildId, setGuildId] = useState(null);
   const [absentees, setAbsentees] = useState([]);
+  const [isAnnouncingTeams, setIsAnnouncingTeams] = useState(false);
+  const [announceSuccess, setAnnounceSuccess] = useState(null);
 
   // First useEffect for fetching initial data
   useEffect(() => {
@@ -439,6 +444,63 @@ const TeamPlanner = () => {
     
     fetchGuildId();
   }, []);
+
+  const handleAnnounceTeams = async () => {
+    if (teams.length === 0) {
+      setAnnounceSuccess({
+        success: false,
+        message: "Can't announce teams: No teams created"
+      });
+      return;
+    }
+    
+    try {
+      setIsAnnouncingTeams(true);
+      
+      // Format teams data
+      const teamsData = teams.map(team => ({
+        id: team.id,
+        name: team.name,
+        members: team.members.map(member => ({
+          id: member.user_id || member.id || (member.User?.id),
+          username: member.User?.username || member.username,
+          role: member.role
+        }))
+      }));
+      
+      const response = await fetch(`${API_URL}/api/discord-bot/announce-teams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          eventId,
+          guildId,
+          teams: teamsData
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to announce teams');
+      }
+      
+      setAnnounceSuccess({
+        success: true,
+        message: "Teams announced successfully to Discord!"
+      });
+    } catch (error) {
+      console.error('Error announcing teams:', error);
+      setAnnounceSuccess({
+        success: false,
+        message: error.message || 'Failed to announce teams'
+      });
+    } finally {
+      setIsAnnouncingTeams(false);
+    }
+  };
+  const handleCloseSnackbar = () => {
+    setAnnounceSuccess(null);
+  };
 
   const handleSignUpAbsentee = async (memberId, role) => {
     try {
@@ -933,6 +995,19 @@ const TeamPlanner = () => {
           >
             Create Team
           </Button>
+          <Button
+            variant="contained"
+            onClick={handleAnnounceTeams}
+            disabled={isAnnouncingTeams || teams.length === 0}
+            startIcon={<SendIcon />}
+            sx={{
+              bgcolor: '#9c27b0',
+              '&:hover': { bgcolor: '#7B1FA2' },
+              '&.Mui-disabled': { bgcolor: 'rgba(156, 39, 176, 0.3)' }
+            }}
+          >
+            {isAnnouncingTeams ? 'Sending...' : 'Announce Teams'}
+          </Button>
         </Box>
       </Box>
   
@@ -1115,6 +1190,22 @@ const TeamPlanner = () => {
           </Button>
         </DialogActions>
       </Dialog>
+  
+      {/* Team announcement notification */}
+      <Snackbar 
+        open={announceSuccess !== null} 
+        autoHideDuration={6000} 
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={announceSuccess?.success ? "success" : "error"}
+          sx={{ width: '100%' }}
+        >
+          {announceSuccess?.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
