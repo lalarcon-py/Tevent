@@ -484,44 +484,71 @@ app.post('/webhook/new-event', async (req, res) => {
     console.log(`[INFO] Using events channel: ${channelId}`);
     
     // Fetch the newly created event
-    const eventsResult = await pool.query(
-      `SELECT e.*, 
-             (SELECT COUNT(*) FROM event_participants ep 
-              WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
-             (SELECT COUNT(*) FROM event_participants ep 
-              WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
-             (SELECT COUNT(*) FROM event_participants ep 
-              WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
-      FROM events e
-      WHERE e.id = $1`,
+    const event = await pool.query(
+      `SELECT * FROM events WHERE id = $1`,
       [eventId]
     );
     
-    if (!eventsResult.rows.length) {
+    if (!event.rows.length) {
       console.error(`[ERROR] Event not found: ${eventId}`);
       return res.status(404).json({ error: 'Event not found' });
     }
     
-    const event = eventsResult.rows[0];
-    console.log(`[INFO] Successfully fetched event: ${event.title}`);
+    const eventData = event.rows[0];
+    console.log(`[INFO] Successfully fetched event: ${eventData.title}`);
     
-    // Create the event embed
-    const embed = createEventEmbed({
-      ...event,
-      participants: {
-        tank_count: event.tank_count,
-        healer_count: event.healer_count,
-        dps_count: event.dps_count
+    // Get current participants
+    const participantsResult = await pool.query(
+      `SELECT ep.role, u.username, u.discord_id 
+       FROM event_participants ep
+       JOIN users u ON ep.user_id = u.id
+       WHERE ep.event_id = $1`,
+      [eventId]
+    );
+    
+    // Group participants by role
+    const participants = {
+      TANK: [],
+      HEALER: [],
+      DPS: []
+    };
+    
+    participantsResult.rows.forEach(p => {
+      if (participants[p.role]) {
+        participants[p.role].push(p.username);
       }
     });
     
-    // Add instruction for reaction signups
-    embed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+    // Create embed
+    const embed = new EmbedBuilder()
+      .setTitle(`📅 ${eventData.title}`)
+      .setColor('#00cc99')
+      .setDescription(eventData.description || 'No description provided')
+      .addFields(
+        { name: 'Date', value: new Date(eventData.event_time).toLocaleDateString(), inline: true },
+        { name: 'Time', value: new Date(eventData.event_time).toLocaleTimeString(), inline: true },
+        { name: 'Location', value: eventData.location || 'Not specified', inline: true },
+        { 
+          name: `🛡️ Tanks (${participants.TANK.length}/${eventData.tanks})`, 
+          value: participants.TANK.length > 0 ? participants.TANK.join('\n') : 'None yet', 
+          inline: false 
+        },
+        { 
+          name: `💚 Healers (${participants.HEALER.length}/${eventData.healers})`, 
+          value: participants.HEALER.length > 0 ? participants.HEALER.join('\n') : 'None yet', 
+          inline: false 
+        },
+        { 
+          name: `⚔️ DPS (${participants.DPS.length}/${eventData.dps})`, 
+          value: participants.DPS.length > 0 ? participants.DPS.join('\n') : 'None yet', 
+          inline: false 
+        }
+      )
+      .setFooter({ text: `React below to sign up • Event ID: ${eventId}` });
     
-    // Update footer to remove command reference
-    embed.setFooter({ text: `React with emojis below to sign up • Event ID: ${event.id}` });
+    // Add extra instructions at the bottom of description
+    embed.setDescription(`${eventData.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
     
-    // Get the channel and send the message
     try {
       const channel = await client.channels.fetch(channelId);
       
@@ -533,7 +560,7 @@ app.post('/webhook/new-event', async (req, res) => {
       console.log(`[INFO] Sending event to channel: ${channel.name}`);
       
       const message = await channel.send({
-        content: `📢 **New Event Created**\n${event.title}`,
+        content: `📢 **New Event Created**\n${eventData.title}`,
         embeds: [embed]
       });
       
@@ -547,32 +574,29 @@ app.post('/webhook/new-event', async (req, res) => {
       
       console.log(`[INFO] Added reactions to event message`);
       
-      // Set up reaction collector (7 days instead of 30 to avoid the integer overflow)
+      // Set up reaction collector (7 days)
       const filter = (reaction, user) => {
         return ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
       };
       
-      // Use a 7-day timeout to avoid the integer overflow (604800000 ms)
       const collector = message.createReactionCollector({ filter, time: 604800000 });
       
       collector.on('collect', async (reaction, user) => {
         console.log(`[INFO] Reaction collected: ${reaction.emoji.name} from user: ${user.id}`);
         
         try {
-          // Look up the user directly in the database
+          // Find user in database
           const userResult = await pool.query(
             'SELECT id, username FROM users WHERE discord_id = $1',
             [user.id]
           );
           
-          console.log(`[DEBUG] User lookup result rows: ${userResult.rows?.length || 0}`);
-          
-          if (!userResult.rows || userResult.rows.length === 0) {
+          if (!userResult.rows.length) {
             console.log(`[INFO] User not found in database: ${user.id}`);
             try {
-              await user.send(`You need to register on the website first before signing up for events.`);
+              await user.send(`You need to register on Tevent.app before signing up for events.`);
             } catch (dmError) {
-              console.error(`[ERROR] Could not DM user: ${dmError.message}`);
+              console.log(`[INFO] Could not DM user: ${dmError.message}`);
             }
             return;
           }
@@ -601,35 +625,72 @@ app.post('/webhook/new-event', async (req, res) => {
           }
           
           if (action === 'signup') {
-            console.log(`[INFO] Processing signup for ${dbUser.username} as ${role}`);
+            console.log(`[INFO] Signing up user ${dbUser.username} as ${role}`);
             
-            // Use direct SQL for better reliability
-            await pool.query(`
-              INSERT INTO event_participants 
-                (id, guild_id, event_id, user_id, role, created_at, updated_at)
-              VALUES 
-                (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())
-              ON CONFLICT (event_id, user_id) 
-              DO UPDATE SET 
-                role = $4,
-                updated_at = NOW()
-            `, [guildId, eventId, dbUser.id, role]);
+            // Check if already signed up for this event
+            const existingSignup = await pool.query(
+              'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, dbUser.id]
+            );
             
-            console.log(`[INFO] Signup processed successfully`);
-            
-            try {
-              await user.send(`You've been signed up for "${event.title}" as ${role}.`);
-            } catch (dmError) {
-              console.log(`[WARN] Could not DM user confirmation: ${dmError.message}`);
+            // If already signed up with same role, do nothing
+            if (existingSignup.rows.length && existingSignup.rows[0].role === role) {
+              console.log(`[INFO] User already signed up with same role: ${role}`);
+              return;
             }
             
-            // Delete any absentee record
+            // If signed up with different role, remove existing signup
+            if (existingSignup.rows.length) {
+              console.log(`[INFO] User changing role from ${existingSignup.rows[0].role} to ${role}`);
+              await pool.query(
+                'DELETE FROM event_participants WHERE id = $1',
+                [existingSignup.rows[0].id]
+              );
+            }
+            
+            // Check if role is full
+            const roleCounts = await pool.query(
+              `SELECT COUNT(*) as count FROM event_participants WHERE event_id = $1 AND role = $2`,
+              [eventId, role]
+            );
+            
+            const currentCount = parseInt(roleCounts.rows[0].count);
+            const maxCount = {
+              'TANK': eventData.tanks,
+              'HEALER': eventData.healers,
+              'DPS': eventData.dps
+            }[role];
+            
+            if (currentCount >= maxCount) {
+              console.log(`[INFO] Role ${role} is full: ${currentCount}/${maxCount}`);
+              try {
+                await user.send(`The ${role} role is full for event "${eventData.title}".`);
+              } catch (dmError) {}
+              return;
+            }
+            
+            // Insert new signup
+            await pool.query(
+              `INSERT INTO event_participants (id, guild_id, event_id, user_id, role, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+              [guildId, eventId, dbUser.id, role]
+            );
+            
+            console.log(`[INFO] User successfully signed up as ${role}`);
+            
+            try {
+              await user.send(`You've been signed up for "${eventData.title}" as ${role}.`);
+            } catch (dmError) {
+              console.log(`[INFO] Could not send confirmation DM: ${dmError.message}`);
+            }
+            
+            // Remove from absentees if present
             await pool.query(
               'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
               [eventId, dbUser.id]
             );
           } else if (action === 'absent') {
-            console.log(`[INFO] Processing absence for ${dbUser.username}`);
+            console.log(`[INFO] Marking user ${dbUser.username} as absent`);
             
             // Remove from participants
             await pool.query(
@@ -637,68 +698,95 @@ app.post('/webhook/new-event', async (req, res) => {
               [eventId, dbUser.id]
             );
             
-            // Create the absentees table if it doesn't exist
-            await pool.query(`
-              CREATE TABLE IF NOT EXISTS event_absentees (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                guild_id UUID NOT NULL,
-                event_id UUID NOT NULL,
-                user_id UUID NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(event_id, user_id)
-              )
-            `);
-            
             // Add to absentees
-            await pool.query(`
-              INSERT INTO event_absentees (id, guild_id, event_id, user_id, created_at, updated_at)
-              VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-              ON CONFLICT (event_id, user_id) DO NOTHING
-            `, [guildId, eventId, dbUser.id]);
-            
-            console.log(`[INFO] Absence processed successfully`);
-            
             try {
-              await user.send(`You've been marked as absent for "${event.title}".`);
-            } catch (dmError) {
-              console.log(`[WARN] Could not DM user confirmation: ${dmError.message}`);
+              // Ensure table exists
+              await pool.query(`
+                CREATE TABLE IF NOT EXISTS event_absentees (
+                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                  guild_id UUID NOT NULL,
+                  event_id UUID NOT NULL,
+                  user_id UUID NOT NULL,
+                  created_at TIMESTAMP DEFAULT NOW(),
+                  updated_at TIMESTAMP DEFAULT NOW(),
+                  UNIQUE(event_id, user_id)
+                )
+              `);
+              
+              await pool.query(
+                `INSERT INTO event_absentees (id, guild_id, event_id, user_id, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                 ON CONFLICT (event_id, user_id) DO NOTHING`,
+                [guildId, eventId, dbUser.id]
+              );
+              
+              console.log(`[INFO] User marked as absent successfully`);
+              
+              try {
+                await user.send(`You've been marked as absent for "${eventData.title}".`);
+              } catch (dmError) {
+                console.log(`[INFO] Could not send confirmation DM: ${dmError.message}`);
+              }
+            } catch (absenteeError) {
+              console.error(`[ERROR] Error marking user as absent:`, absenteeError);
             }
           }
           
-          // Update the event display with current counts
-          const updatedEventResult = await pool.query(
-            `SELECT e.*, 
-                   (SELECT COUNT(*) FROM event_participants ep 
-                    WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
-                   (SELECT COUNT(*) FROM event_participants ep 
-                    WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
-                   (SELECT COUNT(*) FROM event_participants ep 
-                    WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
-             FROM events e
-             WHERE e.id = $1`,
+          // Now update the embed with the current participants
+          const updatedParticipantsResult = await pool.query(
+            `SELECT ep.role, u.username, u.discord_id 
+             FROM event_participants ep
+             JOIN users u ON ep.user_id = u.id
+             WHERE ep.event_id = $1
+             ORDER BY ep.created_at ASC`,
             [eventId]
           );
           
-          if (updatedEventResult.rows.length) {
-            const updatedEvent = updatedEventResult.rows[0];
-            console.log(`[INFO] Updated counts - Tank: ${updatedEvent.tank_count}, Healer: ${updatedEvent.healer_count}, DPS: ${updatedEvent.dps_count}`);
-            
-            const updatedEmbed = createEventEmbed({
-              ...updatedEvent,
-              participants: {
-                tank_count: updatedEvent.tank_count,
-                healer_count: updatedEvent.healer_count,
-                dps_count: updatedEvent.dps_count
+          // Group participants by role
+          const updatedParticipants = {
+            TANK: [],
+            HEALER: [],
+            DPS: []
+          };
+          
+          updatedParticipantsResult.rows.forEach(p => {
+            if (updatedParticipants[p.role]) {
+              updatedParticipants[p.role].push(p.username);
+            }
+          });
+          
+          console.log(`[INFO] Updated participants - Tanks: ${updatedParticipants.TANK.length}, Healers: ${updatedParticipants.HEALER.length}, DPS: ${updatedParticipants.DPS.length}`);
+          
+          // Create updated embed
+          const updatedEmbed = new EmbedBuilder()
+            .setTitle(`📅 ${eventData.title}`)
+            .setColor('#00cc99')
+            .setDescription(`${eventData.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`)
+            .addFields(
+              { name: 'Date', value: new Date(eventData.event_time).toLocaleDateString(), inline: true },
+              { name: 'Time', value: new Date(eventData.event_time).toLocaleTimeString(), inline: true },
+              { name: 'Location', value: eventData.location || 'Not specified', inline: true },
+              { 
+                name: `🛡️ Tanks (${updatedParticipants.TANK.length}/${eventData.tanks})`, 
+                value: updatedParticipants.TANK.length > 0 ? updatedParticipants.TANK.join('\n') : 'None yet', 
+                inline: false 
+              },
+              { 
+                name: `💚 Healers (${updatedParticipants.HEALER.length}/${eventData.healers})`, 
+                value: updatedParticipants.HEALER.length > 0 ? updatedParticipants.HEALER.join('\n') : 'None yet', 
+                inline: false 
+              },
+              { 
+                name: `⚔️ DPS (${updatedParticipants.DPS.length}/${eventData.dps})`, 
+                value: updatedParticipants.DPS.length > 0 ? updatedParticipants.DPS.join('\n') : 'None yet', 
+                inline: false 
               }
-            });
-            
-            updatedEmbed.setDescription(`${updatedEvent.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
-            updatedEmbed.setFooter({ text: `React with emojis below to sign up • Event ID: ${event.id}` });
-            
-            await message.edit({ embeds: [updatedEmbed] });
-            console.log(`[INFO] Updated event display with new counts`);
-          }
+            )
+            .setFooter({ text: `React below to sign up • Event ID: ${eventId}` });
+          
+          await message.edit({ embeds: [updatedEmbed] });
+          console.log(`[INFO] Updated event message with current participants`);
+          
         } catch (error) {
           console.error(`[ERROR] Error processing reaction:`, error);
         }
