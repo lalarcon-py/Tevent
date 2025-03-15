@@ -30,7 +30,9 @@ import BillingPage from './pages/BillingPage';
 import InactiveGuildOverlay from './components/Billing/InactiveGuildOverlay';
 import ApplyToGuildPage from './pages/ApplyToGuildPage';
 import AdminPortal from './pages/AdminPortal';
+import DiscordSettingsPage from "./pages/DiscordSettingsPage";
 import DiscordSetupPage from './pages/DiscordSetupPage';
+
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -212,6 +214,7 @@ function AppContent() {
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/admin" element={<AdminPortal />} />
+          <Route path="/discord/settings" element={<DiscordSettingsPage />} />
           <Route path="*" element={<LandingPage />} />
         </Routes>
       </Router>

@@ -30,6 +30,7 @@ const Navigation = ({ guildId }) => {
   const { logout, user } = useAuth();
   const [guildRole, setGuildRole] = useState('');
   const [loading, setLoading] = useState(true);
+  const [discordConnected, setDiscordConnected] = useState(false);
   
   // Fetch the user's guild-specific role
   useEffect(() => {
@@ -59,6 +60,15 @@ const Navigation = ({ guildId }) => {
         if (currentMember) {
           console.log('Found guild role:', currentMember.role);
           setGuildRole(currentMember.role);
+          
+          // Check if Discord is connected
+          try {
+            const discordStatus = await axiosInstance.get(`/api/discord-setup/status?guildId=${currentGuildId}`);
+            setDiscordConnected(discordStatus.data.connected);
+          } catch (err) {
+            console.error('Failed to check Discord status:', err);
+            setDiscordConnected(false);
+          }
         } else {
           console.log('User not found in guild members');
           setGuildRole('');
@@ -115,7 +125,6 @@ const Navigation = ({ guildId }) => {
       });
   };
   
-
   // Check role permissions
   const isGuildMaster = guildRole === 'Guild Master';
   const isAdvisorOrMaster = ['Guild Master', 'Guild Advisor'].includes(guildRole);
@@ -159,7 +168,7 @@ const Navigation = ({ guildId }) => {
       text: 'Gear Check',
       icon: <FormatListBulletedIcon />,
       path: '/gear-check'
-    },
+    }
   );
   
   // Add conditional menu items
@@ -178,15 +187,21 @@ const Navigation = ({ guildId }) => {
       icon: <ReceiptIcon />,
       path: '/billing'
     });
-  }
-
-  if (isGuildMaster) {
-    baseMenuItems.push({
-      text: 'Discord Integration',
-      icon: <DiscordIcon />,
-      path: '/discord-integration',
-      onClick: () => handleDiscordIntegration()
-    });
+    
+    // Add Discord menu item with appropriate behavior based on connection status
+    if (discordConnected) {
+      baseMenuItems.push({
+        text: 'Discord Settings',
+        icon: <DiscordIcon />,
+        path: '/discord/settings'
+      });
+    } else {
+      baseMenuItems.push({
+        text: 'Connect Discord',
+        icon: <DiscordIcon />,
+        onClick: handleDiscordIntegration
+      });
+    }
   }
 
   const drawer = (
@@ -332,8 +347,9 @@ const Navigation = ({ guildId }) => {
         {baseMenuItems.slice(0, 4).map((item) => (
           <IconButton
             key={item.text}
-            component={Link}
-            to={item.path}
+            component={item.onClick ? 'div' : Link}
+            to={!item.onClick ? item.path : undefined}
+            onClick={item.onClick}
             sx={{ 
               color: location.pathname === item.path ? '#90caf9' : 'white',
               display: 'flex',
