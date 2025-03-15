@@ -502,7 +502,8 @@ app.post('/webhook/new-event', async (req, res) => {
       `SELECT ep.role, u.username, u.discord_id 
        FROM event_participants ep
        JOIN users u ON ep.user_id = u.id
-       WHERE ep.event_id = $1`,
+       WHERE ep.event_id = $1
+       ORDER BY ep.created_at ASC`,
       [eventId]
     );
     
@@ -519,35 +520,42 @@ app.post('/webhook/new-event', async (req, res) => {
       }
     });
     
+    // Convert event time to Unix timestamp for Discord's dynamic time format
+    const eventTime = new Date(eventData.event_time).getTime() / 1000; // Convert to seconds
+    
     // Create embed
     const embed = new EmbedBuilder()
       .setTitle(`📅 ${eventData.title}`)
       .setColor('#00cc99')
       .setDescription(eventData.description || 'No description provided')
       .addFields(
-        { name: 'Date', value: new Date(eventData.event_time).toLocaleDateString(), inline: true },
-        { name: 'Time', value: new Date(eventData.event_time).toLocaleTimeString(), inline: true },
-        { name: 'Location', value: eventData.location || 'Not specified', inline: true },
+        { 
+          name: '⏰ Event Time', 
+          value: `<t:${Math.floor(eventTime)}:F>\n(<t:${Math.floor(eventTime)}:R>)`,
+          inline: false 
+        },
         { 
           name: `🛡️ Tanks (${participants.TANK.length}/${eventData.tanks})`, 
-          value: participants.TANK.length > 0 ? participants.TANK.join('\n') : 'None yet', 
+          value: participants.TANK.length > 0 ? participants.TANK.join('\n') : '—', 
           inline: false 
         },
         { 
           name: `💚 Healers (${participants.HEALER.length}/${eventData.healers})`, 
-          value: participants.HEALER.length > 0 ? participants.HEALER.join('\n') : 'None yet', 
+          value: participants.HEALER.length > 0 ? participants.HEALER.join('\n') : '—', 
           inline: false 
         },
         { 
           name: `⚔️ DPS (${participants.DPS.length}/${eventData.dps})`, 
-          value: participants.DPS.length > 0 ? participants.DPS.join('\n') : 'None yet', 
+          value: participants.DPS.length > 0 ? participants.DPS.join('\n') : '—', 
           inline: false 
         }
       )
-      .setFooter({ text: `React below to sign up • Event ID: ${eventId}` });
+      .setFooter({ text: `🛡️ = Tank | 💚 = Healer | ⚔️ = DPS | ❌ = Absent • ID: ${eventId}` });
     
-    // Add extra instructions at the bottom of description
-    embed.setDescription(`${eventData.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+    // Add location if specified
+    if (eventData.location && eventData.location !== 'Not specified') {
+      embed.addFields({ name: '📍 Location', value: eventData.location, inline: false });
+    }
     
     try {
       const channel = await client.channels.fetch(channelId);
@@ -560,7 +568,7 @@ app.post('/webhook/new-event', async (req, res) => {
       console.log(`[INFO] Sending event to channel: ${channel.name}`);
       
       const message = await channel.send({
-        content: `📢 **New Event Created**\n${eventData.title}`,
+        content: `📢 **New Event: ${eventData.title}**\nReact below to sign up!`,
         embeds: [embed]
       });
       
@@ -761,28 +769,35 @@ app.post('/webhook/new-event', async (req, res) => {
           const updatedEmbed = new EmbedBuilder()
             .setTitle(`📅 ${eventData.title}`)
             .setColor('#00cc99')
-            .setDescription(`${eventData.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`)
+            .setDescription(eventData.description || 'No description provided')
             .addFields(
-              { name: 'Date', value: new Date(eventData.event_time).toLocaleDateString(), inline: true },
-              { name: 'Time', value: new Date(eventData.event_time).toLocaleTimeString(), inline: true },
-              { name: 'Location', value: eventData.location || 'Not specified', inline: true },
+              { 
+                name: '⏰ Event Time', 
+                value: `<t:${Math.floor(eventTime)}:F>\n(<t:${Math.floor(eventTime)}:R>)`,
+                inline: false 
+              },
               { 
                 name: `🛡️ Tanks (${updatedParticipants.TANK.length}/${eventData.tanks})`, 
-                value: updatedParticipants.TANK.length > 0 ? updatedParticipants.TANK.join('\n') : 'None yet', 
+                value: updatedParticipants.TANK.length > 0 ? updatedParticipants.TANK.join('\n') : '—', 
                 inline: false 
               },
               { 
                 name: `💚 Healers (${updatedParticipants.HEALER.length}/${eventData.healers})`, 
-                value: updatedParticipants.HEALER.length > 0 ? updatedParticipants.HEALER.join('\n') : 'None yet', 
+                value: updatedParticipants.HEALER.length > 0 ? updatedParticipants.HEALER.join('\n') : '—', 
                 inline: false 
               },
               { 
                 name: `⚔️ DPS (${updatedParticipants.DPS.length}/${eventData.dps})`, 
-                value: updatedParticipants.DPS.length > 0 ? updatedParticipants.DPS.join('\n') : 'None yet', 
+                value: updatedParticipants.DPS.length > 0 ? updatedParticipants.DPS.join('\n') : '—', 
                 inline: false 
               }
             )
-            .setFooter({ text: `React below to sign up • Event ID: ${eventId}` });
+            .setFooter({ text: `🛡️ = Tank | 💚 = Healer | ⚔️ = DPS | ❌ = Absent • ID: ${eventId}` });
+          
+          // Add location if specified
+          if (eventData.location && eventData.location !== 'Not specified') {
+            updatedEmbed.addFields({ name: '📍 Location', value: eventData.location, inline: false });
+          }
           
           await message.edit({ embeds: [updatedEmbed] });
           console.log(`[INFO] Updated event message with current participants`);
