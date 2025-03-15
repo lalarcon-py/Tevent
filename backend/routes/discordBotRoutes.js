@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const axios = require('axios');
 
 // Get all guild mappings
 router.get('/guild-mappings', async (req, res) => {
