@@ -1605,7 +1605,6 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle loot approval/denial buttons
-      // Handle loot approval/denial buttons
       if (customId.startsWith('approve_loot_') || customId.startsWith('deny_loot_')) {
         const requestId = customId.replace(/^(approve_loot_|deny_loot_)/, '');
         const isApprove = customId.startsWith('approve_loot_');
@@ -1661,7 +1660,7 @@ client.on('interactionCreate', async (interaction) => {
             try {
               await client.query('BEGIN');
               
-              // Update request status
+              // Update request status for the current request
               await client.query(
                 `UPDATE loot_requests 
                 SET status = 'Approved', updated_at = NOW()
@@ -1669,7 +1668,7 @@ client.on('interactionCreate', async (interaction) => {
                 [requestId]
               );
               
-              // Get current quantity first
+              // Get current quantity
               const quantityResult = await client.query(
                 `SELECT quantity FROM guild_storage_items WHERE id = $1`,
                 [request.storage_item_id]
@@ -1692,7 +1691,16 @@ client.on('interactionCreate', async (interaction) => {
                   [request.storage_item_id, requestId]
                 );
                 
-                // Delete the item from storage
+                // IMPORTANT: Clear foreign key references from loot_requests
+                // This is crucial to avoid FK constraint violations
+                await client.query(
+                  `UPDATE loot_requests 
+                  SET storage_item_id = NULL 
+                  WHERE storage_item_id = $1`,
+                  [request.storage_item_id]
+                );
+                
+                // Now it's safe to delete the item
                 await client.query(
                   `DELETE FROM guild_storage_items WHERE id = $1`,
                   [request.storage_item_id]
