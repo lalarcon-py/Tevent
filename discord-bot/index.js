@@ -3296,6 +3296,8 @@ app.post('/webhook/update-event-signup', async (req, res) => {
   }
 });
 
+let lastItemPoll = new Date();
+
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
