@@ -2818,93 +2818,103 @@ app.post('/webhook/announce-teams', async (req, res) => {
       const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       
-      // Send the main event embed
-      const headerEmbed = new EmbedBuilder()
+      // Create a single embed for all teams
+      const mainEmbed = new EmbedBuilder()
         .setTitle(`${eventData.title} - Team Assignments`)
-        .setDescription(eventData.description || 'Group assignments for this event')
-        .addFields([
-          { name: 'Event Time', value: `📅 ${dateFormatted} at ${timeFormatted}`, inline: false },
-          { name: 'Location', value: eventData.location || 'Not specified', inline: false }
-        ])
+        .setDescription(`**Event Time**: 📅 ${dateFormatted} at ${timeFormatted}\n**Location**: ${eventData.location || 'Not specified'}\n\n${eventData.description || ''}`)
         .setColor('#1a64f3')
         .setTimestamp()
         .setFooter({ text: `Boonstone + Interserver + Open World PvP` });
       
-      await channel.send({ embeds: [headerEmbed] });
-      
-      // Team colors - a palette of modern colors for different teams
-      const teamColors = [
-        '#3498db', '#2ecc71', '#9b59b6', '#e74c3c', '#f1c40f', 
-        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#d35400'
-      ];
-      
       console.log(`[INFO] Processing ${teams.length} teams...`);
       
-      // Send each team as a separate embed
-      for (let i = 0; i < teams.length; i++) {
-        const team = teams[i];
-        const groupNumber = i + 1;
-        const teamColor = teamColors[i % teamColors.length];
+      // Discord has a limit of 25 fields per embed
+      const MAX_FIELDS = 25;
+      const needsMultipleEmbeds = teams.length > MAX_FIELDS;
+      
+      // If we need multiple embeds, adjust our approach
+      if (needsMultipleEmbeds) {
+        console.log(`[INFO] Too many teams (${teams.length}) for a single embed, splitting into multiple messages`);
         
-        // Group members by role
-        const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
-        const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
-        const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
+        // Send the header embed first
+        await channel.send({ embeds: [mainEmbed] });
         
-        // Create team embed
-        const teamEmbed = new EmbedBuilder()
-          .setTitle(`Group ${groupNumber}: ${team.name}`)
-          .setColor(teamColor)
-          .setDescription(`*Team members: ${team.members.length}*`);
-        
-        // Add fields for each role with formatting
-        if (tanks.length > 0) {
-          teamEmbed.addFields({
-            name: `🛡️ Tanks (${tanks.length})`,
-            value: tanks.map((m, idx) => `\`${idx+1}.\` ${m.username}`).join('\n'),
+        // Process teams in batches
+        for (let i = 0; i < teams.length; i += MAX_FIELDS) {
+          const teamBatch = teams.slice(i, i + MAX_FIELDS);
+          const batchEmbed = new EmbedBuilder()
+            .setTitle(`${eventData.title} - Teams (continued)`)
+            .setColor('#1a64f3');
+          
+          // Add each team as a field
+          for (let j = 0; j < teamBatch.length; j++) {
+            const team = teamBatch[j];
+            const groupNumber = i + j + 1;
+            
+            // Group members by role with nice formatting
+            const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
+            const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
+            const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
+            
+            let teamText = '';
+            
+            if (tanks.length > 0) {
+              teamText += `🛡️ **Tanks**: ${tanks.map(m => m.username).join(', ')}\n`;
+            }
+            
+            if (healers.length > 0) {
+              teamText += `💚 **Healers**: ${healers.map(m => m.username).join(', ')}\n`;
+            }
+            
+            if (dps.length > 0) {
+              teamText += `⚔️ **DPS**: ${dps.map(m => m.username).join(', ')}`;
+            }
+            
+            batchEmbed.addFields({
+              name: `Group ${groupNumber}: ${team.name}`,
+              value: teamText || 'No members assigned',
+              inline: false
+            });
+          }
+          
+          await channel.send({ embeds: [batchEmbed] });
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } else {
+        // All teams can fit in a single embed
+        // Add each team as a field
+        teams.forEach((team, index) => {
+          const groupNumber = index + 1;
+          
+          // Group members by role with nice formatting
+          const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
+          const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
+          const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
+          
+          let teamText = '';
+          
+          if (tanks.length > 0) {
+            teamText += `🛡️ **Tanks**: ${tanks.map(m => m.username).join(', ')}\n`;
+          }
+          
+          if (healers.length > 0) {
+            teamText += `💚 **Healers**: ${healers.map(m => m.username).join(', ')}\n`;
+          }
+          
+          if (dps.length > 0) {
+            teamText += `⚔️ **DPS**: ${dps.map(m => m.username).join(', ')}`;
+          }
+          
+          mainEmbed.addFields({
+            name: `Group ${groupNumber}: ${team.name}`,
+            value: teamText || 'No members assigned',
             inline: false
           });
-        }
+        });
         
-        if (healers.length > 0) {
-          teamEmbed.addFields({
-            name: `💚 Healers (${healers.length})`,
-            value: healers.map((m, idx) => `\`${idx+1}.\` ${m.username}`).join('\n'),
-            inline: false
-          });
-        }
-        
-        if (dps.length > 0) {
-          teamEmbed.addFields({
-            name: `⚔️ DPS (${dps.length})`,
-            value: dps.map((m, idx) => `\`${idx+1}.\` ${m.username}`).join('\n'),
-            inline: false
-          });
-        }
-        
-        // Add total count
-        const totalMembers = tanks.length + healers.length + dps.length;
-        teamEmbed.setFooter({ text: `Total Members: ${totalMembers}` });
-        
-        // Send the team embed
-        try {
-          await channel.send({ embeds: [teamEmbed] });
-          console.log(`[INFO] Sent group ${groupNumber}: ${team.name}`);
-        } catch (teamError) {
-          console.error(`[ERROR] Failed to send team ${groupNumber}: ${teamError.message}`);
-        }
-        
-        // Small delay to prevent rate limits
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Send the embed with all teams
+        await channel.send({ embeds: [mainEmbed] });
       }
-      
-      // Send a footer embed to complete the announcement
-      const footerEmbed = new EmbedBuilder()
-        .setDescription(`Team assignments complete for **${eventData.title}**`)
-        .setColor('#4CAF50')
-        .setTimestamp();
-      
-      await channel.send({ embeds: [footerEmbed] });
       
       console.log(`[INFO] Team announcements completed successfully for event ${eventId}`);
       res.json({ success: true });
