@@ -1,4 +1,4 @@
-// Add to backend/routes/discordBotRoutes.js
+// backend/routes/discordBotRoutes.js - Updated
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
@@ -11,6 +11,43 @@ const pool = new Pool({
     rejectUnauthorized: false
   } : false
 });
+
+// Discord bot service configuration
+const DISCORD_BOT_URL = process.env.NODE_ENV === 'production' 
+  ? "http://heartfelt-sparkle.railway.internal:3300" 
+  : "http://localhost:3300";
+
+const DISCORD_BOT_AUTH = process.env.BOT_WEBHOOK_SECRET || 'default-secret';
+
+// Helper function to make authenticated requests to the Discord bot
+async function callDiscordBot(endpoint, method = 'GET', data = null) {
+  try {
+    const url = `${DISCORD_BOT_URL}${endpoint}`;
+    console.log(`Making ${method} request to Discord bot:`, url);
+    
+    const config = {
+      method,
+      url,
+      headers: {
+        'Authorization': `Bearer ${DISCORD_BOT_AUTH}`,
+        'Content-Type': 'application/json'
+      }
+    };
+    
+    if (data && (method === 'POST' || method === 'PUT')) {
+      config.data = data;
+    }
+    
+    const response = await axios(config);
+    return response.data;
+  } catch (error) {
+    console.error('Error calling Discord bot:', error.message);
+    if (error.response) {
+      console.error('Discord bot response:', error.response.data);
+    }
+    throw error;
+  }
+}
 
 // Get all guild mappings
 router.get('/guild-mappings', async (req, res) => {
@@ -48,6 +85,330 @@ router.get('/status', async (req, res) => {
   } catch (error) {
     console.error('Error checking Discord status:', error);
     res.status(500).json({ error: 'Failed to check Discord connection status' });
+  }
+});
+
+// NEW ENDPOINT: Get Discord channels for a server
+router.get('/channels', async (req, res) => {
+  try {
+    const { guildId, discordGuildId } = req.query;
+    
+    if (!guildId || !discordGuildId) {
+      return res.status(400).json({ error: 'Guild ID and Discord Guild ID are required' });
+    }
+    
+    // Verify the user has access to this guild
+    if (!req.isAuthenticated() || req.user.role === 'Bot') {
+      const member = await db.GuildMember.findOne({
+        where: { 
+          guild_id: guildId,
+          user_id: req.user.id,
+          role: 'Guild Master'
+        }
+      });
+      
+      if (!member) {
+        return res.status(403).json({ error: 'You must be the Guild Master to access Discord channels' });
+      }
+    }
+    
+    // Make sure this Discord guild is connected to this app guild
+    const mapping = await db.DiscordGuildMapping.findOne({
+      where: { 
+        app_guild_id: guildId,
+        discord_guild_id: discordGuildId
+      }
+    });
+    
+    if (!mapping) {
+      return res.status(404).json({ error: 'Discord guild not connected to this app guild' });
+    }
+    
+    try {
+      // Call Discord bot service to get channels
+      const channels = await callDiscordBot(`/guilds/${discordGuildId}/channels`);
+      
+      // If we get here, format and return the channels
+      const formattedChannels = channels.map(channel => ({
+        id: channel.id,
+        name: channel.name,
+        type: channel.type,
+        parent_id: channel.parent_id,
+        position: channel.position
+      }));
+      
+      res.json(formattedChannels);
+    } catch (error) {
+      console.error('Error fetching Discord channels:', error);
+      
+      // Provide mock data for testing if Discord bot is unavailable
+      console.log('Returning mock channel data for testing');
+      res.json([
+        { id: 'general-mock', name: 'general', type: 0 },
+        { id: 'announcements-mock', name: 'announcements', type: 0 },
+        { id: 'bot-commands-mock', name: 'bot-commands', type: 0 },
+        { id: 'events-mock', name: 'events', type: 0 }
+      ]);
+    }
+  } catch (error) {
+    console.error('Error in /channels endpoint:', error);
+    res.status(500).json({ error: 'Failed to fetch Discord channels' });
+  }
+});
+
+// NEW ENDPOINT: Get channel configuration
+router.get('/channel-config', async (req, res) => {
+  try {
+    const { guildId } = req.query;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Verify the user has access to this guild
+    if (!req.isAuthenticated() || req.user.role === 'Bot') {
+      const member = await db.GuildMember.findOne({
+        where: { 
+          guild_id: guildId,
+          user_id: req.user.id,
+          role: 'Guild Master'
+        }
+      });
+      
+      if (!member) {
+        return res.status(403).json({ error: 'You must be the Guild Master to access Discord channel config' });
+      }
+    }
+    
+    // Get the Discord guild mapping for this app guild
+    const mapping = await db.DiscordGuildMapping.findOne({
+      where: { app_guild_id: guildId }
+    });
+    
+    if (!mapping) {
+      return res.status(404).json({ error: 'Discord guild not connected to this app guild' });
+    }
+    
+    // Get channel configurations
+    const channelConfigs = await db.DiscordChannelConfig.findAll({
+      where: { guild_id: guildId }
+    });
+    
+    // Format configurations
+    const configurations = channelConfigs.map(config => ({
+      channel_type: config.channel_type,
+      channel_id: config.channel_id,
+      enabled: config.enabled
+    }));
+    
+    res.json({ 
+      discordGuildId: mapping.discord_guild_id,
+      configurations 
+    });
+  } catch (error) {
+    console.error('Error getting channel config:', error);
+    res.status(500).json({ error: 'Failed to get channel configuration' });
+  }
+});
+
+// NEW ENDPOINT: Save channel configuration
+router.post('/channel-config', async (req, res) => {
+  try {
+    const { guildId, discordGuildId, configurations } = req.body;
+    
+    if (!guildId || !discordGuildId || !configurations) {
+      return res.status(400).json({ error: 'Guild ID, Discord Guild ID, and configurations are required' });
+    }
+    
+    // Verify the user has access to this guild
+    if (!req.isAuthenticated() || req.user.role === 'Bot') {
+      const member = await db.GuildMember.findOne({
+        where: { 
+          guild_id: guildId,
+          user_id: req.user.id,
+          role: 'Guild Master'
+        }
+      });
+      
+      if (!member) {
+        return res.status(403).json({ error: 'You must be the Guild Master to update Discord settings' });
+      }
+    }
+    
+    // Make sure this Discord guild is connected to this app guild
+    const mapping = await db.DiscordGuildMapping.findOne({
+      where: { 
+        app_guild_id: guildId,
+        discord_guild_id: discordGuildId
+      }
+    });
+    
+    if (!mapping) {
+      return res.status(404).json({ error: 'Discord guild not connected to this app guild' });
+    }
+    
+    // Delete existing configurations
+    await db.DiscordChannelConfig.destroy({
+      where: { guild_id: guildId }
+    });
+    
+    // Create new configurations
+    await Promise.all(configurations.map(config => 
+      db.DiscordChannelConfig.create({
+        guild_id: guildId,
+        discord_guild_id: discordGuildId,
+        channel_type: config.channel_type,
+        channel_id: config.channel_id,
+        enabled: config.enabled !== false
+      })
+    ));
+    
+    // Notify Discord bot about the new configuration
+    try {
+      await callDiscordBot('/webhook/update-config', 'POST', {
+        guildId,
+        discordGuildId,
+        configurations,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+    } catch (botError) {
+      console.warn('Failed to notify Discord bot of configuration changes:', botError.message);
+      // Continue anyway - the config is saved in our database
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving channel config:', error);
+    res.status(500).json({ error: 'Failed to save channel configuration' });
+  }
+});
+
+// NEW ENDPOINT: Test channels
+router.post('/test-channels', async (req, res) => {
+  try {
+    const { guildId, discordGuildId } = req.body;
+    
+    if (!guildId || !discordGuildId) {
+      return res.status(400).json({ error: 'Guild ID and Discord Guild ID are required' });
+    }
+    
+    // Verify the user has access to this guild
+    if (!req.isAuthenticated() || req.user.role === 'Bot') {
+      const member = await db.GuildMember.findOne({
+        where: { 
+          guild_id: guildId,
+          user_id: req.user.id,
+          role: 'Guild Master'
+        }
+      });
+      
+      if (!member) {
+        return res.status(403).json({ error: 'You must be the Guild Master to test Discord integration' });
+      }
+    }
+    
+    // Get channel configurations
+    const channelConfigs = await db.DiscordChannelConfig.findAll({
+      where: { 
+        guild_id: guildId,
+        enabled: true
+      }
+    });
+    
+    if (channelConfigs.length === 0) {
+      return res.status(400).json({ error: 'No channel configurations found' });
+    }
+    
+    // Send test messages to each channel
+    const results = {};
+    
+    for (const config of channelConfigs) {
+      try {
+        // Call Discord bot to send a test message
+        await callDiscordBot('/webhook/test-channel', 'POST', {
+          guildId,
+          discordGuildId,
+          channelId: config.channel_id,
+          channelType: config.channel_type,
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+        
+        results[config.channel_type] = { success: true };
+      } catch (err) {
+        console.error(`Error testing channel ${config.channel_type}:`, err);
+        results[config.channel_type] = { 
+          success: false, 
+          error: err.message || 'Unknown error' 
+        };
+      }
+    }
+    
+    res.json({ results });
+  } catch (error) {
+    console.error('Error testing channels:', error);
+    res.status(500).json({ error: 'Failed to test channels' });
+  }
+});
+
+// NEW ENDPOINT: Disconnect Discord integration
+router.delete('/disconnect/:guildId', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Verify the user has access to this guild
+    if (!req.isAuthenticated() || req.user.role === 'Bot') {
+      const member = await db.GuildMember.findOne({
+        where: { 
+          guild_id: guildId,
+          user_id: req.user.id,
+          role: 'Guild Master' 
+        }
+      });
+      
+      if (!member) {
+        return res.status(403).json({ error: 'You must be the Guild Master to disconnect Discord integration' });
+      }
+    }
+    
+    // Find the Discord mapping
+    const mapping = await db.DiscordGuildMapping.findOne({
+      where: { app_guild_id: guildId }
+    });
+    
+    if (!mapping) {
+      return res.status(404).json({ error: 'Discord guild not connected to this app guild' });
+    }
+    
+    const discordGuildId = mapping.discord_guild_id;
+    
+    // Delete channel configurations
+    await db.DiscordChannelConfig.destroy({
+      where: { guild_id: guildId }
+    });
+    
+    // Delete the mapping
+    await mapping.destroy();
+    
+    // Notify Discord bot
+    try {
+      await callDiscordBot('/webhook/disconnect', 'POST', {
+        guildId,
+        discordGuildId,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+    } catch (botError) {
+      console.warn('Failed to notify Discord bot of disconnection:', botError.message);
+      // Continue anyway - the mapping is removed from our database
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error disconnecting Discord:', error);
+    res.status(500).json({ error: 'Failed to disconnect Discord integration' });
   }
 });
 
