@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, 
-  Button, Avatar, Typography, Box, TextField, useMediaQuery, useTheme, Chip
+  Button, Avatar, Typography, Box, TextField, useMediaQuery, useTheme, Chip,
+  SwipeableDrawer, List, ListItem, ListItemText, ListItemAvatar, Divider,
+  Tooltip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -133,7 +135,8 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
     'Guild Master': 4,
     'Guild Advisor': 3,
     'Guild Guardian': 2,
-    'Guild Member': 1
+    'Member': 1,  // Added this to fix missing role
+    'Guild Member': 1  // Some systems use this name
   };
 
   const getAvailableRoles = () => {
@@ -630,6 +633,7 @@ const NameEditDialog = ({ open, onClose, member, onSave }) => {
 const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrentUser }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user: authCurrentUser } = useAuth();
   const [roleManagementMember, setRoleManagementMember] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
@@ -641,8 +645,10 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
     key: null,
     direction: 'asc'
   });
-
   const [selectedMember, setSelectedMember] = useState(null);
+  const [mobileDetailDrawer, setMobileDetailDrawer] = useState(false);
+  const [activeMobileMember, setActiveMobileMember] = useState(null);
+  
   const effectiveCurrentUser = propCurrentUser || authCurrentUser;
 
   const handleSort = (key) => {
@@ -654,7 +660,6 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   };
 
   useEffect(() => {
-
     if (roleManagementMember && currentUserRole !== 'Guild Master') {
       setRoleManagementMember(null);
     }
@@ -748,8 +753,9 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         console.error('No guild ID found');
         return;
       }
-
-      if (nameEditMember.id !== effectiveCurrentUser?.id && currentUserRole !== 'Guild Master') {
+      
+      // Check if user has permission to edit this name
+      if (nameEditMember.id !== effectiveCurrentUser?.id && effectiveCurrentUser?.role !== 'Guild Master') {
         alert('You do not have permission to edit this name');
         setNameEditMember(null);
         return;
@@ -815,9 +821,15 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
     });
   };
 
-  useEffect(() => {
-    console.log('Current editMember state:', editMember);
-  }, [editMember]);
+  // Mobile touch-friendly drawer for member details
+  const handleMemberTap = (member) => {
+    if (isMobile) {
+      setActiveMobileMember(member);
+      setMobileDetailDrawer(true);
+    } else {
+      setSelectedMember(member);
+    }
+  };
 
   const fetchMembers = async () => {
     try {
@@ -932,6 +944,319 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
     }
   };
 
+  // Render the mobile member list as cards instead of table rows
+  const renderMobileList = () => {
+    return (
+      <List sx={{ width: '100%', bgcolor: '#1e1e1e', p: 0 }}>
+        {sortedMembers.map((member, index) => (
+          <React.Fragment key={member.id}>
+            <ListItem 
+              alignItems="flex-start"
+              sx={{ 
+                py: 2,
+                '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' }
+              }}
+              onClick={() => handleMemberTap(member)}
+            >
+              <ListItemAvatar>
+                <Avatar 
+                  src={member.avatarUrl || member.avatar_url} 
+                  alt={member.username}
+                  sx={{ 
+                    width: 45, 
+                    height: 45,
+                    border: '2px solid #90caf9',
+                    mr: 2
+                  }}
+                />
+              </ListItemAvatar>
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="subtitle1" color="white" sx={{ fontWeight: 'bold' }}>
+                      {member.username}
+                    </Typography>
+                    {member.role === 'Guild Master' && (
+                      <span role="img" aria-label="crown" style={{ fontSize: '14px', color: '#ffd700' }}>👑</span>
+                    )}
+                  </Box>
+                }
+                secondary={
+                  <Box sx={{ mt: 0.5 }}>
+                    <Typography variant="caption" color="#90caf9" component="span">
+                      {member.role}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+                      <Chip 
+                        label={member.status || 'Active'} 
+                        size="small"
+                        sx={{ 
+                          bgcolor: 'rgba(102, 255, 102, 0.2)',
+                          color: '#66ff66',
+                          height: 20,
+                          fontSize: '0.65rem'
+                        }}
+                      />
+                      {member.combat_power && (
+                        <Chip 
+                          label={`CP: ${member.combat_power}`} 
+                          size="small"
+                          sx={{ 
+                            bgcolor: 'rgba(255, 215, 0, 0.2)',
+                            color: '#ffd700',
+                            height: 20,
+                            fontSize: '0.65rem'
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </Box>
+                }
+                sx={{ color: 'white' }}
+              />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, ml: 'auto' }}>
+                {/* Edit button */}
+                {(member.id === effectiveCurrentUser?.id || 
+                  ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role)) && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditMember(member);
+                    }}
+                    sx={{ 
+                      color: '#90caf9',
+                      padding: '8px',
+                      '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.2)' }
+                    }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                )}
+                
+                {/* Role management button - only for Guild Masters */}
+                {effectiveCurrentUser?.role === 'Guild Master' && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRoleManagementMember(member);
+                    }}
+                    sx={{ 
+                      color: '#ffd700',
+                      padding: '8px',
+                      '&:hover': { bgcolor: 'rgba(255, 215, 0, 0.2)' }
+                    }}
+                  >
+                    <span role="img" aria-label="king" style={{ fontSize: '14px' }}>♚</span>
+                  </IconButton>
+                )}
+              </Box>
+            </ListItem>
+            {index < sortedMembers.length - 1 && <Divider variant="inset" component="li" sx={{ bgcolor: '#333' }} />}
+          </React.Fragment>
+        ))}
+      </List>
+    );
+  };
+
+  // Mobile drawer for member details
+  const renderMobileDrawer = () => {
+    if (!activeMobileMember) return null;
+    
+    const member = activeMobileMember;
+    return (
+      <SwipeableDrawer
+        anchor="bottom"
+        open={mobileDetailDrawer}
+        onClose={() => setMobileDetailDrawer(false)}
+        onOpen={() => setMobileDetailDrawer(true)}
+        disableSwipeToOpen
+        sx={{
+          '& .MuiDrawer-paper': {
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            bgcolor: '#262626',
+            maxHeight: '85vh'
+          }
+        }}
+      >
+        <Box sx={{ 
+          width: '40px', 
+          height: '5px', 
+          bgcolor: '#666', 
+          borderRadius: '3px', 
+          mx: 'auto',
+          mt: 1,
+          mb: 2
+        }} />
+        
+        <Box sx={{ px: 3, pb: 4 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <Avatar
+              src={member.avatarUrl || member.avatar_url}
+              alt={member.username}
+              sx={{ width: 60, height: 60, border: '2px solid #90caf9', mr: 2 }}
+            />
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h6" color="white">
+                  {member.username}
+                </Typography>
+                {(member.id === effectiveCurrentUser?.id || effectiveCurrentUser?.role === 'Guild Master') && (
+                  <IconButton 
+                    size="small"
+                    onClick={() => {
+                      setMobileDetailDrawer(false);
+                      setNameEditMember(member);
+                    }}
+                    sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Box>
+              <Typography variant="subtitle2" color="#90caf9">
+                {member.role}
+              </Typography>
+            </Box>
+            
+            {/* Role management button for Guild Masters */}
+            {effectiveCurrentUser?.role === 'Guild Master' && member.id !== effectiveCurrentUser.id && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<span role="img" aria-label="king" style={{ fontSize: '14px' }}>♚</span>}
+                onClick={() => {
+                  setMobileDetailDrawer(false);
+                  setRoleManagementMember(member);
+                }}
+                sx={{ 
+                  ml: 'auto',
+                  borderColor: '#ffd700',
+                  color: '#ffd700',
+                  '&:hover': { borderColor: '#ffd700', bgcolor: 'rgba(255, 215, 0, 0.1)' }
+                }}
+              >
+                Change Role
+              </Button>
+            )}
+          </Box>
+          
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" color="white" gutterBottom>
+              Status
+            </Typography>
+            <Chip 
+              label={member.status || 'Active'} 
+              sx={{ 
+                bgcolor: 'rgba(102, 255, 102, 0.2)',
+                color: '#66ff66',
+                fontWeight: 'medium'
+              }}
+            />
+          </Box>
+          
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" color="white" gutterBottom>
+              Combat Power
+            </Typography>
+            <Typography variant="h5" color="#ffd700">
+              {member.combat_power || 'N/A'}
+            </Typography>
+          </Box>
+          
+          <Box>
+            <Typography variant="subtitle2" color="white" gutterBottom>
+              Builds
+            </Typography>
+            {member.builds?.map((build, index) => (
+              <Box 
+                key={index} 
+                sx={{ 
+                  mb: 2,
+                  p: 2,
+                  bgcolor: 'rgba(144, 202, 249, 0.1)',
+                  borderRadius: 2
+                }}
+              >
+                <Typography variant="subtitle2" color="white" gutterBottom>
+                  Build {index + 1}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {build.primary && (
+                      <img 
+                        src={getWeaponIcon(build.primary)} 
+                        alt={build.primary}
+                        style={{ width: 24, height: 24, objectFit: 'contain' }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    <Typography variant="body2" color="white">
+                      {build.primary}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" color="white">+</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {build.secondary && (
+                      <img 
+                        src={getWeaponIcon(build.secondary)} 
+                        alt={build.secondary}
+                        style={{ width: 24, height: 24, objectFit: 'contain' }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    <Typography variant="body2" color="white">
+                      {build.secondary}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="#90caf9">
+                    {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: build.spec === 'DPS' ? '#ff6666' : 
+                             build.spec === 'Tank' ? '#66b3ff' : 
+                             '#66ff66'
+                    }}
+                  >
+                    {build.spec}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+            
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={() => {
+                setMobileDetailDrawer(false);
+                setEditMember(member);
+              }}
+              sx={{ 
+                mt: 2,
+                bgcolor: member.id === effectiveCurrentUser?.id || 
+                ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role) ? 
+                '#90caf9' : '#666',
+                color: '#000',
+                '&:hover': { bgcolor: '#64b5f6' },
+                '&.Mui-disabled': { bgcolor: '#444', color: '#888' }
+              }}
+              disabled={member.id !== effectiveCurrentUser?.id && 
+                !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role)}
+            >
+              Edit Builds
+            </Button>
+          </Box>
+        </Box>
+      </SwipeableDrawer>
+    );
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3, color: 'white' }}>
@@ -959,19 +1284,23 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
 
   return (
     <>
-      <TableContainer 
-        component={Paper} 
-        sx={{ 
-          bgcolor: '#1e1e1e',
-          overflowX: 'auto', // Ensure horizontal scrolling on mobile
-        }}
-      >
-        <Table size={isMobile ? "small" : "medium"}>
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#1a1a1a' }}>
-              {headers.map((header, index) => (
-                // On mobile, only show important columns
-                (!isMobile || (isMobile && ['Avatar', 'Name', 'Actions'].includes(header.label))) && (
+      {/* Conditional rendering based on device size */}
+      {isMobile ? (
+        // Mobile view with cards
+        renderMobileList()
+      ) : (
+        // Desktop view with table
+        <TableContainer 
+          component={Paper} 
+          sx={{ 
+            bgcolor: '#1e1e1e',
+            overflowX: 'auto',
+          }}
+        >
+          <Table size={isTablet ? "small" : "medium"}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#1a1a1a' }}>
+                {headers.map((header, index) => (
                   <TableCell 
                     key={index}
                     onClick={() => header.key && handleSort(header.key)}
@@ -980,8 +1309,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                       fontWeight: 'bold',
                       borderBottom: '2px solid #90caf9',
                       cursor: header.key ? 'pointer' : 'default',
-                      padding: isMobile ? '8px 4px' : '16px',
-                      whiteSpace: isMobile ? 'nowrap' : 'normal',
+                      padding: isTablet ? '12px 8px' : '16px',
+                      whiteSpace: isTablet ? 'nowrap' : 'normal',
                       userSelect: 'none',
                       '&:hover': {
                         backgroundColor: header.key ? 'rgba(144, 202, 249, 0.1)' : 'inherit',
@@ -997,58 +1326,57 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                       )}
                     </Box>
                   </TableCell>
-                )
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sortedMembers.map((member) => (
-              <TableRow 
-                key={member.id}
-                onClick={() => setSelectedMember(member)}
-                sx={{ 
-                  cursor: 'pointer',
-                  '&:hover': { 
-                    backgroundColor: 'rgba(144, 202, 249, 0.1)',
-                  },
-                  transition: 'background-color 0.2s ease'
-                }}
-              >
-                <TableCell sx={{ 
-                  color: 'white', 
-                  padding: isMobile ? '8px 4px' : '16px', 
-                  width: '50px' 
-                }}>
-                  <Avatar
-                    src={member.avatarUrl || member.avatar_url}
-                    alt={member.username}
-                    sx={{ 
-                      width: isMobile ? 32 : 40, 
-                      height: isMobile ? 32 : 40,
-                      border: '2px solid #90caf9'
-                    }}
-                  />
-                </TableCell>
-                
-                <TableCell sx={{ 
-                  color: 'white', 
-                  paddingLeft: isMobile ? '4px' : '16px',
-                  fontSize: isMobile ? '0.875rem' : 'inherit'
-                }}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    position: 'relative',
-                    '&:hover .name-edit-icon': {
-                      opacity: 1
-                    } 
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sortedMembers.map((member) => (
+                <TableRow 
+                  key={member.id}
+                  onClick={() => setSelectedMember(member)}
+                  sx={{ 
+                    cursor: 'pointer',
+                    '&:hover': { 
+                      backgroundColor: 'rgba(144, 202, 249, 0.1)',
+                    },
+                    transition: 'background-color 0.2s ease'
+                  }}
+                >
+                  <TableCell sx={{ 
+                    color: 'white', 
+                    padding: isTablet ? '12px 8px' : '16px', 
+                    width: '50px' 
                   }}>
-                    <Typography variant={isMobile ? "body2" : "body1"} sx={{ fontWeight: 'bold' }}>
-                      {member.username}
-                    </Typography>
-                    
-                    {/* Only show edit icon for current user */}
-                    {(member.id === effectiveCurrentUser?.id || currentUserRole === 'Guild Master') && (
+                    <Avatar
+                      src={member.avatarUrl || member.avatar_url}
+                      alt={member.username}
+                      sx={{ 
+                        width: isTablet ? 36 : 40, 
+                        height: isTablet ? 36 : 40,
+                        border: '2px solid #90caf9'
+                      }}
+                    />
+                  </TableCell>
+                  
+                  <TableCell sx={{ 
+                    color: 'white', 
+                    paddingLeft: isTablet ? '8px' : '16px',
+                    fontSize: isTablet ? '0.875rem' : 'inherit'
+                  }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      position: 'relative',
+                      '&:hover .name-edit-icon': {
+                        opacity: 1
+                      } 
+                    }}>
+                      <Typography variant={isTablet ? "body2" : "body1"} sx={{ fontWeight: 'bold' }}>
+                        {member.username}
+                      </Typography>
+                      
+                      {/* Show edit icon for current user OR if current user is Guild Master */}
+                      {(member.id === effectiveCurrentUser?.id || effectiveCurrentUser?.role === 'Guild Master') && (
                         <IconButton 
                           size="small"
                           className="name-edit-icon"
@@ -1071,161 +1399,159 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                           <EditIcon fontSize="small" />
                         </IconButton>
                       )}
-                    {isMobile && (
-                      <Typography variant="caption" sx={{ color: '#90caf9' }}>
-                        {member.role}
-                      </Typography>
-                    )}
-                  </Box>
-                </TableCell>
-                
-                {/* Only show these cells on desktop */}
-                {!isMobile && (
-                  <>
-                    <TableCell sx={{ color: 'white' }}>{member.role}</TableCell>
-                    <TableCell sx={{ color: 'white' }}>
-                      <Chip 
-                        label={member.status || 'Active'} 
-                        sx={{ 
-                          bgcolor: 'rgba(102, 255, 102, 0.2)',
-                          color: '#66ff66',
-                          fontWeight: 'medium'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell sx={{ color: 'white' }}>
-                      {member.builds?.map((build, index) => (
-                        <div 
-                          key={index} 
-                          style={{ 
-                            margin: '0.5rem 0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px'
-                          }}
-                        >
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px' 
-                          }}>
-                            {build.primary && (
-                              <img 
-                                src={getWeaponIcon(build.primary)} 
-                                alt={build.primary}
-                                style={{ 
-                                  width: 24, 
-                                  height: 24,
-                                  objectFit: 'contain'
-                                }}
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                }}
-                              />
-                            )}
-                            {build.secondary && (
-                              <img 
-                                src={getWeaponIcon(build.secondary)} 
-                                alt={build.secondary}
-                                style={{ 
-                                  width: 24, 
-                                  height: 24,
-                                  objectFit: 'contain'
-                                }}
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                }}
-                              />
-                            )}
-                          </div>
-                          <span style={{ color: '#90caf9' }}>
-                            {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
-                          </span>
-                        </div>
-                      ))}
-                    </TableCell>
-                    <TableCell sx={{ color: 'white' }}>
-                      {member.builds?.map((build, index) => (
-                        <div 
-                          key={index} 
-                          style={{ 
-                            margin: '0.5rem 0',
-                            color: build.spec === 'DPS' ? '#ff6666' : 
-                                  build.spec === 'Tank' ? '#66b3ff' : 
-                                  '#66ff66'
-                          }}
-                        >
-                          ⚔ {build.spec}
-                        </div>
-                      ))}
-                    </TableCell>
-                    <TableCell sx={{ color: 'white' }}>
-                      {member.builds?.map((build, index) => (
-                        <div 
-                          key={index} 
-                          style={{ 
-                            margin: '0.5rem 0',
-                            color: '#ffd700'
-                          }}
-                        >
-                          {member.combat_power || 'N/A'}
-                        </div>
-                      ))}
-                    </TableCell>
-                  </>
-                )}
-                
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
-                    {/* Existing edit button remains */}
-                    {(member.id === effectiveCurrentUser?.id || 
-                      ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUserRole)) && (
-                      <IconButton 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditMember(member);
-                        }}
-                        sx={{ 
-                          color: '#90caf9',
-                          padding: isMobile ? '4px' : '8px',
-                          '&:hover': { 
-                            bgcolor: 'rgba(144, 202, 249, 0.2)',
-                            transform: 'scale(1.1)'
-                          }
+                    </Box>
+                  </TableCell>
+                  
+                  <TableCell sx={{ color: 'white' }}>{member.role}</TableCell>
+                  <TableCell sx={{ color: 'white' }}>
+                    <Chip 
+                      label={member.status || 'Active'} 
+                      sx={{ 
+                        bgcolor: 'rgba(102, 255, 102, 0.2)',
+                        color: '#66ff66',
+                        fontWeight: 'medium'
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ color: 'white' }}>
+                    {member.builds?.map((build, index) => (
+                      <div 
+                        key={index} 
+                        style={{ 
+                          margin: '0.5rem 0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px'
                         }}
                       >
-                        <EditIcon fontSize={isMobile ? "small" : "medium"} />
-                      </IconButton>
-                    )}
-                    
-                    {/* King chess piece button ONLY appears if the current user is a Guild Master */}
-                    {effectiveCurrentUser?.role === 'Guild Master' && (
-                      <IconButton 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRoleManagementMember(member);
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px' 
+                        }}>
+                          {build.primary && (
+                            <img 
+                              src={getWeaponIcon(build.primary)} 
+                              alt={build.primary}
+                              style={{ 
+                                width: 24, 
+                                height: 24,
+                                objectFit: 'contain'
+                              }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          )}
+                          {build.secondary && (
+                            <img 
+                              src={getWeaponIcon(build.secondary)} 
+                              alt={build.secondary}
+                              style={{ 
+                                width: 24, 
+                                height: 24,
+                                objectFit: 'contain'
+                              }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span style={{ color: '#90caf9' }}>
+                          {member.weapon_spec || getWeaponSpec(build.primary, build.secondary)}
+                        </span>
+                      </div>
+                    ))}
+                  </TableCell>
+                  <TableCell sx={{ color: 'white' }}>
+                    {member.builds?.map((build, index) => (
+                      <div 
+                        key={index} 
+                        style={{ 
+                          margin: '0.5rem 0',
+                          color: build.spec === 'DPS' ? '#ff6666' : 
+                                build.spec === 'Tank' ? '#66b3ff' : 
+                                '#66ff66'
                         }}
-                        sx={{ 
-                          color: '#ffd700',
-                          padding: isMobile ? '4px' : '8px',
-                          '&:hover': { 
-                            bgcolor: 'rgba(255, 215, 0, 0.2)',
-                            transform: 'scale(1.1)'
-                          }
-                        }}
-                        title="Manage Guild Role"
                       >
-                        <span role="img" aria-label="king" style={{ fontSize: isMobile ? '14px' : '18px' }}>♚</span>
-                      </IconButton>
-                    )}
-                  </Box>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                        ⚔ {build.spec}
+                      </div>
+                    ))}
+                  </TableCell>
+                  <TableCell sx={{ color: 'white' }}>
+                    {member.builds?.map((build, index) => (
+                      <div 
+                        key={index} 
+                        style={{ 
+                          margin: '0.5rem 0',
+                          color: '#ffd700'
+                        }}
+                      >
+                        {member.combat_power || 'N/A'}
+                      </div>
+                    ))}
+                  </TableCell>
+                  
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: isTablet ? 0 : 1 }}>
+                      {/* Show edit icon if it's the current user's own profile OR if the current user has admin privileges */}
+                      {(member.id === effectiveCurrentUser?.id || 
+                        ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role)) && (
+                        <Tooltip title="Edit Builds">
+                          <IconButton 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditMember(member);
+                            }}
+                            sx={{ 
+                              color: '#90caf9',
+                              padding: isTablet ? '6px' : '8px',
+                              '&:hover': { 
+                                bgcolor: 'rgba(144, 202, 249, 0.2)',
+                                transform: 'scale(1.1)'
+                              }
+                            }}
+                          >
+                            <EditIcon fontSize={isTablet ? "small" : "medium"} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      
+                      {/* King chess piece button ONLY appears if the current user is a Guild Master */}
+                      {effectiveCurrentUser?.role === 'Guild Master' && (
+                        <Tooltip title="Manage Guild Role">
+                          <IconButton 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRoleManagementMember(member);
+                            }}
+                            sx={{ 
+                              color: '#ffd700', // Gold color for king
+                              padding: isTablet ? '6px' : '8px',
+                              '&:hover': { 
+                                bgcolor: 'rgba(255, 215, 0, 0.2)',
+                                transform: 'scale(1.1)'
+                              }
+                            }}
+                          >
+                            <span role="img" aria-label="king" style={{ fontSize: isTablet ? '14px' : '18px' }}>♚</span>
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
   
+      {/* Mobile drawer for member details */}
+      {renderMobileDrawer()}
+      
+      {/* Dialogs remain unchanged */}
       {editMember && (
         <EditMemberDialog 
           member={editMember} 
@@ -1234,10 +1560,11 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           onSave={handleSave}
         />
       )}
-        {roleManagementMember && (
+  
+      {roleManagementMember && (
         <RoleManagementDialog
           member={roleManagementMember}
-          currentUserRole={currentUserRole}
+          currentUserRole={effectiveCurrentUser?.role}
           currentUser={effectiveCurrentUser}
           onClose={() => setRoleManagementMember(null)}
           onSave={handleRoleSave}
@@ -1253,7 +1580,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         />
       )}
   
-      {selectedMember && (
+      {selectedMember && !isMobile && (
         <MemberProfileModal
           member={selectedMember}
           open={!!selectedMember}
