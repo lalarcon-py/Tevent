@@ -32,10 +32,20 @@ const Navigation = ({ guildId }) => {
   const [loading, setLoading] = useState(true);
   const [discordConnected, setDiscordConnected] = useState(false);
   
+  // Debug function to log state of various values
+  const debugLog = (message, data) => {
+    console.log(`🔍 DEBUG [${new Date().toISOString()}]: ${message}`, data);
+  };
+  
   // Fetch the user's guild-specific role and Discord connection status
   useEffect(() => {
     const fetchGuildData = async () => {
-      if (!user) return;
+      if (!user) {
+        debugLog('No user available, exiting fetchGuildData', null);
+        return;
+      }
+      
+      debugLog('Starting guild data fetch for user', user.id);
       
       try {
         setLoading(true);
@@ -44,83 +54,135 @@ const Navigation = ({ guildId }) => {
         const currentGuildId = guildId || localStorage.getItem('guildId');
         
         if (!currentGuildId) {
-          console.log('No guild ID available');
+          debugLog('No guild ID available', null);
           setLoading(false);
           return;
         }
         
+        debugLog('Current guild ID', currentGuildId);
+        
         // Fetch guild members
+        debugLog('Fetching guild members', `URL: /api/guilds/${currentGuildId}/members`);
         const response = await axiosInstance.get(`/api/guilds/${currentGuildId}/members`);
+        debugLog('Guild members response status', response.status);
+        debugLog('Guild members count', response.data.length);
         
         // Find current user in members list
         const currentMember = response.data.find(member => member.id === user.id);
+        debugLog('Current member found in guild', currentMember ? 'Yes' : 'No');
         
         if (currentMember) {
+          debugLog('User role in guild', currentMember.role);
           setGuildRole(currentMember.role);
           
           // Try different approaches to check Discord connection status
+          debugLog('Starting Discord connection checks', null);
           
-          // Approach 1: Check directly with the specific guild
+          // APPROACH 1: Try the most direct endpoint first
           try {
-            const mappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping?guildId=${currentGuildId}`);
-            console.log('Discord mapping response:', mappingResponse.data);
+            debugLog('APPROACH 1: Checking via status endpoint', null);
+            const statusResponse = await axiosInstance.get(`/api/discord-setup/status?guildId=${currentGuildId}`);
+            debugLog('Status response', statusResponse.data);
             
-            // If we get a successful response with data, Discord is connected
-            if (mappingResponse.data && (mappingResponse.data.connected === true || 
-                                      (mappingResponse.data.discord_guild_id && mappingResponse.data.app_guild_id === currentGuildId))) {
+            if (statusResponse.data && typeof statusResponse.data.connected === 'boolean') {
+              debugLog('Setting discord connected from status endpoint', statusResponse.data.connected);
+              setDiscordConnected(statusResponse.data.connected);
+              return;
+            } else {
+              debugLog('Status endpoint did not return expected format', statusResponse.data);
+            }
+          } catch (err) {
+            debugLog('Error in APPROACH 1', {
+              message: err.message,
+              response: err.response?.data
+            });
+          }
+          
+          // APPROACH 2: Try direct guild mapping lookup
+          try {
+            debugLog('APPROACH 2: Direct guild mapping lookup', null);
+            const mappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping/${currentGuildId}`);
+            debugLog('Mapping response', mappingResponse.data);
+            
+            if (mappingResponse.data) {
+              debugLog('Setting discord connected from direct mapping', true);
               setDiscordConnected(true);
               return;
             }
           } catch (err) {
-            console.log('First approach failed, trying next method');
+            debugLog('Error in APPROACH 2', {
+              message: err.message,
+              response: err.response?.data
+            });
           }
           
-          // Approach 2: Get all mappings and check if our guild is in the list
+          // APPROACH 3: Get all mappings and check
           try {
+            debugLog('APPROACH 3: Checking all mappings', null);
             const allMappingsResponse = await axiosInstance.get('/api/discord-bot/guild-mappings');
-            console.log('All mappings response:', allMappingsResponse.data);
+            debugLog('All mappings response', allMappingsResponse.data);
             
             if (Array.isArray(allMappingsResponse.data)) {
-              const isConnected = allMappingsResponse.data.some(mapping => 
-                mapping.app_guild_id === currentGuildId || mapping.guild_id === currentGuildId
+              const mappings = allMappingsResponse.data;
+              debugLog('Number of mappings found', mappings.length);
+              
+              // Log each mapping to see if our guild ID is in there
+              mappings.forEach((mapping, index) => {
+                debugLog(`Mapping ${index}`, {
+                  discord_guild_id: mapping.discord_guild_id,
+                  app_guild_id: mapping.app_guild_id,
+                  matches_current: mapping.app_guild_id === currentGuildId
+                });
+              });
+              
+              const isConnected = mappings.some(mapping => 
+                mapping.app_guild_id === currentGuildId
               );
               
+              debugLog('Setting discord connected from all mappings', isConnected);
               setDiscordConnected(isConnected);
+              return;
+            } else {
+              debugLog('Mappings response is not an array', typeof allMappingsResponse.data);
+            }
+          } catch (err) {
+            debugLog('Error in APPROACH 3', {
+              message: err.message,
+              response: err.response?.data
+            });
+          }
+          
+          // APPROACH 4: Try to fetch channel configs
+          try {
+            debugLog('APPROACH 4: Checking channel configs', null);
+            const channelsResponse = await axiosInstance.get(`/api/discord-setup/channel-config?guildId=${currentGuildId}`);
+            debugLog('Channel config response', channelsResponse.data);
+            
+            if (channelsResponse.status === 200) {
+              // If we can get a successful response, Discord is probably connected
+              debugLog('Setting discord connected from channel configs', true);
+              setDiscordConnected(true);
               return;
             }
           } catch (err) {
-            console.log('Second approach failed, trying next method');
+            debugLog('Error in APPROACH 4', {
+              message: err.message,
+              response: err.response?.data
+            });
           }
           
-          // Approach 3: Try the status endpoint directly
-          try {
-            const statusResponse = await axiosInstance.get(`/api/discord-setup/status?guildId=${currentGuildId}`);
-            console.log('Discord status response:', statusResponse.data);
-            
-            setDiscordConnected(statusResponse.data && statusResponse.data.connected === true);
-            return;
-          } catch (err) {
-            console.log('Third approach failed, trying next method');
-          }
-          
-          // Approach 4: Try to fetch channel configs - if successful, Discord is likely connected
-          try {
-            const channelsResponse = await axiosInstance.get(`/api/discord-setup/channel-config?guildId=${currentGuildId}`);
-            console.log('Channel config response:', channelsResponse.data);
-            
-            // If we can get channel configurations, Discord is likely connected
-            setDiscordConnected(true);
-            return;
-          } catch (err) {
-            console.log('Fourth approach failed');
-            setDiscordConnected(false);
-          }
+          // If we get here, all approaches failed
+          debugLog('All Discord connection check approaches failed', null);
+          setDiscordConnected(false);
         } else {
-          console.log('User not found in guild members');
+          debugLog('User not found in guild members', null);
           setGuildRole('');
         }
       } catch (error) {
-        console.error('Failed to fetch guild role:', error);
+        debugLog('Error in fetchGuildData', {
+          message: error.message,
+          stack: error.stack
+        });
       } finally {
         setLoading(false);
       }
@@ -140,33 +202,57 @@ const Navigation = ({ guildId }) => {
     setMobileOpen(!mobileOpen);
   };
 
+  // Fixed Discord integration function with extensive debugging
   const handleDiscordIntegration = () => {
+    debugLog('handleDiscordIntegration called', null);
+    
     // Get the guild's join code
     const currentGuildId = guildId || localStorage.getItem('guildId');
     
     if (!currentGuildId) {
+      debugLog('No guild ID available for Discord integration', null);
       alert('No guild selected');
       return;
     }
     
+    debugLog('Fetching join code for guild', currentGuildId);
+    
     // Fetch join code and then open Discord authorization
     axiosInstance.get(`/api/guilds/${currentGuildId}/settings`)
       .then(response => {
+        debugLog('Guild settings response', response.data);
         const joinCode = response.data.joinCode;
+        debugLog('Join code', joinCode);
         
-        // Create Discord invitation URL
-        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.REACT_APP_DISCORD_CLIENT_ID}&permissions=2147485696&scope=bot%20applications.commands`;
+        // Create Discord invitation URL WITH client_id properly set from environment
+        const discordClientId = process.env.REACT_APP_DISCORD_CLIENT_ID;
+        debugLog('Discord client ID from env', discordClientId);
+        
+        if (!discordClientId) {
+          debugLog('WARNING: Discord client ID is undefined!', null);
+          alert('Could not connect to Discord. The Discord client ID is missing.');
+          return;
+        }
+        
+        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${discordClientId}&permissions=2147485696&scope=bot%20applications.commands`;
+        debugLog('Discord OAuth URL', discordUrl);
         
         // Open Discord authorization in new tab
+        debugLog('Opening Discord OAuth URL in new tab', null);
         window.open(discordUrl, '_blank');
         
         // Show modal or alert with instructions
         setTimeout(() => {
-          alert(`After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`);
+          const message = `After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`;
+          debugLog('Showing alert with instructions', message);
+          alert(message);
         }, 500);
       })
       .catch(error => {
-        console.error('Failed to get join code:', error);
+        debugLog('Error getting join code', {
+          message: error.message,
+          response: error.response?.data
+        });
         alert('Could not retrieve Discord integration information');
       });
   };
@@ -234,6 +320,9 @@ const Navigation = ({ guildId }) => {
       path: '/billing'
     });
     
+    // For debugging, log the Discord connected state that affects the menu
+    debugLog('Discord connection state for menu item', discordConnected);
+    
     // Add Discord menu item conditionally based on connection status
     if (discordConnected) {
       baseMenuItems.push({
@@ -270,14 +359,19 @@ const Navigation = ({ guildId }) => {
       </Box>
       <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.12)' }} />
       
-      {/* Debug info - You can remove this later */}
+      {/* Debug info with improved display */}
       <Box sx={{ px: 2, py: 1, bgcolor: 'rgba(0,0,0,0.2)' }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color="text.secondary" display="block">
           Guild Role: {loading ? 'Loading...' : (guildRole || 'None')}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block">
-          Discord: {loading ? 'Loading...' : (discordConnected ? 'Connected' : 'Not Connected')}
+          Discord: {loading ? 'Loading...' : (discordConnected ? '✅ Connected' : '❌ Not Connected')}
         </Typography>
+        {isGuildMaster && (
+          <Typography variant="caption" color="text.secondary" display="block">
+            Client ID: {process.env.REACT_APP_DISCORD_CLIENT_ID ? '✅ Set' : '❌ Missing'}
+          </Typography>
+        )}
       </Box>
       
       {/* Main menu items */}
