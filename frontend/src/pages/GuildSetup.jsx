@@ -67,18 +67,47 @@ const GuildSetup = () => {
     }
   };
   
-  const handleJoinGuild = async (guildId) => {
+  const handleJoinGuild = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      await axiosInstance.post(`/api/guilds/join/${guildId}`);
+      if (!joinCode.trim()) {
+        setError('Join code is required');
+        setLoading(false);
+        return;
+      }
       
-      // Redirect to the guild's dashboard
-      window.location.href = `/guilds/${guildId}/dashboard`;
+      // Use the new endpoint that doesn't require a guild ID
+      const response = await fetch(`${API_URL}/api/guilds/join-by-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          joinCode: joinCode
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to join guild');
+      }
+      
+      const data = await response.json();
+      setJoinDialogOpen(false);
+      
+      try {
+        localStorage.setItem('guildId', data.guild.id);
+      } catch (e) {
+        console.warn('Failed to update localStorage:', e);
+      }
+      
+      navigate('/guild-management');
     } catch (error) {
       console.error('Failed to join guild:', error);
-      setError(error.response?.data?.error || 'Failed to join guild');
+      setError(error.message || 'Failed to join guild');
     } finally {
       setLoading(false);
     }
