@@ -3,6 +3,14 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const axios = require('axios');
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : false
+});
 
 // Get all guild mappings
 router.get('/guild-mappings', async (req, res) => {
@@ -164,6 +172,34 @@ router.post('/announce-teams', async (req, res) => {
       error: 'Failed to announce teams',
       details: error.message 
     });
+  }
+});
+
+// Check if guild is connected to Discord
+router.get('/guild-mapping/:guildId', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Direct query to the discord_guild_mappings table
+    const result = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    // If we found a row, the guild is connected to Discord
+    const isConnected = result.rows.length > 0;
+    
+    res.json({
+      connected: isConnected,
+      discordGuildId: isConnected ? result.rows[0].discord_guild_id : null
+    });
+  } catch (error) {
+    console.error('Error checking guild Discord connection:', error);
+    res.status(500).json({ error: 'Failed to check guild Discord connection' });
   }
 });
 
