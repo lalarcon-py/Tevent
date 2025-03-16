@@ -129,6 +129,8 @@ router.get('/channels', async (req, res) => {
       return res.status(404).json({ error: 'Discord guild not connected to this app guild' });
     }
     
+    let channelsData = [];
+    
     try {
       console.log(`Fetching channels from Discord bot webhook endpoint`);
       const discordBotResponse = await axios.post(`${DISCORD_BOT_URL}/webhook/channels`, {
@@ -139,7 +141,7 @@ router.get('/channels', async (req, res) => {
       
       if (discordBotResponse.data && Array.isArray(discordBotResponse.data)) {
         // Filter and format channels
-        const formattedChannels = discordBotResponse.data
+        channelsData = discordBotResponse.data
           .filter(channel => channel.type === 0) // Only text channels
           .map(channel => ({
             id: channel.id,
@@ -149,22 +151,25 @@ router.get('/channels', async (req, res) => {
             position: channel.position
           }));
         
-        console.log(`Found ${formattedChannels.length} text channels`);
-        return res.json(formattedChannels);
+        console.log(`Found ${channelsData.length} text channels`);
       } else {
         throw new Error('Invalid response format from Discord bot');
       }
     } catch (discordError) {
       console.error('Error fetching channels from Discord bot:', discordError);
-
       console.log('Falling back to mock channel data');
-      return res.json([
+      
+      // Use mock data when Discord bot request fails
+      channelsData = [
         { id: 'mock-general', name: 'general (mock)', type: 0 },
         { id: 'mock-events', name: 'events (mock)', type: 0 },
         { id: 'mock-announcements', name: 'announcements (mock)', type: 0 },
         { id: 'mock-bot-commands', name: 'bot-commands (mock)', type: 0 }
-      ]);
+      ];
     }
+    
+    // Always return channel data, whether real or mock
+    return res.json(channelsData);
   } catch (error) {
     console.error('Error in /channels endpoint:', error);
     res.status(500).json({ error: 'Failed to fetch Discord channels' });

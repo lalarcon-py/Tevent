@@ -3183,6 +3183,55 @@ app.post('/webhook/announce-teams', async (req, res) => {
   }
 });
 
+app.post('/webhook/channels', async (req, res) => {
+  try {
+    const { discordGuildId, secret } = req.body;
+    
+    // Verify secret
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Check if guild ID is provided
+    if (!discordGuildId) {
+      return res.status(400).json({ error: 'Discord Guild ID is required' });
+    }
+    
+    // Fetch the guild from Discord API
+    try {
+      const guild = await client.guilds.fetch(discordGuildId);
+      
+      if (!guild) {
+        return res.status(404).json({ error: 'Discord guild not found' });
+      }
+      
+      // Fetch and return all channels
+      const channels = await guild.channels.fetch();
+      
+      // Convert the channels collection to an array and format it
+      const channelList = Array.from(channels.values()).map(channel => ({
+        id: channel.id,
+        name: channel.name,
+        type: channel.type,
+        parent_id: channel.parentId,
+        position: channel.position
+      }));
+      
+      console.log(`Returning ${channelList.length} channels for guild ${discordGuildId}`);
+      return res.json(channelList);
+    } catch (discordError) {
+      console.error('Error fetching Discord guild or channels:', discordError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch Discord channels',
+        details: discordError.message
+      });
+    }
+  } catch (error) {
+    console.error('Error in /webhook/channels endpoint:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.post('/webhook/update-event-signup', async (req, res) => {
   try {
     const { guildId, eventId, userId, username, action, role, secret } = req.body;
