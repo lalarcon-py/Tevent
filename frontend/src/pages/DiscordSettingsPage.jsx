@@ -1,35 +1,27 @@
 // pages/DiscordSettingsPage.jsx
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Box, Button, Card, Container, FormControl, Grid, 
   MenuItem, Select, Typography, Alert, CircularProgress,
-  Snackbar, InputLabel, Divider, Switch, FormControlLabel
+  Snackbar, InputLabel, Divider, Paper, Link
 } from '@mui/material';
 import axiosInstance from '../config/axios';
-
-const NOTIFICATION_TYPES = [
-  { id: 'events', name: 'Events', description: 'New events, signups, and reminders' },
-  { id: 'storage', name: 'Storage/Items', description: 'Guild storage updates and new items' },
-  { id: 'loot', name: 'Loot Requests', description: 'Item requests and approvals' },
-  { id: 'announcements', name: 'Announcements', description: 'Guild announcements and news' }
-];
+import CodeIcon from '@mui/icons-material/Code';
 
 export default function DiscordSettingsPage() {
   const { guildId } = useParams();
+  const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [discordGuilds, setDiscordGuilds] = useState([]);
   const [selectedGuild, setSelectedGuild] = useState(null);
-  const [channels, setChannels] = useState([]);
-  const [configurations, setConfigurations] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [botConnected, setBotConnected] = useState(false);
-  const [testResults, setTestResults] = useState(null);
+  const [discordGuildId, setDiscordGuildId] = useState(null);
   
-  // Fetch Discord servers where bot is installed
+  // Fetch Discord connection status
   useEffect(() => {
     if (!guildId) return;
     
@@ -41,32 +33,29 @@ export default function DiscordSettingsPage() {
         // Get Discord connection status
         const statusResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping/${guildId}`);
         console.log('Discord connection status response:', statusResponse.data);
+        
         setBotConnected(statusResponse.data.connected);
+        setDiscordGuildId(statusResponse.data.discordGuildId);
         
         if (statusResponse.data.connected) {
-          // Get Discord servers
-          const serversResponse = await axiosInstance.get(`/api/discord-bot/servers?guildId=${guildId}`);
-          console.log('Discord servers response:', serversResponse.data);
-          setDiscordGuilds(serversResponse.data);
-          
-          // If there's a mapped Discord server, select it
-          if (statusResponse.data.discordGuildId) {
-            setSelectedGuild(statusResponse.data.discordGuildId);
+          try {
+            // Get Discord servers
+            const serversResponse = await axiosInstance.get(`/api/discord-bot/servers?guildId=${guildId}`);
+            console.log('Discord servers response:', serversResponse.data);
+            setDiscordGuilds(serversResponse.data);
             
-            // Get channels for the Discord server
-            const channelsResponse = await axiosInstance.get(`/api/discord-bot/channels?guildId=${guildId}&discordGuildId=${statusResponse.data.discordGuildId}`);
-            console.log('Discord channels response:', channelsResponse.data);
-            setChannels(channelsResponse.data);
-            
-            // Get current channel configurations
-            const configResponse = await axiosInstance.get(`/api/discord-bot/channel-config?guildId=${guildId}`);
-            console.log('Channel config response:', configResponse.data);
-            setConfigurations(configResponse.data.configurations || []);
+            // Set selected guild
+            if (statusResponse.data.discordGuildId) {
+              setSelectedGuild(statusResponse.data.discordGuildId);
+            }
+          } catch (serverError) {
+            console.error('Error fetching Discord servers:', serverError);
+            setError('Could not load Discord servers. The servers endpoint may not be fully implemented.');
           }
         }
       } catch (err) {
         console.error('Error fetching Discord settings:', err);
-        setError('Failed to load Discord settings: ' + (err.response?.data?.error || err.message));
+        setError('Failed to load Discord connection status: ' + (err.response?.data?.error || err.message));
       } finally {
         setLoading(false);
       }
@@ -75,127 +64,7 @@ export default function DiscordSettingsPage() {
     fetchData();
   }, [guildId]);
   
-  // When Discord server selection changes, fetch channels
-  const handleGuildChange = async (discordGuildId) => {
-    try {
-      setSelectedGuild(discordGuildId);
-      setLoading(true);
-      
-      const channelsResponse = await axiosInstance.get(`/api/discord-bot/channels?guildId=${guildId}&discordGuildId=${discordGuildId}`);
-      setChannels(channelsResponse.data);
-      
-      // Get current channel configurations
-      const configResponse = await axiosInstance.get(`/api/discord-bot/channel-config?guildId=${guildId}`);
-      setConfigurations(configResponse.data.configurations || []);
-    } catch (err) {
-      console.error('Error fetching channels:', err);
-      setError('Failed to load Discord channels: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Handle channel selection for a notification type
-  const handleChannelChange = (notificationType, channelId) => {
-    const updatedConfigs = [...configurations];
-    const existingConfig = updatedConfigs.find(c => c.channel_type === notificationType);
-    
-    if (existingConfig) {
-      existingConfig.channel_id = channelId;
-    } else {
-      updatedConfigs.push({
-        channel_type: notificationType,
-        channel_id: channelId,
-        enabled: true
-      });
-    }
-    
-    setConfigurations(updatedConfigs);
-  };
-  
-  // Toggle enabled status
-  const handleToggleEnabled = (notificationType) => {
-    const updatedConfigs = [...configurations];
-    const existingConfig = updatedConfigs.find(c => c.channel_type === notificationType);
-    
-    if (existingConfig) {
-      existingConfig.enabled = !existingConfig.enabled;
-      setConfigurations(updatedConfigs);
-    }
-  };
-  
-  // Save channel configurations
-  const saveSettings = async () => {
-    try {
-      setSaving(true);
-      
-      await axiosInstance.post(`/api/discord-bot/channel-config`, {
-        guildId,
-        discordGuildId: selectedGuild,
-        configurations
-      });
-      
-      setSuccess('Channel configuration saved successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error saving channel config:', err);
-      setError('Failed to save channel configuration: ' + (err.response?.data?.error || err.message));
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  // Test posting to configured channels
-  const testConfiguration = async () => {
-    try {
-      setTestResults(null);
-      setSaving(true);
-      
-      const response = await axiosInstance.post(`/api/discord-bot/test-channels`, {
-        guildId,
-        discordGuildId: selectedGuild
-      });
-      
-      setTestResults(response.data.results);
-      setTimeout(() => setTestResults(null), 10000);
-    } catch (err) {
-      console.error('Error testing channels:', err);
-      setError('Failed to test channel configuration: ' + (err.response?.data?.error || err.message));
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  // Create a test event
-  const createTestEvent = async () => {
-    try {
-      setSaving(true);
-      
-      await axiosInstance.post(`/api/events`, {
-        guildId,
-        title: 'Discord Test Event',
-        description: 'This is a test event created to verify Discord integration.',
-        event_time: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
-        location: 'Discord Test',
-        tanks: 2,
-        healers: 4,
-        dps: 14
-      });
-      
-      setSuccess('Test event created! Check your Discord channel');
-      setTimeout(() => setSuccess(''), 5000);
-    } catch (err) {
-      console.error('Error creating test event:', err);
-      setError('Failed to create test event: ' + (err.response?.data?.error || err.message));
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  if (loading && !channels.length) {
+  if (loading) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
@@ -212,24 +81,65 @@ export default function DiscordSettingsPage() {
       </Typography>
       
       {!botConnected && (
-        <Alert severity="warning" sx={{ mb: 4 }}>
-          Your guild isn't connected to Discord yet. Please use the Discord bot's <code>/setup</code> command
-          in your Discord server first.
-        </Alert>
+        <>
+          <Alert severity="warning" sx={{ mb: 4 }}>
+            Your guild isn't connected to Discord yet. You need to connect your Discord server first.
+          </Alert>
+          
+          <Paper sx={{ p: 3, mb: 4 }}>
+            <Typography variant="h6" gutterBottom>
+              How to Connect Discord
+            </Typography>
+            
+            <Typography variant="body1" paragraph>
+              To connect your guild to Discord:
+            </Typography>
+            
+            <ol>
+              <li>
+                <Typography paragraph>
+                  Go to your guild's dashboard and click "Connect Discord" in the sidebar
+                </Typography>
+              </li>
+              <li>
+                <Typography paragraph>
+                  Follow the prompts to add the bot to your Discord server
+                </Typography>
+              </li>
+              <li>
+                <Typography paragraph>
+                  Use the provided join code with the bot's <code>/link-guild</code> command in your Discord server
+                </Typography>
+              </li>
+            </ol>
+            
+            <Button 
+              variant="contained" 
+              onClick={() => navigate('/dashboard')}
+              sx={{ mt: 2 }}
+            >
+              Return to Dashboard
+            </Button>
+          </Paper>
+        </>
       )}
       
       {botConnected && (
         <>
+          <Alert severity="success" sx={{ mb: 4 }}>
+            Your guild is connected to Discord server with ID: {discordGuildId}
+          </Alert>
+          
           <Card sx={{ p: 3, mb: 4 }}>
             <Typography variant="h6" gutterBottom>
-              Select Discord Server
+              Discord Server
             </Typography>
             
             <FormControl fullWidth sx={{ mb: 3 }}>
-              <InputLabel>Discord Server</InputLabel>
+              <InputLabel>Connected Discord Server</InputLabel>
               <Select
                 value={selectedGuild || ''}
-                onChange={(e) => handleGuildChange(e.target.value)}
+                disabled={true}
                 label="Discord Server"
               >
                 {discordGuilds.map((server) => (
@@ -237,120 +147,50 @@ export default function DiscordSettingsPage() {
                     {server.name}
                   </MenuItem>
                 ))}
+                {discordGuilds.length === 0 && (
+                  <MenuItem value={discordGuildId}>
+                    Discord Server ({discordGuildId})
+                  </MenuItem>
+                )}
               </Select>
             </FormControl>
             
-            {selectedGuild && (
-              <>
-                <Divider sx={{ my: 3 }} />
-                
-                <Typography variant="h6" gutterBottom>
-                  Channel Configuration
-                </Typography>
-                
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Select which Discord channels should receive notifications for each feature.
-                </Typography>
-                
-                {NOTIFICATION_TYPES.map((type) => {
-                  const config = configurations.find(c => c.channel_type === type.id);
-                  const channelId = config?.channel_id || '';
-                  const enabled = config?.enabled !== false; // Default to true if not specified
-                  
-                  return (
-                    <Grid container spacing={2} key={type.id} sx={{ mb: 2 }}>
-                      <Grid item xs={12} sm={4} md={3}>
-                        <Typography variant="subtitle1">
-                          {type.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {type.description}
-                        </Typography>
-                      </Grid>
-                      <Grid item xs={12} sm={6} md={7}>
-                        <FormControl fullWidth>
-                          <InputLabel>Channel</InputLabel>
-                          <Select
-                            value={channelId}
-                            onChange={(e) => handleChannelChange(type.id, e.target.value)}
-                            label="Channel"
-                            disabled={!enabled}
-                          >
-                            <MenuItem value="">
-                              <em>None</em>
-                            </MenuItem>
-                            {channels
-                              .filter(channel => channel.type === 0) // Only text channels
-                              .map((channel) => (
-                                <MenuItem key={channel.id} value={channel.id}>
-                                  #{channel.name}
-                                </MenuItem>
-                              ))}
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <Grid item xs={12} sm={2} md={2}>
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={enabled}
-                              onChange={() => handleToggleEnabled(type.id)}
-                            />
-                          }
-                          label="Enabled"
-                        />
-                      </Grid>
-                    </Grid>
-                  );
-                })}
-                
-                <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
-                  <Button 
-                    variant="contained" 
-                    color="primary" 
-                    onClick={saveSettings}
-                    disabled={saving}
-                  >
-                    {saving ? <CircularProgress size={24} /> : 'Save Settings'}
-                  </Button>
-                  
-                  <Button 
-                    variant="outlined"
-                    onClick={testConfiguration}
-                    disabled={saving}
-                  >
-                    Test Channels
-                  </Button>
-                  
-                  <Button 
-                    variant="outlined"
-                    color="secondary"
-                    onClick={createTestEvent}
-                    disabled={saving}
-                  >
-                    Create Test Event
-                  </Button>
-                </Box>
-                
-                {testResults && (
-                  <Box sx={{ mt: 3 }}>
-                    <Typography variant="h6" gutterBottom>
-                      Test Results
-                    </Typography>
-                    
-                    {Object.entries(testResults).map(([type, result]) => (
-                      <Alert 
-                        key={type} 
-                        severity={result.success ? "success" : "error"}
-                        sx={{ mb: 1 }}
-                      >
-                        {type}: {result.success ? "Message sent successfully" : result.error}
-                      </Alert>
-                    ))}
-                  </Box>
-                )}
-              </>
-            )}
+            <Divider sx={{ my: 3 }} />
+            
+            <Alert severity="info" icon={<CodeIcon />} sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Channel Configuration API Not Implemented
+              </Typography>
+              <Typography variant="body2">
+                The API endpoints for channel configuration have not been fully implemented on the backend:
+              </Typography>
+              <ul>
+                <li><code>/api/discord-bot/channels</code> - For fetching available Discord channels</li>
+                <li><code>/api/discord-bot/channel-config</code> - For managing notification settings</li>
+                <li><code>/api/discord-bot/test-channels</code> - For testing channel integration</li>
+              </ul>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Once these endpoints are implemented, channel configuration will be available on this page.
+              </Typography>
+            </Alert>
+            
+            <Button 
+              variant="outlined" 
+              color="error"
+              onClick={async () => {
+                try {
+                  await axiosInstance.delete(`/api/discord-bot/disconnect/${guildId}`);
+                  setBotConnected(false);
+                  setSuccess('Discord connection removed successfully');
+                  setTimeout(() => window.location.reload(), 1500);
+                } catch (err) {
+                  setError('Failed to disconnect Discord: this endpoint may not be implemented yet');
+                }
+              }}
+              sx={{ mt: 2 }}
+            >
+              Disconnect Discord
+            </Button>
           </Card>
         </>
       )}
