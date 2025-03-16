@@ -1849,37 +1849,75 @@ const handleLinkGuildCommand = async (interaction) => {
     
     console.log(`Processing link-guild command with join code: ${joinCode}`);
     
-    // Get a bot token for authentication
-    const authResponse = await axios.post(`${API_URL}/auth/bot-token`, {
-      botSecret: process.env.DISCORD_CLIENT_SECRET
-    });
-    
-    // Call the backend to create the mapping
-    const response = await axios.post(`${API_URL}/api/discord-bot/link-guild`, {
-      discordGuildId: interaction.guildId,
-      joinCode: joinCode,
-      secret: process.env.BOT_WEBHOOK_SECRET
-    }, {
-      headers: {
-        'Authorization': `Bearer ${authResponse.data.token}`,
-        'Content-Type': 'application/json'
+    // Use the database directly through the pool
+    try {
+      console.log('Attempting database connection directly...');
+      
+      // First find guild by join code
+      const guildResult = await pool.query(
+        'SELECT id, name FROM guilds WHERE join_code = $1',
+        [joinCode]
+      );
+      
+      if (!guildResult.rows || guildResult.rows.length === 0) {
+        return await interaction.editReply({
+          content: '❌ Invalid join code. Please check your guild settings for the correct code.',
+          ephemeral: true
+        });
       }
-    });
-    
-    if (response.data.success) {
+      
+      const guildId = guildResult.rows[0].id;
+      const guildName = guildResult.rows[0].name;
+      
+      console.log(`Found guild with join code ${joinCode}: ${guildId} (${guildName})`);
+      
+      // Check if mapping already exists
+      const mappingResult = await pool.query(
+        'SELECT * FROM discord_guild_mappings WHERE discord_guild_id = $1',
+        [interaction.guildId]
+      );
+      
+      if (mappingResult.rows && mappingResult.rows.length > 0) {
+        // Update existing mapping
+        await pool.query(
+          'UPDATE discord_guild_mappings SET app_guild_id = $1, updated_at = NOW() WHERE discord_guild_id = $2',
+          [guildId, interaction.guildId]
+        );
+        console.log(`Updated existing mapping for Discord guild ${interaction.guildId} to app guild ${guildId}`);
+      } else {
+        // Create new mapping
+        await pool.query(
+          'INSERT INTO discord_guild_mappings (discord_guild_id, app_guild_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())',
+          [interaction.guildId, guildId]
+        );
+        console.log(`Created new mapping: Discord ${interaction.guildId} → App Guild ${guildId}`);
+      }
+      
+      // Notify the bot webhooks about the new connection
+      try {
+        await axios.post(`${API_URL}/webhook/update-config`, {
+          guildId: guildId,
+          discordGuildId: interaction.guildId,
+          configurations: [],
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+        console.log('Webhook notification sent');
+      } catch (webhookError) {
+        console.error('Failed to send webhook notification, but guild mapping was created:', webhookError.message);
+      }
+      
       await interaction.editReply({
-        content: `✅ Successfully linked this Discord server to guild "${response.data.guildName || 'Unknown'}"!`,
+        content: `✅ Successfully linked this Discord server to guild "${guildName}"! You can now configure channel settings in the Discord tab on your guild dashboard.`,
         ephemeral: true
       });
-    } else {
-      await interaction.editReply({
-        content: `❌ Failed to link: ${response.data.error || 'Unknown error'}`,
-        ephemeral: true
-      });
+      
+    } catch (dbError) {
+      console.error('Database approach failed:', dbError);
+      throw new Error(`Failed to link guild: ${dbError.message}`);
     }
+    
   } catch (error) {
     console.error('Error linking guild:', error);
-    console.error('Error response:', error.response?.data);
     
     await interaction.editReply({
       content: `❌ An error occurred: ${error.message}. Please check that your join code is correct.`,
