@@ -133,8 +133,7 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
     'Guild Master': 4,
     'Guild Advisor': 3,
     'Guild Guardian': 2,
-    'Member': 1,  // Added this to fix missing role
-    'Guild Member': 1  // Some systems use this name
+    'Guild Member': 1
   };
 
   const getAvailableRoles = () => {
@@ -749,8 +748,13 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         console.error('No guild ID found');
         return;
       }
+
+      if (nameEditMember.id !== effectiveCurrentUser?.id && currentUserRole !== 'Guild Master') {
+        alert('You do not have permission to edit this name');
+        setNameEditMember(null);
+        return;
+      }
       
-      // Use axios instead of fetch for consistency and better error handling
       const response = await axiosInstance.put(`/api/guilds/members/${nameEditMember.id}/update-name`, {
         username: newName,
         guildId
@@ -1044,30 +1048,29 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                     </Typography>
                     
                     {/* Only show edit icon for current user */}
-                    {member.id === effectiveCurrentUser?.id && (
-                      <IconButton 
-                        size="small"
-                        className="name-edit-icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setNameEditMember(member);
-                        }}
-                        sx={{ 
-                          opacity: 0,
-                          ml: 1, 
-                          p: 0.5,
-                          color: 'rgba(255, 255, 255, 0.7)',
-                          '&:hover': { 
-                            color: '#90caf9',
-                            bgcolor: 'rgba(144, 202, 249, 0.1)'
-                          },
-                          transition: 'opacity 0.2s ease-in-out'
-                        }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                    
+                    {(member.id === effectiveCurrentUser?.id || currentUserRole === 'Guild Master') && (
+                        <IconButton 
+                          size="small"
+                          className="name-edit-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNameEditMember(member);
+                          }}
+                          sx={{ 
+                            opacity: 0,
+                            ml: 1, 
+                            p: 0.5,
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            '&:hover': { 
+                              color: '#90caf9',
+                              bgcolor: 'rgba(144, 202, 249, 0.1)'
+                            },
+                            transition: 'opacity 0.2s ease-in-out'
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      )}
                     {isMobile && (
                       <Typography variant="caption" sx={{ color: '#90caf9' }}>
                         {member.role}
@@ -1173,31 +1176,50 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 )}
                 
                 <TableCell>
-                <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
-                  {/* Show edit icon if it's the current user's own profile OR if the current user has admin privileges */}
-                  {(member.id === effectiveCurrentUser?.id || 
-                    ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUserRole)) && (
-                    <IconButton 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditMember(member);
-                      }}
-                      sx={{ 
-                        color: '#90caf9',
-                        padding: isMobile ? '4px' : '8px',
-                        '&:hover': { 
-                          bgcolor: 'rgba(144, 202, 249, 0.2)',
-                          transform: 'scale(1.1)'
-                        }
-                      }}
-                    >
-                      <EditIcon fontSize={isMobile ? "small" : "medium"} />
-                    </IconButton>
-                  )}
-                  
-                  {/* Star icon for role management removed completely */}
-                </Box>
-              </TableCell>
+                  <Box sx={{ display: 'flex', gap: isMobile ? 0 : 1 }}>
+                    {/* Existing edit button remains */}
+                    {(member.id === effectiveCurrentUser?.id || 
+                      ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUserRole)) && (
+                      <IconButton 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditMember(member);
+                        }}
+                        sx={{ 
+                          color: '#90caf9',
+                          padding: isMobile ? '4px' : '8px',
+                          '&:hover': { 
+                            bgcolor: 'rgba(144, 202, 249, 0.2)',
+                            transform: 'scale(1.1)'
+                          }
+                        }}
+                      >
+                        <EditIcon fontSize={isMobile ? "small" : "medium"} />
+                      </IconButton>
+                    )}
+                    
+                    {/* King chess piece button ONLY appears if the current user is a Guild Master */}
+                    {effectiveCurrentUser?.role === 'Guild Master' && (
+                      <IconButton 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRoleManagementMember(member);
+                        }}
+                        sx={{ 
+                          color: '#ffd700',
+                          padding: isMobile ? '4px' : '8px',
+                          '&:hover': { 
+                            bgcolor: 'rgba(255, 215, 0, 0.2)',
+                            transform: 'scale(1.1)'
+                          }
+                        }}
+                        title="Manage Guild Role"
+                      >
+                        <span role="img" aria-label="king" style={{ fontSize: isMobile ? '14px' : '18px' }}>♚</span>
+                      </IconButton>
+                    )}
+                  </Box>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -1212,7 +1234,6 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           onSave={handleSave}
         />
       )}
-  
         {roleManagementMember && (
         <RoleManagementDialog
           member={roleManagementMember}
