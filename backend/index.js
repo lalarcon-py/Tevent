@@ -312,7 +312,12 @@ app.use('/api/guilds/:guildId/members', guildScopeMiddleware, validateGuildMembe
 
 app.use('/api/guilds', guildScopeMiddleware, guildRouter);
 
-// Debug routes
+app.get('/api/config/discord', (req, res) => {
+  res.json({ 
+    clientId: process.env.DISCORD_CLIENT_ID || '1333905158496587816'
+  });
+});
+
 
 app.enable('trust proxy');
 
