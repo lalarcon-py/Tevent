@@ -503,29 +503,38 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
               </Box>
             ))}
 
-            {showCombatPower && (
-              <Box sx={{ mb: 2 }}>
-                <Typography color="white" sx={{ mb: 1 }}>Combat Power</Typography>
-                <TextField
-                  type="number"
-                  value={editedMember.combat_power || ''}
-                  onChange={(e) => setEditedMember({
+          <TextField
+            type="number"
+            value={editedMember.combat_power || ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '') {
+                setEditedMember({
+                  ...editedMember,
+                  combat_power: ''
+                });
+              } else {
+                const numValue = Number(value);
+                if (!isNaN(numValue) && numValue >= 0 && numValue <= 6300) {
+                  setEditedMember({
                     ...editedMember,
-                    combat_power: e.target.value
-                  })}
-                  fullWidth
-                  sx={{ 
-                    bgcolor: '#2d2d2d',
-                    input: { color: 'white' },
-                    '& .MuiOutlinedInput-root': {
-                      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
-                      '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
-                      '&.Mui-focused fieldset': { borderColor: '#90caf9' }
-                    }
-                  }}
-                />
-              </Box>
-            )}
+                    combat_power: numValue
+                  });
+                }
+              }
+            }}
+            inputProps={{ min: 0, max: 6300 }}
+            fullWidth
+            sx={{ 
+              bgcolor: '#2d2d2d',
+              input: { color: 'white' },
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                '&.Mui-focused fieldset': { borderColor: '#90caf9' }
+              }
+            }}
+          />
 
 
             <Button 

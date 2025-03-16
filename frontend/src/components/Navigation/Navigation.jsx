@@ -32,12 +32,10 @@ const Navigation = ({ guildId }) => {
   const [loading, setLoading] = useState(true);
   const [discordConnected, setDiscordConnected] = useState(false);
   
-  // Debug function to log state of various values
   const debugLog = (message, data) => {
     console.log(`🔍 DEBUG [${new Date().toISOString()}]: ${message}`, data);
   };
   
-  // Fetch the user's guild-specific role and Discord connection status
   useEffect(() => {
     const fetchGuildData = async () => {
       if (!user) {
@@ -47,7 +45,6 @@ const Navigation = ({ guildId }) => {
       try {
         setLoading(true);
         
-        // Get guild ID - try from props first, then localStorage
         const currentGuildId = guildId || localStorage.getItem('guildId');
         
         if (!currentGuildId) {
@@ -55,17 +52,13 @@ const Navigation = ({ guildId }) => {
           return;
         }
         
-        // Fetch guild members
         const response = await axiosInstance.get(`/api/guilds/${currentGuildId}/members`);
         
-        // Find current user in members list
         const currentMember = response.data.find(member => member.id === user.id);
         
         if (currentMember) {
           setGuildRole(currentMember.role);
           
-          // SIMPLIFIED DISCORD CONNECTION CHECK
-          // Direct check using the dedicated endpoint
           try {
             const discordResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping/${currentGuildId}`);
             setDiscordConnected(discordResponse.data.connected === true);
@@ -264,11 +257,11 @@ const Navigation = ({ guildId }) => {
           variant="h6" 
           sx={{ 
             color: 'white',
-            fontFamily: '"Poppins", "Roboto", "Arial", sans-serif', // More modern font
-            fontWeight: 500, // Medium weight
-            letterSpacing: '0.5px', // Slight letter spacing for modern look
-            textTransform: 'uppercase', // Adds a modern touch
-            fontSize: '1.1rem' // Slightly adjusted size
+            fontFamily: '"Poppins", "Roboto", "Arial", sans-serif',
+            fontWeight: 500,
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase',
+            fontSize: '1.1rem'
           }}
         >
           TEVENT
@@ -278,8 +271,8 @@ const Navigation = ({ guildId }) => {
             onClick={handleDrawerToggle} 
             sx={{ 
               color: 'white',
-              position: 'absolute', // Position absolutely to maintain center alignment
-              right: 8 // Place on the right side
+              position: 'absolute',
+              right: 8
             }}
           >
             <CloseIcon />
@@ -450,11 +443,11 @@ const Navigation = ({ guildId }) => {
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
-            paddingTop: '0', // Reset padding as we're using the spacer
+            paddingTop: '0',
           },
         }}
         ModalProps={{
-          keepMounted: true // Better mobile performance
+          keepMounted: true
         }}
       >
         {drawer}
