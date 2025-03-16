@@ -22,8 +22,6 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import axiosInstance from '../../config/axios';
 import DiscordIcon from '@mui/icons-material/ConnectedTv';
 
-
-
 const Navigation = ({ guildId }) => {
   const location = useLocation();
   const theme = useTheme();
@@ -39,7 +37,6 @@ const Navigation = ({ guildId }) => {
     console.log(`🔍 DEBUG [${new Date().toISOString()}]: ${message}`, data);
   };
   
-  // Fetch the user's guild-specific role and Discord connection status
   // Fetch the user's guild-specific role and Discord connection status
   useEffect(() => {
     const fetchGuildData = async () => {
@@ -252,18 +249,39 @@ const Navigation = ({ guildId }) => {
 
   const drawer = (
     <>
+      {/* Add padding spacer to account for AppHeader height */}
+      <Box sx={{ height: '64px' }} />
+      
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center', 
-        justifyContent: 'space-between',
+        justifyContent: 'center', // Changed to center the content
         p: 1,
+        position: 'relative', // Added for absolute positioning of close button
         ...isMobile ? { py: 2 } : {}
       }}>
-        <Typography variant="h6" sx={{ ml: 2, color: 'white' }}>
-          Guild Manager
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            color: 'white',
+            fontFamily: '"Poppins", "Roboto", "Arial", sans-serif', // More modern font
+            fontWeight: 500, // Medium weight
+            letterSpacing: '0.5px', // Slight letter spacing for modern look
+            textTransform: 'uppercase', // Adds a modern touch
+            fontSize: '1.1rem' // Slightly adjusted size
+          }}
+        >
+          TEVENT
         </Typography>
         {isMobile && (
-          <IconButton onClick={handleDrawerToggle} sx={{ color: 'white' }}>
+          <IconButton 
+            onClick={handleDrawerToggle} 
+            sx={{ 
+              color: 'white',
+              position: 'absolute', // Position absolutely to maintain center alignment
+              right: 8 // Place on the right side
+            }}
+          >
             <CloseIcon />
           </IconButton>
         )}
@@ -275,14 +293,6 @@ const Navigation = ({ guildId }) => {
         <Typography variant="caption" color="text.secondary" display="block">
           Guild Role: {loading ? 'Loading...' : (guildRole || 'None')}
         </Typography>
-        <Typography variant="caption" color="text.secondary" display="block">
-          Discord: {loading ? 'Loading...' : (discordConnected ? '✅ Connected' : '❌ Not Connected')}
-        </Typography>
-        {isGuildMaster && (
-          <Typography variant="caption" color="text.secondary" display="block">
-            Client ID: {process.env.REACT_APP_DISCORD_CLIENT_ID ? '✅ Set' : '❌ Missing'}
-          </Typography>
-        )}
       </Box>
       
       {/* Main menu items */}
@@ -290,9 +300,9 @@ const Navigation = ({ guildId }) => {
           {baseMenuItems.map((item) => (
             <ListItem 
               button 
-              component={item.onClick ? 'div' : Link} // Use div if we have an onClick handler
-              to={!item.onClick ? item.path : undefined} // Only use "to" if no onClick
-              onClick={item.onClick} // Add onClick handler
+              component={item.onClick ? 'div' : Link}
+              to={!item.onClick ? item.path : undefined}
+              onClick={item.onClick}
               key={item.text}
               sx={{ 
                 color: location.pathname === item.path ? '#90caf9' : 'white',
@@ -439,7 +449,8 @@ const Navigation = ({ guildId }) => {
             boxShadow: isMobile ? '4px 0 10px rgba(0,0,0,0.25)' : 'none',
             display: 'flex',
             flexDirection: 'column',
-            height: '100%'
+            height: '100%',
+            paddingTop: '0', // Reset padding as we're using the spacer
           },
         }}
         ModalProps={{
