@@ -19,11 +19,15 @@ const DISCORD_BOT_URL = process.env.NODE_ENV === 'production'
 
 const DISCORD_BOT_AUTH = process.env.BOT_WEBHOOK_SECRET || 'default-secret';
 
-// Helper function to make authenticated requests to the Discord bot
+
 async function callDiscordBot(endpoint, method = 'GET', data = null) {
   try {
+    if (!endpoint.startsWith('/')) {
+      endpoint = '/' + endpoint;
+    }
+    
     const url = `${DISCORD_BOT_URL}${endpoint}`;
-    console.log(`Making ${method} request to Discord bot:`, url);
+    console.log(`Making ${method} request to Discord bot: ${url}`);
     
     const config = {
       method,
@@ -126,7 +130,7 @@ router.get('/channels', async (req, res) => {
     
     try {
       // Call Discord bot service to get channels
-      const channels = await callDiscordBot(`/guilds/${discordGuildId}/channels`);
+      const channels = await callDiscordBot(`/channels?guildId=${appGuildId}&discordGuildId=${discordGuildId}`);
       
       // If we get here, format and return the channels
       const formattedChannels = channels.map(channel => ({
