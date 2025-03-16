@@ -1,3 +1,5 @@
+// Updated DiscordSettingsPage.jsx component with enhanced channel reading
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
@@ -6,7 +8,6 @@ import {
   Snackbar, InputLabel, Divider, Switch, FormControlLabel,
   Paper, Card, CardContent
 } from '@mui/material';
-import axios from 'axios';
 import ConnectedTvIcon from '@mui/icons-material/ConnectedTv';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import TuneIcon from '@mui/icons-material/Tune';
@@ -26,22 +27,19 @@ const CHANNEL_TYPES = [
 ];
 
 const DiscordSettingsPage = () => {
+  // Get guildId from URL or localStorage
   const { guildId: urlGuildId } = useParams();
   const currentGuildId = urlGuildId || localStorage.getItem('guildId');
+  
   const { guildRole } = useGuild();
+  const { isAuthenticated } = useAuth();
   
-  
-  
-  // Debug information for troubleshooting
-  const [debugInfo, setDebugInfo] = useState({
-    guildId: currentGuildId,
-    guildRole: null,
-    discordConnected: false,
-    apiEndpoints: {}
-  });
+  // Add this new state variable for permission check
+  const [isGuildMaster, setIsGuildMaster] = useState(false);
   
   // State variables
   const [loading, setLoading] = useState(true);
+  const [channelLoading, setChannelLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [discordGuilds, setDiscordGuilds] = useState([]);
   const [selectedGuild, setSelectedGuild] = useState(null);
@@ -52,23 +50,8 @@ const DiscordSettingsPage = () => {
   const [botConnected, setBotConnected] = useState(false);
   const [testResults, setTestResults] = useState(null);
   
-  const [isGuildMaster, setIsGuildMaster] = useState(false);
-  
   // Fetch Discord connection data
   useEffect(() => {
-    // Update debug info
-    setDebugInfo({
-      guildId: currentGuildId,
-      guildRole: guildRole,
-      discordConnected: botConnected,
-      apiEndpoints: {
-        status: `/api/discord-bot/status?guildId=${currentGuildId}`,
-        guildMapping: `/api/discord-bot/guild-mapping/${currentGuildId}`,
-        servers: `/api/discord-setup/servers?guildId=${currentGuildId}`,
-        channelConfig: `/api/discord-setup/channel-config?guildId=${currentGuildId}`
-      }
-    });
-    
     if (!currentGuildId) {
       console.error('No guild ID available for Discord settings');
       setError('No guild selected. Please select a guild first.');
@@ -104,40 +87,18 @@ const DiscordSettingsPage = () => {
           
           setBotConnected(mappingResponse.data.connected);
           
-          // Rest of the existing code for fetching Discord data
           if (mappingResponse.data.connected) {
             // Set selected Discord guild
             setSelectedGuild(mappingResponse.data.discordGuildId);
             
-            // Get Discord server info
+            // Get Discord server info - falling back to simpler approach for now
             setDiscordGuilds([{
               id: mappingResponse.data.discordGuildId,
               name: "Connected Discord Server"
             }]);
             
-            // Try to get channels
-            try {
-              const channelsResponse = await axiosInstance.get(
-                `/api/discord-bot/channels?guildId=${currentGuildId}&discordGuildId=${mappingResponse.data.discordGuildId}`
-              );
-              
-              if (channelsResponse.data && Array.isArray(channelsResponse.data)) {
-                setChannels(channelsResponse.data);
-              } else {
-                // Fallback
-                setChannels([
-                  { id: 'general', name: 'general', type: 0 },
-                  { id: 'announcements', name: 'announcements', type: 0 }
-                ]);
-              }
-            } catch (channelsError) {
-              console.warn('Could not fetch Discord channels:', channelsError);
-              // Fallback channels
-              setChannels([
-                { id: 'general', name: 'general', type: 0 },
-                { id: 'announcements', name: 'announcements', type: 0 }
-              ]);
-            }
+            // Load channels for the connected server
+            await fetchDiscordChannels(currentGuildId, mappingResponse.data.discordGuildId);
             
             // Try to get existing configurations
             try {
@@ -175,33 +136,42 @@ const DiscordSettingsPage = () => {
     fetchData();
   }, [currentGuildId]);
   
+  // New function to fetch Discord channels
+  const fetchDiscordChannels = async (guildId, discordGuildId) => {
+    try {
+      setChannelLoading(true);
+      
+      // Call API to get Discord channels
+      const response = await axiosInstance.get(
+        `/api/discord-bot/channels?guildId=${guildId}&discordGuildId=${discordGuildId}`
+      );
+      
+      // Filter to only include text channels (type 0)
+      const textChannels = response.data.filter(channel => channel.type === 0);
+      
+      // Sort channels alphabetically for easier navigation
+      const sortedChannels = textChannels.sort((a, b) => a.name.localeCompare(b.name));
+      
+      console.log(`Fetched ${sortedChannels.length} text channels`);
+      setChannels(sortedChannels);
+    } catch (error) {
+      console.error('Error fetching Discord channels:', error);
+      setError('Failed to load Discord channels. Please try again later.');
+      
+      // Fallback to empty channels list
+      setChannels([]);
+    } finally {
+      setChannelLoading(false);
+    }
+  };
+  
   // Handle Discord server selection change
   const handleGuildChange = async (discordGuildId) => {
     try {
       setSelectedGuild(discordGuildId);
-      setLoading(true);
       
-      // Get channels for the selected Discord server
-      try {
-        const channelsResponse = await axiosInstance.get(
-          `/api/discord-bot/channels?guildId=${currentGuildId}&discordGuildId=${discordGuildId}`
-        );
-        
-        if (channelsResponse.data && Array.isArray(channelsResponse.data)) {
-          setChannels(channelsResponse.data);
-        } else {
-          setChannels([
-            { id: 'general', name: 'general', type: 0 },
-            { id: 'announcements', name: 'announcements', type: 0 }
-          ]);
-        }
-      } catch (channelsError) {
-        console.warn('Could not fetch Discord channels:', channelsError);
-        setChannels([
-          { id: 'general', name: 'general', type: 0 },
-          { id: 'announcements', name: 'announcements', type: 0 }
-        ]);
-      }
+      // Load channels for the selected server
+      await fetchDiscordChannels(currentGuildId, discordGuildId);
       
       // Get current channel configurations
       try {
@@ -213,10 +183,8 @@ const DiscordSettingsPage = () => {
         console.warn('Could not fetch channel configurations:', configError);
       }
     } catch (err) {
-      console.error('Error fetching channels:', err);
-      setError('Failed to load Discord channels');
-    } finally {
-      setLoading(false);
+      console.error('Error changing Discord server:', err);
+      setError('Failed to load Discord channels for the selected server');
     }
   };
   
@@ -253,6 +221,8 @@ const DiscordSettingsPage = () => {
   const saveSettings = async () => {
     try {
       setSaving(true);
+      setError('');
+      setSuccess('');
       
       await axiosInstance.post(`/api/discord-bot/channel-config`, {
         guildId: currentGuildId,
@@ -264,7 +234,7 @@ const DiscordSettingsPage = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Error saving channel config:', err);
-      setError('Failed to save channel configuration');
+      setError('Failed to save channel configuration: ' + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }
@@ -275,6 +245,7 @@ const DiscordSettingsPage = () => {
     try {
       setTestResults(null);
       setSaving(true);
+      setError('');
       
       const response = await axiosInstance.post(`/api/discord-bot/test-channels`, {
         guildId: currentGuildId,
@@ -285,7 +256,7 @@ const DiscordSettingsPage = () => {
       setTimeout(() => setTestResults(null), 10000);
     } catch (err) {
       console.error('Error testing channels:', err);
-      setError('Failed to test channel configuration');
+      setError('Failed to test channel configuration: ' + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }
@@ -315,38 +286,8 @@ const DiscordSettingsPage = () => {
       });
   };
   
-  // If we have a critical error, show it prominently
-  if (error && !loading) {
-    return (
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
-        </Alert>
-        <Box sx={{ mt: 2 }}>
-          <Button 
-            variant="contained" 
-            color="primary"
-            onClick={() => window.location.href = '/dashboard'}
-          >
-            Return to Dashboard
-          </Button>
-        </Box>
-        
-        {/* Show debug info in development */}
-        {process.env.NODE_ENV === 'development' && (
-          <Paper sx={{ p: 3, mt: 3 }}>
-            <Typography variant="h6">Debug Information</Typography>
-            <pre style={{ overflow: 'auto', background: '#f5f5f5', padding: '10px' }}>
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          </Paper>
-        )}
-      </Container>
-    );
-  }
-  
   // If not Guild Master, show access denied message
-  if (!isGuildMaster) {
+  if (!isGuildMaster && !loading) {
     return (
       <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
         <Alert severity="error" sx={{ mt: 2 }}>
@@ -356,45 +297,12 @@ const DiscordSettingsPage = () => {
     );
   }
   
-  if (loading && !channels.length) {
+  if (loading) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
           <CircularProgress />
         </Box>
-      </Container>
-    );
-  }
-  
-  // Simplified view for initial development and testing
-  if (process.env.NODE_ENV === 'development' && (!botConnected || channels.length === 0)) {
-    return (
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Discord Integration Settings
-        </Typography>
-        
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6">Debug Information</Typography>
-          <pre style={{ overflow: 'auto', background: '#f5f5f5', padding: '10px' }}>
-            {JSON.stringify(debugInfo, null, 2)}
-          </pre>
-        </Paper>
-        
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6">Discord Connection Status</Typography>
-          <Typography paragraph>
-            Discord connection status: {botConnected ? '✅ Connected' : '❌ Not connected'}
-          </Typography>
-          
-          <Button 
-            variant="contained" 
-            color="primary"
-            onClick={connectDiscordBot}
-          >
-            Connect Discord Bot
-          </Button>
-        </Paper>
       </Container>
     );
   }
@@ -430,142 +338,127 @@ const DiscordSettingsPage = () => {
         <>
           <Paper sx={{ p: 3, mb: 4, borderRadius: 2 }}>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-              <TuneIcon sx={{ mr: 1 }} />
-              Discord Server Configuration
+              <NotificationsIcon sx={{ mr: 1 }} />
+              Channel Notification Settings
             </Typography>
             
-            <FormControl fullWidth sx={{ mb: 3, mt: 2 }}>
-              <InputLabel>Select Discord Server</InputLabel>
-              <Select
-                value={selectedGuild || ''}
-                onChange={(e) => handleGuildChange(e.target.value)}
-                label="Select Discord Server"
-              >
-                {discordGuilds.map((server) => (
-                  <MenuItem key={server.id} value={server.id}>
-                    {server.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Configure which Discord channels should receive different types of notifications and interactions.
+            </Typography>
             
-            {selectedGuild && (
-              <>
-                <Divider sx={{ my: 3 }} />
+            {/* Channel selection/loading indicator */}
+            {channelLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress size={30} />
+                <Typography sx={{ ml: 2 }}>Loading channels...</Typography>
+              </Box>
+            ) : channels.length === 0 ? (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                No text channels found in your Discord server. Please create at least one text channel first.
+              </Alert>
+            ) : (
+              // Channel selection for each notification type
+              CHANNEL_TYPES.map((type) => {
+                const config = configurations.find(c => c.channel_type === type.id);
+                const channelId = config?.channel_id || '';
+                const enabled = config?.enabled !== false; // Default to true if not specified
                 
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                  <NotificationsIcon sx={{ mr: 1 }} />
-                  Channel Notification Settings
-                </Typography>
-                
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Configure which Discord channels should receive different types of notifications and interactions.
-                </Typography>
-                
-                {CHANNEL_TYPES.map((type) => {
-                  const config = configurations.find(c => c.channel_type === type.id);
-                  const channelId = config?.channel_id || '';
-                  const enabled = config?.enabled !== false; // Default to true if not specified
-                  
-                  return (
-                    <Card 
-                      key={type.id} 
-                      variant="outlined" 
-                      sx={{ 
-                        mb: 2,
-                        borderColor: enabled ? 'primary.main' : 'divider',
-                        opacity: enabled ? 1 : 0.7,
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-                        <Grid container spacing={2} alignItems="center">
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle1" fontWeight="medium">
-                              {type.name}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {type.description}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <FormControl fullWidth>
-                              <InputLabel>Channel</InputLabel>
-                              <Select
-                                value={channelId}
-                                onChange={(e) => handleChannelChange(type.id, e.target.value)}
-                                label="Channel"
-                                disabled={!enabled}
-                              >
-                                <MenuItem value="">
-                                  <em>None</em>
-                                </MenuItem>
-                                {channels
-                                  .filter(channel => channel.type === 0) // Only text channels
-                                  .map((channel) => (
-                                    <MenuItem key={channel.id} value={channel.id}>
-                                      #{channel.name}
-                                    </MenuItem>
-                                  ))}
-                              </Select>
-                            </FormControl>
-                          </Grid>
-                          <Grid item xs={12} sm={2}>
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  checked={enabled}
-                                  onChange={() => handleToggleEnabled(type.id)}
-                                  color="primary"
-                                />
-                              }
-                              label="Enabled"
-                            />
-                          </Grid>
+                return (
+                  <Card 
+                    key={type.id} 
+                    variant="outlined" 
+                    sx={{ 
+                      mb: 2,
+                      borderColor: enabled ? 'primary.main' : 'divider',
+                      opacity: enabled ? 1 : 0.7,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} sm={4}>
+                          <Typography variant="subtitle1" fontWeight="medium">
+                            {type.name}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {type.description}
+                          </Typography>
                         </Grid>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                        <Grid item xs={12} sm={6}>
+                          <FormControl fullWidth>
+                            <InputLabel>Channel</InputLabel>
+                            <Select
+                              value={channelId}
+                              onChange={(e) => handleChannelChange(type.id, e.target.value)}
+                              label="Channel"
+                              disabled={!enabled}
+                            >
+                              <MenuItem value="">
+                                <em>None</em>
+                              </MenuItem>
+                              {channels.map((channel) => (
+                                <MenuItem key={channel.id} value={channel.id}>
+                                  #{channel.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={enabled}
+                                onChange={() => handleToggleEnabled(type.id)}
+                                color="primary"
+                              />
+                            }
+                            label="Enabled"
+                          />
+                        </Grid>
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+            
+            <Box sx={{ mt: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button 
+                variant="contained" 
+                color="primary" 
+                onClick={saveSettings}
+                disabled={saving || channelLoading}
+                size="large"
+              >
+                {saving ? <CircularProgress size={24} /> : 'Save Settings'}
+              </Button>
+              
+              <Button 
+                variant="outlined"
+                onClick={testConfiguration}
+                disabled={saving || channelLoading}
+              >
+                Test Notifications
+              </Button>
+            </Box>
+            
+            {testResults && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Test Results
+                </Typography>
                 
-                <Box sx={{ mt: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                  <Button 
-                    variant="contained" 
-                    color="primary" 
-                    onClick={saveSettings}
-                    disabled={saving}
-                    size="large"
+                {Object.entries(testResults).map(([type, result]) => (
+                  <Alert 
+                    key={type} 
+                    severity={result.success ? "success" : "error"}
+                    sx={{ mb: 1 }}
                   >
-                    {saving ? <CircularProgress size={24} /> : 'Save Settings'}
-                  </Button>
-                  
-                  <Button 
-                    variant="outlined"
-                    onClick={testConfiguration}
-                    disabled={saving}
-                  >
-                    Test Notifications
-                  </Button>
-                </Box>
-                
-                {testResults && (
-                  <Box sx={{ mt: 3 }}>
-                    <Typography variant="h6" gutterBottom>
-                      Test Results
-                    </Typography>
-                    
-                    {Object.entries(testResults).map(([type, result]) => (
-                      <Alert 
-                        key={type} 
-                        severity={result.success ? "success" : "error"}
-                        sx={{ mb: 1 }}
-                      >
-                        {type}: {result.success ? "Message sent successfully" : result.error}
-                      </Alert>
-                    ))}
-                  </Box>
-                )}
-              </>
+                    {type}: {result.success ? "Message sent successfully" : result.error}
+                  </Alert>
+                ))}
+              </Box>
             )}
           </Paper>
           
