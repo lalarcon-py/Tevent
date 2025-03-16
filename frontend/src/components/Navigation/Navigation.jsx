@@ -49,8 +49,6 @@ const Navigation = ({ guildId }) => {
           return;
         }
         
-        console.log('Fetching members for guild:', currentGuildId);
-        
         // Fetch guild members
         const response = await axiosInstance.get(`/api/guilds/${currentGuildId}/members`);
         
@@ -58,19 +56,63 @@ const Navigation = ({ guildId }) => {
         const currentMember = response.data.find(member => member.id === user.id);
         
         if (currentMember) {
-          console.log('Found guild role:', currentMember.role);
           setGuildRole(currentMember.role);
           
-          // Use the discord-setup/status endpoint directly instead of checking mappings
+          // Try different approaches to check Discord connection status
+          
+          // Approach 1: Check directly with the specific guild
           try {
-            // This endpoint should directly tell us if Discord is connected
+            const mappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping?guildId=${currentGuildId}`);
+            console.log('Discord mapping response:', mappingResponse.data);
+            
+            // If we get a successful response with data, Discord is connected
+            if (mappingResponse.data && (mappingResponse.data.connected === true || 
+                                      (mappingResponse.data.discord_guild_id && mappingResponse.data.app_guild_id === currentGuildId))) {
+              setDiscordConnected(true);
+              return;
+            }
+          } catch (err) {
+            console.log('First approach failed, trying next method');
+          }
+          
+          // Approach 2: Get all mappings and check if our guild is in the list
+          try {
+            const allMappingsResponse = await axiosInstance.get('/api/discord-bot/guild-mappings');
+            console.log('All mappings response:', allMappingsResponse.data);
+            
+            if (Array.isArray(allMappingsResponse.data)) {
+              const isConnected = allMappingsResponse.data.some(mapping => 
+                mapping.app_guild_id === currentGuildId || mapping.guild_id === currentGuildId
+              );
+              
+              setDiscordConnected(isConnected);
+              return;
+            }
+          } catch (err) {
+            console.log('Second approach failed, trying next method');
+          }
+          
+          // Approach 3: Try the status endpoint directly
+          try {
             const statusResponse = await axiosInstance.get(`/api/discord-setup/status?guildId=${currentGuildId}`);
             console.log('Discord status response:', statusResponse.data);
             
-            // Set connected status based on the response
             setDiscordConnected(statusResponse.data && statusResponse.data.connected === true);
+            return;
           } catch (err) {
-            console.error('Failed to check Discord status:', err);
+            console.log('Third approach failed, trying next method');
+          }
+          
+          // Approach 4: Try to fetch channel configs - if successful, Discord is likely connected
+          try {
+            const channelsResponse = await axiosInstance.get(`/api/discord-setup/channel-config?guildId=${currentGuildId}`);
+            console.log('Channel config response:', channelsResponse.data);
+            
+            // If we can get channel configurations, Discord is likely connected
+            setDiscordConnected(true);
+            return;
+          } catch (err) {
+            console.log('Fourth approach failed');
             setDiscordConnected(false);
           }
         } else {
