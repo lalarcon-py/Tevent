@@ -912,15 +912,28 @@ router.put('/members/:userId/update-name', async (req, res) => {
     const { userId } = req.params;
     const { username, guildId } = req.body;
     
-    // Only allow users to change their own name
-    if (userId !== req.user.id) {
-      return res.status(403).json({ error: 'You can only change your own name' });
+    const isSelf = userId === req.user.id;
+    let isGuildMaster = false;
+    
+    if (!isSelf && guildId) {
+      const membership = await db.GuildMember.findOne({
+        where: {
+          guild_id: guildId,
+          user_id: req.user.id,
+          role: 'Guild Master'
+        }
+      });
+      isGuildMaster = !!membership;
     }
     
-    // Ensure we're in the public schema
+    if (!isSelf && !isGuildMaster) {
+      return res.status(403).json({ 
+        error: 'You can only change your own name unless you are a Guild Master' 
+      });
+    }
+    
     await sequelize.query(`SET search_path TO public`, { transaction: t });
     
-    // Update the user record in the public schema
     await db.User.update({ 
       username 
     }, { 
