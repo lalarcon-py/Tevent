@@ -467,11 +467,16 @@ router.get('/servers', async (req, res) => {
 // Link a Discord server to an application guild
 router.post('/link-guild', async (req, res) => {
   try {
-    console.log('Received link-guild request:', req.body);
-
+    console.log('Received link-guild request:', {
+      discordGuildId: req.body.discordGuildId,
+      joinCode: req.body.joinCode,
+      hasSecret: !!req.body.secret
+    });
+    
+    // Extract data from request body
     const { discordGuildId, joinCode, secret } = req.body;
     
-    // Validate input
+    // Validate input data
     if (!discordGuildId || !joinCode) {
       return res.status(400).json({ 
         success: false, 
@@ -487,41 +492,45 @@ router.post('/link-guild', async (req, res) => {
       });
     }
     
-    // Find guild by join code
+    // Find the guild by join code
     const guild = await db.Guild.findOne({
       where: { join_code: joinCode }
     });
     
     if (!guild) {
+      console.log(`Guild not found with join code: ${joinCode}`);
       return res.status(404).json({ 
         success: false, 
-        error: 'Guild not found with the provided join code' 
+        error: 'Invalid join code. Please check your guild settings for the correct code.' 
       });
     }
     
-    // Create or update mapping
+    console.log(`Found guild with join code ${joinCode}: ${guild.id} (${guild.name})`);
+    
+    // Create or update the mapping entry
     const [mapping, created] = await db.DiscordGuildMapping.findOrCreate({
       where: { discord_guild_id: discordGuildId },
       defaults: { app_guild_id: guild.id }
     });
     
     if (!created) {
+      console.log(`Updating existing mapping for Discord guild ${discordGuildId} to app guild ${guild.id}`);
       await mapping.update({ app_guild_id: guild.id });
+    } else {
+      console.log(`Created new mapping: Discord ${discordGuildId} → App Guild ${guild.id}`);
     }
     
-    console.log(`Created Discord mapping: ${discordGuildId} -> ${guild.id}`);
-    
+    // Return success response
     res.json({ 
       success: true, 
-      message: 'Guild linked successfully',
-      guildName: guild.name
+      message: 'Guild linked successfully', 
+      guildName: guild.name 
     });
   } catch (error) {
     console.error('Error linking guild:', error);
     res.status(500).json({ 
       success: false, 
-      error: 'Failed to link guild', 
-      details: error.message 
+      error: 'Failed to link guild: ' + error.message 
     });
   }
 });

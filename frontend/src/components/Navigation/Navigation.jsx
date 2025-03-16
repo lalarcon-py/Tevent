@@ -146,6 +146,11 @@ const Navigation = ({ guildId }) => {
       const joinCode = settingsResponse.data.joinCode;
       debugLog('Join code', joinCode);
       
+      if (!joinCode) {
+        alert('Could not retrieve your guild join code. Please contact support.');
+        return;
+      }
+      
       // Get Discord client ID
       const clientId = await getDiscordClientId();
       debugLog('Discord client ID', clientId);
@@ -155,17 +160,16 @@ const Navigation = ({ guildId }) => {
         return;
       }
       
-      // Add state parameter with guild info for automatic linking
-      const state = btoa(JSON.stringify({
-        appGuildId: currentGuildId,
-        joinCode: joinCode
-      }));
+      // Create OAuth URL (standard bot invite URL)
+      const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=2147485696&scope=bot%20applications.commands`;
       
-      // Create and open Discord OAuth URL - add state parameter
-      const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=2147485696&scope=bot%20applications.commands&state=${state}`;
+      // Open Discord authorization in new tab
       window.open(discordUrl, '_blank');
       
-      // No need for instructions - it will happen automatically
+      // Show instructions with actual join code
+      setTimeout(() => {
+        alert(`After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`);
+      }, 500);
     } catch (error) {
       debugLog('Error in Discord integration', error);
       alert('Could not connect to Discord. Please try again later.');
