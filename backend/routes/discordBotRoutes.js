@@ -27,6 +27,62 @@ router.get('/guild-mappings', async (req, res) => {
   }
 });
 
+router.get('/status', async (req, res) => {
+  try {
+    const { guildId } = req.query;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Check if mapping exists in database
+    const result = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    res.json({
+      connected: result.rows.length > 0,
+      discordGuildId: result.rows[0]?.discord_guild_id || null
+    });
+  } catch (error) {
+    console.error('Error checking Discord status:', error);
+    res.status(500).json({ error: 'Failed to check Discord connection status' });
+  }
+});
+
+router.get('/servers', async (req, res) => {
+  try {
+    // For simplicity, find the Discord guild ID from the mapping and return it
+    const { guildId } = req.query;
+    
+    const result = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!result.rows.length) {
+      return res.json([]);
+    }
+    
+    // Try to get guild info from Discord API
+    try {
+      const discordGuildId = result.rows[0].discord_guild_id;
+      // You would normally use Discord API here, but for now return basic info
+      res.json([{
+        id: discordGuildId,
+        name: "Connected Discord Server"
+      }]);
+    } catch (err) {
+      console.error('Error fetching Discord guild info:', err);
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('Error fetching Discord servers:', error);
+    res.status(500).json({ error: 'Failed to fetch Discord servers' });
+  }
+});
+
 // Link a Discord server to an application guild
 router.post('/link-guild', async (req, res) => {
   try {

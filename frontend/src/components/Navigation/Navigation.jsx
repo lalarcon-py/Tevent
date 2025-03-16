@@ -241,7 +241,7 @@ const Navigation = ({ guildId }) => {
       baseMenuItems.push({
         text: 'Discord Settings',
         icon: <DiscordIcon />,
-        path: '/discord/settings'
+        path: `/guilds/${guildId}/discord/settings`
       });
     } else {
       baseMenuItems.push({

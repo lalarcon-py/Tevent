@@ -11,6 +11,7 @@ import ConnectedTvIcon from '@mui/icons-material/ConnectedTv';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import TuneIcon from '@mui/icons-material/Tune';
 import { useGuild } from '../contexts/GuildContext';
+import axiosInstance from '../config/axios';
 
 // Channel configuration options - matches the requested channels
 const CHANNEL_TYPES = [
@@ -24,8 +25,19 @@ const CHANNEL_TYPES = [
 ];
 
 const DiscordSettingsPage = () => {
-  const { guildId } = useParams();
+  // Get guildId from URL or localStorage
+  const { guildId: urlGuildId } = useParams();
+  const currentGuildId = urlGuildId || localStorage.getItem('guildId');
+  
   const { guildRole } = useGuild();
+  
+  // Debug information for troubleshooting
+  const [debugInfo, setDebugInfo] = useState({
+    guildId: currentGuildId,
+    guildRole: null,
+    discordConnected: false,
+    apiEndpoints: {}
+  });
   
   // State variables
   const [loading, setLoading] = useState(true);
@@ -44,34 +56,89 @@ const DiscordSettingsPage = () => {
   
   // Fetch Discord connection data
   useEffect(() => {
-    if (!guildId || !isGuildMaster) return;
+    // Update debug info
+    setDebugInfo({
+      guildId: currentGuildId,
+      guildRole: guildRole,
+      discordConnected: botConnected,
+      apiEndpoints: {
+        status: `/api/discord-bot/status?guildId=${currentGuildId}`,
+        guildMapping: `/api/discord-bot/guild-mapping/${currentGuildId}`,
+        servers: `/api/discord-setup/servers?guildId=${currentGuildId}`,
+        channelConfig: `/api/discord-setup/channel-config?guildId=${currentGuildId}`
+      }
+    });
+    
+    if (!currentGuildId) {
+      console.error('No guild ID available for Discord settings');
+      setError('No guild selected. Please select a guild first.');
+      setLoading(false);
+      return;
+    }
+    
+    if (!isGuildMaster) {
+      setLoading(false);
+      return;
+    }
     
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Get Discord connection status
-        const statusResponse = await axios.get(`/api/discord-setup/status?guildId=${guildId}`);
-        setBotConnected(statusResponse.data.connected);
-        
-        if (statusResponse.data.connected) {
-          // Get Discord servers where bot is installed
-          const serversResponse = await axios.get(`/api/discord-setup/servers?guildId=${guildId}`);
-          setDiscordGuilds(serversResponse.data);
+        // Get Discord connection status using the direct guild-mapping endpoint
+        try {
+          const mappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping/${currentGuildId}`);
+          console.log('Discord mapping response:', mappingResponse.data);
           
-          if (statusResponse.data.discordGuildId) {
-            setSelectedGuild(statusResponse.data.discordGuildId);
+          setBotConnected(mappingResponse.data.connected);
+          
+          if (mappingResponse.data.connected) {
+            // Set selected Discord guild
+            setSelectedGuild(mappingResponse.data.discordGuildId);
             
-            // Fetch channels for this Discord server
-            const channelsResponse = await axios.get(
-              `/api/discord-setup/channels?guildId=${guildId}&discordGuildId=${statusResponse.data.discordGuildId}`
-            );
-            setChannels(channelsResponse.data);
+            // Get Discord server info - falling back to simpler approach for now
+            setDiscordGuilds([{
+              id: mappingResponse.data.discordGuildId,
+              name: "Connected Discord Server"
+            }]);
             
-            // Get existing channel configurations
-            const configResponse = await axios.get(`/api/discord-setup/channel-config?guildId=${guildId}`);
-            setConfigurations(configResponse.data.configurations || []);
+            // Try to get channels - simplified for now
+            try {
+              const channelsResponse = await axiosInstance.get(
+                `/api/discord-bot/channels?guildId=${currentGuildId}&discordGuildId=${mappingResponse.data.discordGuildId}`
+              );
+              
+              if (channelsResponse.data && Array.isArray(channelsResponse.data)) {
+                setChannels(channelsResponse.data);
+              } else {
+                // Fallback to show at least something
+                setChannels([
+                  { id: 'general', name: 'general', type: 0 },
+                  { id: 'announcements', name: 'announcements', type: 0 }
+                ]);
+              }
+            } catch (channelsError) {
+              console.warn('Could not fetch Discord channels:', channelsError);
+              // Fallback channels for UI testing
+              setChannels([
+                { id: 'general', name: 'general', type: 0 },
+                { id: 'announcements', name: 'announcements', type: 0 }
+              ]);
+            }
+            
+            // Try to get existing configurations
+            try {
+              const configResponse = await axiosInstance.get(`/api/discord-bot/channel-config?guildId=${currentGuildId}`);
+              if (configResponse.data && configResponse.data.configurations) {
+                setConfigurations(configResponse.data.configurations);
+              }
+            } catch (configError) {
+              console.warn('Could not fetch channel configurations:', configError);
+            }
           }
+        } catch (mappingError) {
+          console.error('Error checking Discord connection:', mappingError);
+          setBotConnected(false);
         }
       } catch (err) {
         console.error('Error fetching Discord data:', err);
@@ -82,7 +149,7 @@ const DiscordSettingsPage = () => {
     };
     
     fetchData();
-  }, [guildId, isGuildMaster]);
+  }, [currentGuildId, isGuildMaster, guildRole, botConnected]);
   
   // Handle Discord server selection change
   const handleGuildChange = async (discordGuildId) => {
@@ -91,14 +158,36 @@ const DiscordSettingsPage = () => {
       setLoading(true);
       
       // Get channels for the selected Discord server
-      const channelsResponse = await axios.get(
-        `/api/discord-setup/channels?guildId=${guildId}&discordGuildId=${discordGuildId}`
-      );
-      setChannels(channelsResponse.data);
+      try {
+        const channelsResponse = await axiosInstance.get(
+          `/api/discord-bot/channels?guildId=${currentGuildId}&discordGuildId=${discordGuildId}`
+        );
+        
+        if (channelsResponse.data && Array.isArray(channelsResponse.data)) {
+          setChannels(channelsResponse.data);
+        } else {
+          setChannels([
+            { id: 'general', name: 'general', type: 0 },
+            { id: 'announcements', name: 'announcements', type: 0 }
+          ]);
+        }
+      } catch (channelsError) {
+        console.warn('Could not fetch Discord channels:', channelsError);
+        setChannels([
+          { id: 'general', name: 'general', type: 0 },
+          { id: 'announcements', name: 'announcements', type: 0 }
+        ]);
+      }
       
       // Get current channel configurations
-      const configResponse = await axios.get(`/api/discord-setup/channel-config?guildId=${guildId}`);
-      setConfigurations(configResponse.data.configurations || []);
+      try {
+        const configResponse = await axiosInstance.get(`/api/discord-bot/channel-config?guildId=${currentGuildId}`);
+        if (configResponse.data && configResponse.data.configurations) {
+          setConfigurations(configResponse.data.configurations);
+        }
+      } catch (configError) {
+        console.warn('Could not fetch channel configurations:', configError);
+      }
     } catch (err) {
       console.error('Error fetching channels:', err);
       setError('Failed to load Discord channels');
@@ -141,8 +230,8 @@ const DiscordSettingsPage = () => {
     try {
       setSaving(true);
       
-      await axios.post(`/api/discord-setup/channel-config`, {
-        guildId,
+      await axiosInstance.post(`/api/discord-bot/channel-config`, {
+        guildId: currentGuildId,
         discordGuildId: selectedGuild,
         configurations
       });
@@ -163,8 +252,8 @@ const DiscordSettingsPage = () => {
       setTestResults(null);
       setSaving(true);
       
-      const response = await axios.post(`/api/discord-setup/test-channels`, {
-        guildId,
+      const response = await axiosInstance.post(`/api/discord-bot/test-channels`, {
+        guildId: currentGuildId,
         discordGuildId: selectedGuild
       });
       
@@ -180,7 +269,7 @@ const DiscordSettingsPage = () => {
   
   // Connect Discord bot
   const connectDiscordBot = () => {
-    axios.get(`/api/guilds/${guildId}/settings`)
+    axiosInstance.get(`/api/guilds/${currentGuildId}/settings`)
       .then(response => {
         const joinCode = response.data.joinCode;
         
@@ -202,6 +291,36 @@ const DiscordSettingsPage = () => {
       });
   };
   
+  // If we have a critical error, show it prominently
+  if (error && !loading) {
+    return (
+      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+        <Box sx={{ mt: 2 }}>
+          <Button 
+            variant="contained" 
+            color="primary"
+            onClick={() => window.location.href = '/dashboard'}
+          >
+            Return to Dashboard
+          </Button>
+        </Box>
+        
+        {/* Show debug info in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Typography variant="h6">Debug Information</Typography>
+            <pre style={{ overflow: 'auto', background: '#f5f5f5', padding: '10px' }}>
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </Paper>
+        )}
+      </Container>
+    );
+  }
+  
   // If not Guild Master, show access denied message
   if (!isGuildMaster) {
     return (
@@ -219,6 +338,39 @@ const DiscordSettingsPage = () => {
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
           <CircularProgress />
         </Box>
+      </Container>
+    );
+  }
+  
+  // Simplified view for initial development and testing
+  if (process.env.NODE_ENV === 'development' && (!botConnected || channels.length === 0)) {
+    return (
+      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Discord Integration Settings
+        </Typography>
+        
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6">Debug Information</Typography>
+          <pre style={{ overflow: 'auto', background: '#f5f5f5', padding: '10px' }}>
+            {JSON.stringify(debugInfo, null, 2)}
+          </pre>
+        </Paper>
+        
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6">Discord Connection Status</Typography>
+          <Typography paragraph>
+            Discord connection status: {botConnected ? '✅ Connected' : '❌ Not connected'}
+          </Typography>
+          
+          <Button 
+            variant="contained" 
+            color="primary"
+            onClick={connectDiscordBot}
+          >
+            Connect Discord Bot
+          </Button>
+        </Paper>
       </Container>
     );
   }

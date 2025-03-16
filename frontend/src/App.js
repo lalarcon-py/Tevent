@@ -214,7 +214,7 @@ function AppContent() {
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/admin" element={<AdminPortal />} />
-          <Route path="/discord/settings" element={<DiscordSettingsPage />} />
+          <Route path="/guilds/:guildId/discord/settings" element={<DiscordSettingsPage />} />
           <Route path="*" element={<LandingPage />} />
         </Routes>
       </Router>
