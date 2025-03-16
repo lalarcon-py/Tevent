@@ -92,7 +92,7 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// NEW ENDPOINT: Get Discord channels for a server
+
 router.get('/channels', async (req, res) => {
   try {
     const { guildId, discordGuildId } = req.query;
@@ -130,7 +130,8 @@ router.get('/channels', async (req, res) => {
     
     try {
       // Call Discord bot service to get channels
-      const channels = await callDiscordBot(`/channels?guildId=${appGuildId}&discordGuildId=${discordGuildId}`);
+      // Fix this line to use guildId instead of appGuildId
+      const channels = await callDiscordBot(`/channels?guildId=${guildId}&discordGuildId=${discordGuildId}`);
       
       // If we get here, format and return the channels
       const formattedChannels = channels.map(channel => ({
@@ -160,7 +161,7 @@ router.get('/channels', async (req, res) => {
   }
 });
 
-// NEW ENDPOINT: Get channel configuration
+
 router.get('/channel-config', async (req, res) => {
   try {
     const { guildId } = req.query;
