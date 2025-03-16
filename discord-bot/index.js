@@ -1885,31 +1885,57 @@ const handleLinkGuildCommand = async (interaction) => {
         );
         console.log(`Updated existing mapping for Discord guild ${interaction.guildId} to app guild ${guildId}`);
       } else {
-        // Create new mapping
+        // Create new mapping with explicit UUID generation
         await pool.query(
-          'INSERT INTO discord_guild_mappings (discord_guild_id, app_guild_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())',
+          `INSERT INTO discord_guild_mappings 
+           (id, discord_guild_id, app_guild_id, created_at, updated_at) 
+           VALUES (gen_random_uuid(), $1, $2, NOW(), NOW())`,
           [interaction.guildId, guildId]
         );
         console.log(`Created new mapping: Discord ${interaction.guildId} → App Guild ${guildId}`);
       }
       
-      // Notify the bot webhooks about the new connection
-      try {
-        await axios.post(`${API_URL}/webhook/update-config`, {
-          guildId: guildId,
-          discordGuildId: interaction.guildId,
-          configurations: [],
-          secret: process.env.BOT_WEBHOOK_SECRET
-        });
-        console.log('Webhook notification sent');
-      } catch (webhookError) {
-        console.error('Failed to send webhook notification, but guild mapping was created:', webhookError.message);
-      }
-      
+      // Notify the user in Discord
       await interaction.editReply({
         content: `✅ Successfully linked this Discord server to guild "${guildName}"! You can now configure channel settings in the Discord tab on your guild dashboard.`,
         ephemeral: true
       });
+      
+      // Try to set up default channel configs
+      try {
+        // Find the system channel or general channel for defaults
+        const guild = interaction.guild;
+        let defaultChannel = guild.systemChannel;
+        
+        if (!defaultChannel) {
+          // Try to find a channel with "general" in the name
+          defaultChannel = guild.channels.cache.find(
+            channel => channel.type === 0 && channel.name.includes('general')
+          );
+        }
+        
+        if (!defaultChannel) {
+          // Just use the first text channel
+          defaultChannel = guild.channels.cache.find(channel => channel.type === 0);
+        }
+        
+        if (defaultChannel) {
+          // Create default channel configurations
+          await pool.query(
+            `INSERT INTO discord_channel_config
+             (id, guild_id, discord_guild_id, channel_id, channel_type, enabled, created_at, updated_at)
+             VALUES 
+             (gen_random_uuid(), $1, $2, $3, 'events', true, NOW(), NOW()),
+             (gen_random_uuid(), $1, $2, $3, 'announcements', true, NOW(), NOW())`,
+            [guildId, interaction.guildId, defaultChannel.id]
+          );
+          
+          console.log(`Created default channel configurations using channel: ${defaultChannel.name}`);
+        }
+      } catch (configError) {
+        console.error('Error setting up default channel configs:', configError);
+        // This is non-critical, so we don't throw
+      }
       
     } catch (dbError) {
       console.error('Database approach failed:', dbError);
