@@ -4,7 +4,7 @@ import {
   Box, Paper, Tabs, Tab, Typography, Divider, CircularProgress,
   Alert, Container, Button
 } from '@mui/material';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import SettingsIcon from '@mui/icons-material/Settings';
 import PeopleIcon from '@mui/icons-material/People';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
@@ -12,7 +12,6 @@ import WarningIcon from '@mui/icons-material/Warning';
 import PercentIcon from '@mui/icons-material/Percent';
 import axiosInstance from '../../config/axios';
 import { useAuth } from '../../contexts/AuthContext';
-import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 import GeneralSettings from './GeneralSettings';
 import DkpSettings from './DkpSettings';
 import RoleLimits from './RoleLimits';
@@ -26,84 +25,55 @@ const GuildSettings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [guildData, setGuildData] = useState(null);
-  
-  // Use multiple sources to get guild ID
-  const { guildId: urlGuildId } = useParams();
-  const { guildId: contextGuildId } = useGuildSettings();
+  const { guildId } = useParams();
   const { isAuthenticated, user } = useAuth();
   const [isGuildMaster, setIsGuildMaster] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  
-  // Determine the actual guild ID with proper fallbacks
   const [actualGuildId, setActualGuildId] = useState(null);
+  const navigate = useNavigate();
   
-  // First, try to determine the guild ID from available sources
+  // First, find the guild ID using multiple methods
   useEffect(() => {
-    // Log initial state for debugging
-    console.log('Guild Settings initializing with parameters:', {
-      urlParam: urlGuildId,
-      contextId: contextGuildId,
-      pathname: location.pathname
-    });
-    
-    let foundGuildId = null;
-    
     // Method 1: From URL parameters (React Router)
-    if (urlGuildId && urlGuildId !== 'undefined') {
-      console.log('Using guildId from route params:', urlGuildId);
-      foundGuildId = urlGuildId;
+    if (guildId && guildId !== 'undefined') {
+      console.log('Using guildId from route params:', guildId);
+      setActualGuildId(guildId);
+      return;
     }
-    // Method 2: From context provider
-    else if (contextGuildId && contextGuildId !== 'undefined') {
-      console.log('Using guildId from context:', contextGuildId);
-      foundGuildId = contextGuildId;
-    }
-    // Method 3: Extract from URL path
-    else {
-      const pathParts = location.pathname.split('/');
-      const guildIdIndex = pathParts.indexOf('guilds') + 1;
-      if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
-        const pathGuildId = pathParts[guildIdIndex];
-        if (pathGuildId && pathGuildId !== 'undefined') {
-          console.log('Using guildId from URL path:', pathGuildId);
-          foundGuildId = pathGuildId;
-        }
+    
+    // Method 2: From URL path
+    const pathParts = window.location.pathname.split('/');
+    const guildIdIndex = pathParts.indexOf('guilds') + 1;
+    if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
+      const urlGuildId = pathParts[guildIdIndex];
+      if (urlGuildId && urlGuildId !== 'undefined') {
+        console.log('Using guildId from URL path:', urlGuildId);
+        setActualGuildId(urlGuildId);
+        return;
       }
     }
     
-    // Method 4: From localStorage as last resort
-    if (!foundGuildId) {
-      try {
-        const storedGuildId = localStorage.getItem('guildId');
-        if (storedGuildId && storedGuildId !== 'undefined') {
-          console.log('Using guildId from localStorage:', storedGuildId);
-          foundGuildId = storedGuildId;
-        }
-      } catch (e) {
-        console.warn('Failed to access localStorage', e);
+    // Method 3: From localStorage - only as a fallback, permissions enforced server-side
+    try {
+      const storedGuildId = localStorage.getItem('guildId');
+      if (storedGuildId && storedGuildId !== 'undefined') {
+        console.log('Using guildId from localStorage:', storedGuildId);
+        setActualGuildId(storedGuildId);
+        return;
       }
+    } catch (e) {
+      console.warn('Failed to access localStorage', e);
     }
     
-    console.log('Final determined guild ID:', foundGuildId);
-    setActualGuildId(foundGuildId);
-    
-    // If we couldn't find any guild ID, exit loading state with error
-    if (!foundGuildId && isAuthenticated) {
-      setError('No valid guild ID found. Please return to the dashboard and try again.');
-      setLoading(false);
-    }
-  }, [urlGuildId, contextGuildId, location.pathname, isAuthenticated]);
+    // No valid guild ID found
+    console.error('No valid guild ID found');
+    setError('No guild ID found. Please go back to the dashboard and try again.');
+    setLoading(false);
+  }, [guildId]);
   
-  // Then, fetch guild data if we have a valid ID and user is authenticated
+  // Then, fetch guild data if we have a valid ID
   useEffect(() => {
     if (isAuthenticated && actualGuildId) {
-      console.log('Fetching guild data for ID:', actualGuildId);
       fetchGuildData();
-    } else if (isAuthenticated && !actualGuildId) {
-      // If authenticated but no guild ID found, exit loading state
-      setError('Unable to determine guild ID. Please return to dashboard and try again.');
-      setLoading(false);
     }
   }, [isAuthenticated, actualGuildId]);
   
@@ -115,8 +85,6 @@ const GuildSettings = () => {
       if (!actualGuildId || actualGuildId === 'undefined') {
         throw new Error('Invalid guild ID');
       }
-      
-      console.log('Making API request to fetch guild data for ID:', actualGuildId);
       
       // Fetch guild details - server validates permissions
       const guildResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}`);
@@ -131,7 +99,6 @@ const GuildSettings = () => {
       
       // Fetch guild settings
       const settingsResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}/settings`);
-      console.log("Settings API response:", settingsResponse.data);
       
       // Combine guild data with settings
       setGuildData({
@@ -169,7 +136,7 @@ const GuildSettings = () => {
     setCurrentTab(newValue);
   };
   
-  const handleSettingsUpdate = async (settings) => {
+  const handleSettingsUpdate = async (settingGroup, updatedSettings) => {
     try {
       setLoading(true);
       
@@ -177,21 +144,21 @@ const GuildSettings = () => {
         throw new Error('Invalid guild ID');
       }
       
-      console.log('Updating settings for guild ID:', actualGuildId, settings);
-      
       // Update settings in backend - server will enforce permissions
-      const response = await axiosInstance.put(`/api/guilds/${actualGuildId}/settings`, settings);
+      const response = await axiosInstance.put(`/api/guilds/${actualGuildId}/settings`, {
+        settingGroup,
+        settings: updatedSettings
+      });
       
       // Update local state
       setGuildData(prev => ({
         ...prev,
         settings: {
           ...prev.settings,
-          ...settings
+          ...updatedSettings
         }
       }));
       
-      return true;
     } catch (error) {
       console.error('Failed to update settings:', error);
       
@@ -203,8 +170,6 @@ const GuildSettings = () => {
       } else {
         setError(error.response?.data?.error || 'Failed to update settings. Please try again.');
       }
-      
-      throw error;
     } finally {
       setLoading(false);
     }
@@ -319,31 +284,31 @@ const GuildSettings = () => {
             {currentTab === 0 && (
               <GeneralSettings 
                 guildData={guildData} 
-                onUpdate={handleSettingsUpdate} 
+                onUpdate={(settings) => handleSettingsUpdate('general', settings)} 
               />
             )}
             {currentTab === 1 && (
               <DkpSettings 
                 guildData={guildData} 
-                onUpdate={handleSettingsUpdate} 
+                onUpdate={(settings) => handleSettingsUpdate('dkp', settings)} 
               />
             )}
             {currentTab === 2 && (
               <RoleLimits 
                 guildData={guildData} 
-                onUpdate={handleSettingsUpdate} 
+                onUpdate={(settings) => handleSettingsUpdate('roles', settings)} 
               />
             )}
             {currentTab === 3 && (
               <AttendanceSettings 
                 guildData={guildData} 
-                onUpdate={handleSettingsUpdate} 
+                onUpdate={(settings) => handleSettingsUpdate('attendance', settings)} 
               />
             )}
             {currentTab === 4 && (
               <AdvancedSettings 
                 guildData={guildData} 
-                onUpdate={handleSettingsUpdate} 
+                onUpdate={(settings) => handleSettingsUpdate('advanced', settings)} 
               />
             )}
             {currentTab === 5 && (
