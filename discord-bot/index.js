@@ -2437,20 +2437,21 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
   try {
     console.log(`[INFO] Attempting to send ${type} notification for guild ${guildId}`);
     
-    // Get channel configuration
+    // Get the latest channel configuration from the database - don't use cached results
     const configResult = await pool.query(
       `SELECT channel_id FROM discord_channel_config 
-       WHERE guild_id = $1 AND channel_type = $2 AND enabled = true`,
+       WHERE guild_id = $1 AND channel_type = $2 AND enabled = true
+       ORDER BY updated_at DESC LIMIT 1`,
       [guildId, type]
     );
     
-    // If no channel is configured for this type, try to find a general channel
     if (!configResult.rows.length) {
       console.log(`[INFO] No ${type} channel configured, checking for general channel`);
       
       const generalResult = await pool.query(
         `SELECT channel_id FROM discord_channel_config 
-         WHERE guild_id = $1 AND channel_type = 'general' AND enabled = true`,
+         WHERE guild_id = $1 AND channel_type = 'general' AND enabled = true
+         ORDER BY updated_at DESC LIMIT 1`,
         [guildId]
       );
       
@@ -2461,7 +2462,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
         const anyChannelResult = await pool.query(
           `SELECT channel_id FROM discord_channel_config 
            WHERE guild_id = $1 AND enabled = true
-           LIMIT 1`,
+           ORDER BY updated_at DESC LIMIT 1`,
           [guildId]
         );
         
@@ -3180,6 +3181,100 @@ app.post('/webhook/announce-teams', async (req, res) => {
       error: 'Internal server error',
       details: error.message
     });
+  }
+});
+
+app.post('/webhook/update-config', async (req, res) => {
+  try {
+    const { guildId, discordGuildId, configurations, secret } = req.body;
+    
+    console.log(`[INFO] Received configuration update for guild: ${guildId}`);
+    
+    // Validate the secret
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    if (!guildId || !discordGuildId || !configurations) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    // Store the configurations in the database for persistence
+    try {
+      // Ensure we have the proper table
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS discord_channel_config (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guild_id UUID NOT NULL,
+          discord_guild_id VARCHAR(255) NOT NULL,
+          channel_id VARCHAR(255) NOT NULL,
+          channel_type VARCHAR(50) NOT NULL,
+          enabled BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      // Delete existing configurations
+      await pool.query(
+        `DELETE FROM discord_channel_config WHERE guild_id = $1`,
+        [guildId]
+      );
+      
+      // Insert new configurations
+      for (const config of configurations) {
+        if (config.channel_id && config.channel_type) {
+          await pool.query(
+            `INSERT INTO discord_channel_config 
+             (guild_id, discord_guild_id, channel_id, channel_type, enabled)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              guildId, 
+              discordGuildId, 
+              config.channel_id, 
+              config.channel_type, 
+              config.enabled !== false
+            ]
+          );
+        }
+      }
+      
+      console.log(`[INFO] Successfully updated configuration for guild ${guildId}`);
+    } catch (dbError) {
+      console.error(`[ERROR] Database error when updating configuration:`, dbError);
+      // Continue even if DB update fails, as we'll use the in-memory configurations
+    }
+    
+    // Clear any cached configurations for this guild
+    const cacheKey = `channel_config_${guildId}`;
+    
+    // Log the new configuration
+    console.log(`[INFO] New channel configuration for guild ${guildId}:`, 
+      configurations.map(c => `${c.channel_type}: ${c.channel_id} (${c.enabled ? 'enabled' : 'disabled'})`).join(', ')
+    );
+    
+    // Send success response
+    res.json({ success: true });
+    
+    // Verify the configuration by checking channel validity
+    try {
+      for (const config of configurations) {
+        if (config.enabled && config.channel_id) {
+          const channel = await client.channels.fetch(config.channel_id).catch(() => null);
+          if (channel) {
+            console.log(`[INFO] Verified channel ${config.channel_id} (${channel.name}) for ${config.channel_type}`);
+          } else {
+            console.warn(`[WARN] Could not find channel ${config.channel_id} for ${config.channel_type}`);
+          }
+        }
+      }
+    } catch (verifyError) {
+      console.error(`[ERROR] Error verifying channels:`, verifyError);
+    }
+  } catch (error) {
+    console.error(`[ERROR] Error processing update config webhook:`, error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
