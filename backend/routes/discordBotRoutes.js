@@ -467,47 +467,62 @@ router.get('/servers', async (req, res) => {
 // Link a Discord server to an application guild
 router.post('/link-guild', async (req, res) => {
   try {
-    if (!req.isAuthenticated() || req.user.role !== 'Bot') {
-      return res.status(403).json({ error: 'Bot authentication required' });
-    }
+    console.log('Received link-guild request:', req.body);
+
+    const { discordGuildId, joinCode, secret } = req.body;
     
-    const { discordGuildId, appGuildId } = req.body;
-    
-    if (!discordGuildId || !appGuildId) {
-      return res.status(400).json({ error: 'Discord guild ID and app guild ID are required' });
-    }
-    
-    // Check if the app guild exists
-    const guild = await db.Guild.findByPk(appGuildId);
-    if (!guild) {
-      return res.status(404).json({ error: 'Guild not found' });
-    }
-    
-    // Check if the guild is active
-    if (guild.status !== 'ACTIVE') {
-      return res.status(400).json({ error: 'Guild is not active' });
-    }
-    
-    // Check if mapping already exists
-    let mapping = await db.DiscordGuildMapping.findOne({
-      where: { discord_guild_id: discordGuildId }
-    });
-    
-    if (mapping) {
-      // Update existing mapping
-      await mapping.update({ app_guild_id: appGuildId });
-    } else {
-      // Create new mapping
-      mapping = await db.DiscordGuildMapping.create({
-        discord_guild_id: discordGuildId,
-        app_guild_id: appGuildId
+    // Validate input
+    if (!discordGuildId || !joinCode) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Discord guild ID and join code are required' 
       });
     }
     
-    res.json({ success: true, mapping });
+    // Verify webhook secret
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Invalid webhook secret' 
+      });
+    }
+    
+    // Find guild by join code
+    const guild = await db.Guild.findOne({
+      where: { join_code: joinCode }
+    });
+    
+    if (!guild) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Guild not found with the provided join code' 
+      });
+    }
+    
+    // Create or update mapping
+    const [mapping, created] = await db.DiscordGuildMapping.findOrCreate({
+      where: { discord_guild_id: discordGuildId },
+      defaults: { app_guild_id: guild.id }
+    });
+    
+    if (!created) {
+      await mapping.update({ app_guild_id: guild.id });
+    }
+    
+    console.log(`Created Discord mapping: ${discordGuildId} -> ${guild.id}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Guild linked successfully',
+      guildName: guild.name
+    });
   } catch (error) {
     console.error('Error linking guild:', error);
-    res.status(500).json({ error: 'Failed to link guild' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to link guild', 
+      details: error.message 
+    });
   }
 });
 

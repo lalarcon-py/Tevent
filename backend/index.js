@@ -381,6 +381,63 @@ app.get('/api/members', async (req, res) => {
   }
 });
 
+app.get('/oauth/callback', async (req, res) => {
+  try {
+    const { state, guild_id } = req.query;
+    
+    if (!state || !guild_id) {
+      return res.status(400).send("Missing required parameters");
+    }
+    
+    console.log(`Bot installed to Discord guild: ${guild_id}`);
+    
+    // Decode state parameter
+    let stateData;
+    try {
+      stateData = JSON.parse(atob(state));
+    } catch (e) {
+      return res.status(400).send("Invalid state parameter");
+    }
+    
+    const { appGuildId, joinCode } = stateData;
+    
+    if (!appGuildId || !joinCode) {
+      return res.status(400).send("Missing guild information in state");
+    }
+    
+    console.log(`Automatically linking: Discord ${guild_id} → App Guild ${appGuildId}`);
+    
+    // Create the mapping
+    try {
+      // Get a bot token for authentication
+      const authResponse = await axios.post(`${API_URL}/auth/bot-token`, {
+        botSecret: process.env.DISCORD_CLIENT_SECRET
+      });
+      
+      // Call the backend to create the mapping
+      await axios.post(`${API_URL}/api/discord-bot/link-guild`, {
+        discordGuildId: guild_id,
+        joinCode: joinCode,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      }, {
+        headers: {
+          'Authorization': `Bearer ${authResponse.data.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Redirect to success page
+      res.redirect(`${process.env.FRONTEND_URL}/guilds/${appGuildId}/dashboard?discord=connected`);
+    } catch (error) {
+      console.error('Error automatically linking guild:', error);
+      res.status(500).send("Failed to complete Discord integration. Please try again or contact support.");
+    }
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    res.status(500).send("An error occurred during Discord integration");
+  }
+});
+
 // PUT endpoint for updating members with proper validation
 app.put('/api/members/:id', async (req, res) => {
   const t = await sequelize.transaction();

@@ -39,14 +39,13 @@ const guildSettingsController = {
         minAttendanceThreshold: guild.min_attendance_threshold || 60,
         attendanceWarningMessage: guild.attendance_warning_message || 
           "You are at risk of falling below the minimum attendance threshold and may be removed if improvements are not shown.",
-        // New fields
         privateGuild: guild.private_guild === true,
         autoKickEnabled: guild.auto_kick_enabled === true,
         attendanceThreshold: guild.attendance_threshold || 40,
         noShowCount: guild.no_show_count || 3,
         gearCheckEnabled: guild.gear_check_enabled === true,
         gearCheckFrequency: guild.gear_check_frequency || 30,
-        joinCode: guild.join_code || '' // Add this line
+        joinCode: guild.join_code || ''
       });
     } catch (error) {
       console.error('Error getting guild settings:', error);
@@ -61,7 +60,6 @@ const guildSettingsController = {
     try {
       const { guildId } = req.params;
       
-      // Use raw SQL to bypass any ORM issues
       const [results] = await db.sequelize.query(
         `SELECT dkp_enabled FROM guilds WHERE id = :guildId`,
         { 
@@ -82,7 +80,6 @@ const guildSettingsController = {
     }
   },
 
-  // Update guild settings
   updateGuildSettings: async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
@@ -92,10 +89,8 @@ const guildSettingsController = {
       const { guildId } = req.params;
       const { settingGroup, settings } = req.body;
       
-      // Ensure we're using the public schema for guild operations
       await sequelize.query(`SET search_path TO public`);
       
-      // Verify the user is a guild master
       const membership = await db.GuildMember.findOne({
         where: {
           guild_id: guildId,
@@ -113,12 +108,10 @@ const guildSettingsController = {
         return res.status(404).json({ error: 'Guild not found' });
       }
   
-      // Update different settings based on the group
       let updateData = {};
       
       switch (settingGroup) {
         case 'general':
-          // Handle name change with 30-day restriction
           if (settings.name && settings.name !== guild.name) {
             if (guild.last_name_change) {
               const lastChange = new Date(guild.last_name_change);

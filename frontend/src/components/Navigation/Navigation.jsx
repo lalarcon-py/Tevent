@@ -128,7 +128,6 @@ const Navigation = ({ guildId }) => {
     }
   };
 
-  // Fixed Discord integration function with extensive debugging
   const handleDiscordIntegration = async () => {
     debugLog('handleDiscordIntegration called', null);
     
@@ -156,29 +155,29 @@ const Navigation = ({ guildId }) => {
         return;
       }
       
-      // Create and open Discord OAuth URL
-      const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=2147485696&scope=bot%20applications.commands`;
+      // Add state parameter with guild info for automatic linking
+      const state = btoa(JSON.stringify({
+        appGuildId: currentGuildId,
+        joinCode: joinCode
+      }));
+      
+      // Create and open Discord OAuth URL - add state parameter
+      const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=2147485696&scope=bot%20applications.commands&state=${state}`;
       window.open(discordUrl, '_blank');
       
-      // Show instructions
-      setTimeout(() => {
-        alert(`After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`);
-      }, 500);
+      // No need for instructions - it will happen automatically
     } catch (error) {
       debugLog('Error in Discord integration', error);
       alert('Could not connect to Discord. Please try again later.');
     }
   };
   
-  // Check role permissions
   const isGuildMaster = guildRole === 'Guild Master';
   const isAdvisorOrMaster = ['Guild Master', 'Guild Advisor'].includes(guildRole);
   const hasDashboardAccess = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(guildRole);
 
-  // Create base menu items - start with an empty array
   const baseMenuItems = [];
   
-  // Add Dashboard only for those with access
   if (hasDashboardAccess) {
     baseMenuItems.push({
       text: 'Dashboard',
@@ -187,7 +186,6 @@ const Navigation = ({ guildId }) => {
     });
   }
   
-  // Add other menu items that are available to all guild members
   baseMenuItems.push(
     {
       text: 'Guild Members',
@@ -216,7 +214,6 @@ const Navigation = ({ guildId }) => {
     }
   );
   
-  // Add conditional menu items
   if (isAdvisorOrMaster) {
     baseMenuItems.push({
       text: 'Guild Applications',
@@ -225,7 +222,6 @@ const Navigation = ({ guildId }) => {
     });
   }
   
-  // Add billing for Guild Master only
   if (isGuildMaster) {
     baseMenuItems.push({
       text: 'Billing',
@@ -233,10 +229,8 @@ const Navigation = ({ guildId }) => {
       path: '/billing'
     });
     
-    // For debugging, log the Discord connected state that affects the menu
     debugLog('Discord connection state for menu item', discordConnected);
     
-    // Add Discord menu item conditionally based on connection status
     if (discordConnected) {
       baseMenuItems.push({
         text: 'Discord Settings',

@@ -1244,7 +1244,14 @@ const registerCommands = async () => {
       {
         name: 'link-guild',
         description: 'Link this Discord server to your application guild',
-        options: []
+        options: [
+          {
+            name: 'join_code',
+            description: 'The join code from your guild settings',
+            type: 3, // STRING
+            required: true
+          }
+        ]
       },
       // Storage commands
       {
@@ -1818,7 +1825,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // Link guild command handler
-async function handleLinkGuildCommand(interaction) {
+const handleLinkGuildCommand = async (interaction) => {
   // Only server admins can use this command
   if (!interaction.member.permissions.has('Administrator')) {
     return await interaction.reply({ 
@@ -1829,22 +1836,57 @@ async function handleLinkGuildCommand(interaction) {
   
   await interaction.deferReply({ ephemeral: true });
   
-  // Generate a web setup URL instead of requiring manual parameters
-  const setupUrl = `${process.env.FRONTEND_URL}/discord/setup?guildId=${interaction.guild.id}`;
-  
-  await interaction.editReply({
-    content: `Click the link below to connect this Discord server to your guild:`,
-    components: [
-      new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setURL(setupUrl)
-            .setLabel('Setup Connection')
-            .setStyle(ButtonStyle.Link)
-        )
-    ]
-  });
-}
+  try {
+    // Get the join code from the command options
+    const joinCode = interaction.options.getString('join_code');
+    
+    if (!joinCode) {
+      return await interaction.editReply({
+        content: 'Please provide a valid join code. You can find this in your guild settings.',
+        ephemeral: true
+      });
+    }
+    
+    console.log(`Processing link-guild command with join code: ${joinCode}`);
+    
+    // Get a bot token for authentication
+    const authResponse = await axios.post(`${API_URL}/auth/bot-token`, {
+      botSecret: process.env.DISCORD_CLIENT_SECRET
+    });
+    
+    // Call the backend to create the mapping
+    const response = await axios.post(`${API_URL}/api/discord-bot/link-guild`, {
+      discordGuildId: interaction.guildId,
+      joinCode: joinCode,
+      secret: process.env.BOT_WEBHOOK_SECRET
+    }, {
+      headers: {
+        'Authorization': `Bearer ${authResponse.data.token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.data.success) {
+      await interaction.editReply({
+        content: `✅ Successfully linked this Discord server to guild "${response.data.guildName || 'Unknown'}"!`,
+        ephemeral: true
+      });
+    } else {
+      await interaction.editReply({
+        content: `❌ Failed to link: ${response.data.error || 'Unknown error'}`,
+        ephemeral: true
+      });
+    }
+  } catch (error) {
+    console.error('Error linking guild:', error);
+    console.error('Error response:', error.response?.data);
+    
+    await interaction.editReply({
+      content: `❌ An error occurred: ${error.message}. Please check that your join code is correct.`,
+      ephemeral: true
+    });
+  }
+};
 
 // Setup command handler
 async function handleStorageCommand(interaction, appGuildId) {
