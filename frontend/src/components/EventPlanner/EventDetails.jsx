@@ -63,6 +63,12 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     fetchCurrentUser();
   }, []);
 
+  // Add permission check helper function
+  const hasEventManagementPermission = () => {
+    if (!currentUser) return false;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser.role);
+  };
+
   useEffect(() => {
     const fetchGuildId = async () => {
       try {
@@ -239,6 +245,12 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRoleChange = async (userId, newRole) => {
     try {
+      // Check if user has permission to change roles
+      if (!hasEventManagementPermission() && userId !== currentUser?.id) {
+        setError('You do not have permission to change roles for other users');
+        return;
+      }
+
       await handleRemoveParticipant(userId);
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
@@ -267,6 +279,12 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const handleRemoveParticipant = async (userId) => {
     try {
+      // Check if user has permission to remove participants
+      if (!hasEventManagementPermission() && userId !== currentUser?.id) {
+        setError('You do not have permission to remove other participants');
+        return;
+      }
+
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'DELETE',
         headers: {
@@ -442,6 +460,12 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const handleDeleteEvent = async () => {
     if (!event) return;
   
+    // Check permissions before delete
+    if (!hasEventManagementPermission()) {
+      setError('You do not have permission to delete events');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this event?')) return;
     setIsDeleting(true);
   
@@ -558,13 +582,15 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
               Team Planner
             </Button>
           </Link>
-          <Button
-            startIcon={<EditIcon />}
-            onClick={() => setIsEditDialogOpen(true)}
-            sx={{ color: '#90caf9' }}
-          >
-            Edit
-          </Button>
+          {hasEventManagementPermission() && (
+            <Button
+              startIcon={<EditIcon />}
+              onClick={() => setIsEditDialogOpen(true)}
+              sx={{ color: '#90caf9' }}
+            >
+              Edit
+            </Button>
+          )}
         </Box>
       </Box>
   
@@ -762,6 +788,13 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
           }}
           onSubmit={async (updatedData) => {
             try {
+              // Check for permissions
+              if (!hasEventManagementPermission()) {
+                setError('You do not have permission to edit events');
+                setIsEditDialogOpen(false);
+                return;
+              }
+
               const response = await fetch(`${API_URL}/api/events/${event.id}`, {
                 method: 'PUT',
                 headers: {
@@ -788,17 +821,19 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         />
       </Dialog>
   
-      {/* Delete event button */}
-      <DialogActions>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={handleDeleteEvent}
-          disabled={isDeleting}
-        >
-          {isDeleting ? 'Deleting...' : 'Delete Event'}
-        </Button>
-      </DialogActions>
+      {/* Delete event button - only shown if user has permission */}
+      {hasEventManagementPermission() && (
+        <DialogActions>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteEvent}
+            disabled={isDeleting}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete Event'}
+          </Button>
+        </DialogActions>
+      )}
     </DialogContent>
   );
 };

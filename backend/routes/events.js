@@ -1,3 +1,4 @@
+// backend/routes/events.js
 const express = require('express');
 const router = express.Router();
 const { Event, User, EventParticipant, Team, TeamMember } = require('../models');
@@ -10,6 +11,19 @@ const isAuthenticated = (req, res, next) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
+  next();
+};
+
+// Permission middleware
+const hasPermission = (roles) => (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Permission denied' });
+  }
+  
   next();
 };
 
@@ -268,9 +282,11 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
   }
 });
 
-
-
-router.put('/:id', isAuthenticated, async (req, res) => {
+// Apply permissions to event modification routes
+router.put('/:id', 
+  isAuthenticated, 
+  hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']), 
+  async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const eventId = req.params.id;
@@ -341,7 +357,10 @@ router.put('/:id', isAuthenticated, async (req, res) => {
   }
 });
 
-router.delete('/:id', isAuthenticated, async (req, res) => {
+router.delete('/:id', 
+  isAuthenticated, 
+  hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']), 
+  async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const eventId = req.params.id;
@@ -445,8 +464,11 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
   }
 });
 
-// Create an event
-router.post('/', isAuthenticated, async (req, res) => {
+// Create an event with permission check
+router.post('/', 
+  isAuthenticated, 
+  hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']), 
+  async (req, res) => {
   const t = await sequelize.transaction();
   try {
     // Try to get guildId from multiple places

@@ -61,6 +61,12 @@ const EventPlanner = () => {
     }
   }, [user]);
 
+  // Add permission check helper function
+  const hasEventCreationPermission = () => {
+    if (!user) return false;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+  };
+
   const fetchEvents = async () => {
     try {
       const url = guildId 
@@ -81,6 +87,11 @@ const EventPlanner = () => {
   const createEvent = async (eventData) => {
     if (!user) {
       throw new Error('Please log in to create events');
+    }
+  
+    // Add permission check
+    if (!hasEventCreationPermission()) {
+      throw new Error('You do not have permission to create events');
     }
   
     try {
@@ -123,7 +134,8 @@ const EventPlanner = () => {
     if (eventData.id) {
       setSelectedEvent(eventData);
       setIsDetailsDialogOpen(true);
-    } else {
+    } else if (hasEventCreationPermission()) {
+      // Only show create dialog if user has permission
       setIsCreateDialogOpen(true);
       setSelectedEvent({
         event_time: eventData.event_time,
@@ -135,11 +147,19 @@ const EventPlanner = () => {
         dps: 35,
         requirements: ''
       });
+    } else {
+      setError('You do not have permission to create events');
     }
   };
 
   const handleDeleteEvent = async () => {
     if (!selectedEvent) return;
+    
+    // Check permissions before delete
+    if (!hasEventCreationPermission()) {
+      setError('You do not have permission to delete events');
+      return;
+    }
   
     if (!window.confirm('Are you sure you want to delete this event?')) return;
     setIsDeleting(true);
@@ -358,17 +378,23 @@ const EventPlanner = () => {
       ) : (
         <>
           <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setSelectedEvent(null);
-                setIsCreateDialogOpen(true);
-              }}
-              sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
-            >
-              Create Event
-            </Button>
+            {hasEventCreationPermission() ? (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setSelectedEvent(null);
+                  setIsCreateDialogOpen(true);
+                }}
+                sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
+              >
+                Create Event
+              </Button>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Only Guild Master, Guild Advisor, and Guild Guardian can create events
+              </Typography>
+            )}
           </Box>
 
           <CalendarView 
@@ -438,17 +464,19 @@ const EventPlanner = () => {
                       setSelectedEvent(null);
                     }}
                   />
-                  {/* Add Delete Button */}
-                  <DialogActions>
-                    <Button
-                      variant="contained"
-                      color="error"
-                      onClick={handleDeleteEvent}
-                      sx={{ ml: 2 }}
-                    >
-                      Delete Event
-                    </Button>
-                  </DialogActions>
+                  {/* Add Delete Button with permission check */}
+                  {hasEventCreationPermission() && (
+                    <DialogActions>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={handleDeleteEvent}
+                        sx={{ ml: 2 }}
+                      >
+                        Delete Event
+                      </Button>
+                    </DialogActions>
+                  )}
                 </>
               )}
             </Dialog>

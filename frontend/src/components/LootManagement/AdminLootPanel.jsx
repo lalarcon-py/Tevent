@@ -1,3 +1,4 @@
+// components/LootManagement/AdminLootPanel.jsx
 import { useState, useEffect } from 'react';
 import { 
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
@@ -6,8 +7,10 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AdminLootPanel = ({ dkpEnabled }) => {
+  const { user } = useAuth();
   console.log('AdminLootPanel rendering with dkpEnabled =', dkpEnabled);
   const [addedItems, setAddedItems] = useState([]);
   const [templateItems, setTemplateItems] = useState([]);
@@ -22,12 +25,13 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     icon: ''
   });
 
-  console.log('DKP DEBUG - AdminLootPanel received:', {
-    dkpEnabled: dkpEnabled,
-    type: typeof dkpEnabled,
-    strictCheck: dkpEnabled === true
-  });
+  // Add permission check helper function
+  const hasStoragePermission = () => {
+    if (!user) return false;
+    return ['Guild Master', 'Guild Advisor'].includes(user.role);
+  };
 
+  // Move all useEffect hooks here, before any conditional returns
   useEffect(() => {
     fetchAddedItems();
     fetchTemplateItems();
@@ -73,6 +77,12 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const handleUpdate = async (id, field, value) => {
     try {
+      // Check permission
+      if (!hasStoragePermission()) {
+        console.error('Permission denied: Cannot update storage items');
+        return;
+      }
+
       const guildId = localStorage.getItem('guildId');
       if (!guildId) {
         console.error('No guild ID found');
@@ -92,6 +102,12 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const handleDelete = async (id) => {
     try {
+      // Check permission
+      if (!hasStoragePermission()) {
+        console.error('Permission denied: Cannot delete storage items');
+        return;
+      }
+
       const guildId = localStorage.getItem('guildId');
       if (!guildId) {
         console.error('No guild ID found');
@@ -121,6 +137,12 @@ const AdminLootPanel = ({ dkpEnabled }) => {
 
   const handleAddItem = async () => {
     try {
+      // Check permission
+      if (!hasStoragePermission()) {
+        console.error('Permission denied: Cannot add storage items');
+        return;
+      }
+
       if (!newItem.id) {
         console.error('No item selected');
         return;
@@ -200,6 +222,20 @@ const AdminLootPanel = ({ dkpEnabled }) => {
       }
     }
   };
+
+  // Now do the permission check
+  if (!hasStoragePermission()) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h6" color="error">
+          You don't have permission to manage guild storage.
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Only Guild Masters and Guild Advisors can manage guild storage.
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box>

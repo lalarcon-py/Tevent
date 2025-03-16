@@ -27,7 +27,7 @@ import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 
 const WaitListTab = ({ dkpEnabled, refreshData }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState({
@@ -38,6 +38,13 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
   });
   const [error, setError] = useState(null);
 
+  // Add permission check helper function
+  const hasApprovalPermission = () => {
+    if (!user) return false;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+  };
+
+  // Move all hooks to the top, before any conditional returns
   useEffect(() => {
     if (isAuthenticated) {
       loadRequests();
@@ -50,6 +57,13 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
       console.log('First request data:', requests[0]);
     }
   }, [requests]);
+
+  // Make sure component refreshes when the refreshTrigger changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadRequests();
+    }
+  }, [refreshData, isAuthenticated]);
 
   const loadRequests = async () => {
     try {
@@ -80,6 +94,12 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
   };
 
   const handleApprove = async (request) => {
+    // Check permission
+    if (!hasApprovalPermission()) {
+      setError('You do not have permission to approve requests');
+      return;
+    }
+
     setConfirmDialog({
       open: true,
       title: 'Approve Request',
@@ -121,6 +141,12 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
   };
 
   const handleDeny = async (request) => {
+    // Check permission
+    if (!hasApprovalPermission()) {
+      setError('You do not have permission to deny requests');
+      return;
+    }
+
     setConfirmDialog({
       open: true,
       title: 'Deny Request',
@@ -159,6 +185,12 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
   };
 
   const handleDelete = async (request) => {
+    // Check permission
+    if (!hasApprovalPermission()) {
+      setError('You do not have permission to delete requests');
+      return;
+    }
+
     setConfirmDialog({
       open: true,
       title: 'Delete Request',
@@ -211,10 +243,19 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
     return item?.icon || null;
   };
 
-  // Make sure component refreshes when the refreshTrigger changes
-  useEffect(() => {
-    loadRequests();
-  }, [refreshData]);
+  // Early return if no permission - after all hooks
+  if (!hasApprovalPermission()) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h6" color="error">
+          You don't have permission to manage item requests
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Only Guild Masters, Guild Advisors, and Guild Guardians can manage item requests.
+        </Typography>
+      </Box>
+    );
+  }
 
   if (loading) {
     return (
