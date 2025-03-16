@@ -202,8 +202,35 @@ const Navigation = ({ guildId }) => {
     setMobileOpen(!mobileOpen);
   };
 
+  const getDiscordClientId = async () => {
+    try {
+      // Try to get the client ID from an API endpoint that serves application config
+      const configResponse = await axiosInstance.get('/api/config/discord');
+      if (configResponse.data && configResponse.data.clientId) {
+        return configResponse.data.clientId;
+      }
+      
+      // If that fails, try to get it from your guild settings (if it's stored there)
+      const currentGuildId = guildId || localStorage.getItem('guildId');
+      const settingsResponse = await axiosInstance.get(`/api/guilds/${currentGuildId}/settings`);
+      if (settingsResponse.data && settingsResponse.data.discordClientId) {
+        return settingsResponse.data.discordClientId;
+      }
+      
+      // Fall back to environment variable as last resort
+      if (process.env.REACT_APP_DISCORD_CLIENT_ID) {
+        return process.env.REACT_APP_DISCORD_CLIENT_ID;
+      }
+      
+      throw new Error('Could not find Discord client ID');
+    } catch (error) {
+      console.error('Failed to get Discord client ID:', error);
+      throw error;
+    }
+  };
+
   // Fixed Discord integration function with extensive debugging
-  const handleDiscordIntegration = () => {
+  const handleDiscordIntegration = async () => {
     debugLog('handleDiscordIntegration called', null);
     
     // Get the guild's join code
@@ -215,46 +242,33 @@ const Navigation = ({ guildId }) => {
       return;
     }
     
-    debugLog('Fetching join code for guild', currentGuildId);
-    
-    // Fetch join code and then open Discord authorization
-    axiosInstance.get(`/api/guilds/${currentGuildId}/settings`)
-      .then(response => {
-        debugLog('Guild settings response', response.data);
-        const joinCode = response.data.joinCode;
-        debugLog('Join code', joinCode);
-        
-        // Create Discord invitation URL WITH client_id properly set from environment
-        const discordClientId = process.env.REACT_APP_DISCORD_CLIENT_ID;
-        debugLog('Discord client ID from env', discordClientId);
-        
-        if (!discordClientId) {
-          debugLog('WARNING: Discord client ID is undefined!', null);
-          alert('Could not connect to Discord. The Discord client ID is missing.');
-          return;
-        }
-        
-        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${discordClientId}&permissions=2147485696&scope=bot%20applications.commands`;
-        debugLog('Discord OAuth URL', discordUrl);
-        
-        // Open Discord authorization in new tab
-        debugLog('Opening Discord OAuth URL in new tab', null);
-        window.open(discordUrl, '_blank');
-        
-        // Show modal or alert with instructions
-        setTimeout(() => {
-          const message = `After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`;
-          debugLog('Showing alert with instructions', message);
-          alert(message);
-        }, 500);
-      })
-      .catch(error => {
-        debugLog('Error getting join code', {
-          message: error.message,
-          response: error.response?.data
-        });
-        alert('Could not retrieve Discord integration information');
-      });
+    try {
+      // Get guild settings for join code
+      const settingsResponse = await axiosInstance.get(`/api/guilds/${currentGuildId}/settings`);
+      const joinCode = settingsResponse.data.joinCode;
+      debugLog('Join code', joinCode);
+      
+      // Get Discord client ID
+      const clientId = await getDiscordClientId();
+      debugLog('Discord client ID', clientId);
+      
+      if (!clientId) {
+        alert('Could not retrieve Discord client ID. Please try again later or contact support.');
+        return;
+      }
+      
+      // Create and open Discord OAuth URL
+      const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=2147485696&scope=bot%20applications.commands`;
+      window.open(discordUrl, '_blank');
+      
+      // Show instructions
+      setTimeout(() => {
+        alert(`After adding the bot to your Discord server, use this command:\n\n/link-guild join_code:${joinCode}`);
+      }, 500);
+    } catch (error) {
+      debugLog('Error in Discord integration', error);
+      alert('Could not connect to Discord. Please try again later.');
+    }
   };
   
   // Check role permissions
