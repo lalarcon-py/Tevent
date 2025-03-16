@@ -1,11 +1,13 @@
 // src/pages/ApplyToGuildPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, CircularProgress, Alert, Button, Divider } from '@mui/material';
+import { Box, Typography, Paper, CircularProgress, Alert, Button, Divider, useTheme, useMediaQuery } from '@mui/material';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import ApplicationForm from '../components/Applications/ApplicationForm';
 import axiosInstance from '../config/axios';
 
 const ApplyToGuildPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -108,7 +110,7 @@ const ApplyToGuildPage = () => {
 
   if (error) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: isMobile ? 2 : 3 }}>
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
@@ -121,7 +123,7 @@ const ApplyToGuildPage = () => {
 
   if (!guild) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: isMobile ? 2 : 3 }}>
         <Alert severity="warning">
           Guild not found. Please select a valid guild.
         </Alert>
@@ -138,13 +140,13 @@ const ApplyToGuildPage = () => {
 
   return (
     <Box sx={{ 
-        p: 3, 
+        p: isMobile ? 2 : 3, 
         maxWidth: '1000px', 
         mx: 'auto',
-        mt: 8,
+        mt: isMobile ? 4 : 8,
         mb: 4 
       }}>
-      <Paper sx={{ p: 3, mb: 3 }}>
+      <Paper sx={{ p: isMobile ? 2 : 3, mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Apply to Join {guild.name}
         </Typography>
@@ -195,8 +197,18 @@ const ApplyToGuildPage = () => {
               </Typography>
             </Box>
             
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-              <Button variant="outlined" onClick={handleReturnToGuilds}>
+            <Box sx={{ 
+              mt: 3, 
+              display: 'flex', 
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? 2 : 0,
+              justifyContent: 'space-between' 
+            }}>
+              <Button 
+                variant="outlined" 
+                onClick={handleReturnToGuilds}
+                fullWidth={isMobile}
+              >
                 Return to Guilds
               </Button>
               
@@ -205,6 +217,7 @@ const ApplyToGuildPage = () => {
                   variant="contained" 
                   color="primary"
                   onClick={() => setUserApplication(null)}
+                  fullWidth={isMobile}
                 >
                   Apply Again
                 </Button>
@@ -216,6 +229,7 @@ const ApplyToGuildPage = () => {
             setUserApplication={setUserApplication} 
             guildId={guildId}
             onSubmit={handleApplicationSubmit}
+            isMobile={isMobile}
           />
         )}
       </Paper>

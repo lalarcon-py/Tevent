@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Drawer, List, ListItem, ListItemIcon, ListItemText, 
   Divider, IconButton, Box, useMediaQuery, useTheme,
-  AppBar, Toolbar, Typography, Button
+  AppBar, Toolbar, Typography, Button, Tooltip, Badge
 } from '@mui/material';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -26,6 +26,7 @@ const Navigation = ({ guildId }) => {
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const { logout, user } = useAuth();
   const [guildRole, setGuildRole] = useState('');
@@ -289,37 +290,40 @@ const Navigation = ({ guildId }) => {
       </Box>
       
       {/* Main menu items */}
-      <List sx={{ py: 2 }}>
+      <List sx={{ py: 2, overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}>
           {baseMenuItems.map((item) => (
-            <ListItem 
-              button 
-              component={item.onClick ? 'div' : Link}
-              to={!item.onClick ? item.path : undefined}
-              onClick={item.onClick}
-              key={item.text}
-              sx={{ 
-                color: location.pathname === item.path ? '#90caf9' : 'white',
-                backgroundColor: location.pathname === item.path ? 'rgba(144, 202, 249, 0.08)' : 'transparent',
-                py: 1.5,
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)'
-                }
-              }}
-            >
-              <ListItemIcon sx={{ 
-                color: location.pathname === item.path ? '#90caf9' : 'rgba(255, 255, 255, 0.7)',
-                minWidth: isMobile ? 40 : 56
-              }}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText 
-                primary={item.text} 
-                primaryTypographyProps={{ 
-                  fontSize: isMobile ? '0.95rem' : '1rem',
-                  fontWeight: location.pathname === item.path ? 'bold' : 'normal'
+            <Tooltip title={isMobile ? item.text : ""} placement="right" key={item.text}>
+              <ListItem 
+                button 
+                component={item.onClick ? 'div' : Link}
+                to={!item.onClick ? item.path : undefined}
+                onClick={item.onClick}
+                sx={{ 
+                  color: location.pathname === item.path ? '#90caf9' : 'white',
+                  backgroundColor: location.pathname === item.path ? 'rgba(144, 202, 249, 0.08)' : 'transparent',
+                  py: 1.5,
+                  px: isMobile ? 1.5 : 2,
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)'
+                  }
                 }}
-              />
-            </ListItem>
+              >
+                <ListItemIcon sx={{ 
+                  color: location.pathname === item.path ? '#90caf9' : 'rgba(255, 255, 255, 0.7)',
+                  minWidth: isMobile ? 40 : 56
+                }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.text} 
+                  primaryTypographyProps={{ 
+                    fontSize: isMobile ? '0.95rem' : '1rem',
+                    fontWeight: location.pathname === item.path ? 'bold' : 'normal',
+                    noWrap: true
+                  }}
+                />
+              </ListItem>
+            </Tooltip>
           ))}
         </List>
       
@@ -338,6 +342,7 @@ const Navigation = ({ guildId }) => {
             color: location.pathname.includes('/settings') ? '#90caf9' : 'white',
             backgroundColor: location.pathname.includes('/settings') ? 'rgba(144, 202, 249, 0.08)' : 'transparent',
             py: 1.5,
+            px: isMobile ? 1.5 : 2,
             '&:hover': {
               backgroundColor: 'rgba(255, 255, 255, 0.08)'
             }
@@ -353,7 +358,8 @@ const Navigation = ({ guildId }) => {
             primary="Guild Settings" 
             primaryTypographyProps={{ 
               fontSize: isMobile ? '0.95rem' : '1rem',
-              fontWeight: location.pathname.includes('/settings') ? 'bold' : 'normal'
+              fontWeight: location.pathname.includes('/settings') ? 'bold' : 'normal',
+              noWrap: true
             }}
           />
         </ListItem>
@@ -366,6 +372,7 @@ const Navigation = ({ guildId }) => {
           sx={{ 
             color: 'white',
             py: 1.5,
+            px: isMobile ? 1.5 : 2,
             '&:hover': {
               backgroundColor: 'rgba(255, 255, 255, 0.08)'
             }
@@ -380,7 +387,8 @@ const Navigation = ({ guildId }) => {
           <ListItemText 
             primary="Logout" 
             primaryTypographyProps={{ 
-              fontSize: isMobile ? '0.95rem' : '1rem'
+              fontSize: isMobile ? '0.95rem' : '1rem',
+              noWrap: true
             }}
           />
         </ListItem>
@@ -445,6 +453,10 @@ const Navigation = ({ guildId }) => {
             height: '100%',
             paddingTop: '0',
           },
+          '& .MuiBackdrop-root': {
+            backdropFilter: 'blur(4px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)'
+          }
         }}
         ModalProps={{
           keepMounted: true

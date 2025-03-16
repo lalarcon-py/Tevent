@@ -18,7 +18,10 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  useMediaQuery,
+  useTheme,
+  Grid
 } from '@mui/material';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
@@ -34,6 +37,9 @@ const GuildSetupPage = () => {
   // Auth context
   const { isAuthenticated, user, login, isLoading } = useAuth();
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   
   // Local state
   const [activeTab, setActiveTab] = useState(0);
@@ -281,8 +287,9 @@ const GuildSetupPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ 
-        py: 4, 
-        mt: 8, // Add top margin to account for AppHeader
+        py: isMobile ? 2 : 4, 
+        mt: isMobile ? 4 : 8, // Adjust top margin for mobile
+        px: isMobile ? 2 : 3, // Adjust horizontal padding for mobile
       }}>
         <Paper
           elevation={5}
@@ -297,22 +304,22 @@ const GuildSetupPage = () => {
           }}
         >
         {!isAuthenticated ? (
-          <Box sx={{ textAlign: 'center', py: 6 }}>
-            <Typography variant="h4" sx={{ mb: 4, color: '#f0f0f0' }}>
+          <Box sx={{ textAlign: 'center', py: isMobile ? 4 : 6 }}>
+            <Typography variant="h4" sx={{ mb: 4, color: '#f0f0f0', fontSize: isMobile ? '1.75rem' : '2.125rem' }}>
               Welcome to Tevent Guild Manager
             </Typography>
-            <Typography variant="body1" sx={{ mb: 6, color: '#bbb' }}>
+            <Typography variant="body1" sx={{ mb: 6, color: '#bbb', px: isMobile ? 2 : 0 }}>
               Please log in with Discord to continue.
             </Typography>
             <Button
               variant="contained"
               color="primary"
               onClick={handleLogin}
-              size="large"
+              size={isMobile ? "medium" : "large"}
               sx={{
-                py: 1.5,
-                px: 4,
-                fontSize: '1.1rem',
+                py: isMobile ? 1 : 1.5,
+                px: isMobile ? 3 : 4,
+                fontSize: isMobile ? '1rem' : '1.1rem',
                 bgcolor: '#5865F2', // Discord blue
                 '&:hover': {
                   bgcolor: '#4752c4'
@@ -324,18 +331,24 @@ const GuildSetupPage = () => {
           </Box>
         ) : (
           <Box>
-            <Typography variant="h4" sx={{ p: 3, color: '#f0f0f0', textAlign: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <Typography variant="h4" sx={{ 
+              p: isMobile ? 2 : 3, 
+              color: '#f0f0f0', 
+              textAlign: 'center', 
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              fontSize: isMobile ? '1.75rem' : '2.125rem'
+            }}>
               Welcome, {user?.username || 'Adventurer'}!
             </Typography>
             
             {error && (
-              <Alert severity="error" sx={{ mx: 3, mt: 3 }}>
+              <Alert severity="error" sx={{ mx: isMobile ? 2 : 3, mt: 3 }}>
                 {error}
               </Alert>
             )}
             
             {success && (
-              <Alert severity="success" sx={{ mx: 3, mt: 3 }}>
+              <Alert severity="success" sx={{ mx: isMobile ? 2 : 3, mt: 3 }}>
                 {success}
               </Alert>
             )}
@@ -344,31 +357,32 @@ const GuildSetupPage = () => {
               value={activeTab} 
               onChange={(_, newValue) => setActiveTab(newValue)}
               centered
+              variant={isMobile ? "fullWidth" : "standard"}
               sx={{ 
                 px: 2,
-                '& .MuiTab-root': { color: '#bbb' },
+                '& .MuiTab-root': { color: '#bbb', minWidth: 0, px: isMobile ? 1 : 2 },
                 '& .Mui-selected': { color: '#90caf9' },
                 '& .MuiTabs-indicator': { backgroundColor: '#90caf9' }
               }}
             >
               <Tab 
-                label="Create a Guild" 
+                label={isMobile ? "Create" : "Create a Guild"} 
                 icon={<AddCircleIcon />} 
                 iconPosition="start" 
               />
               <Tab 
-                label="Join a Guild" 
+                label={isMobile ? "Join" : "Join a Guild"} 
                 icon={<GroupAddIcon />} 
                 iconPosition="start" 
               />
               <Tab 
-                label="Join with Code" 
+                label={isMobile ? "Join Code" : "Join with Code"} 
                 icon={<VpnKeyIcon />} 
                 iconPosition="start" 
               />
             </Tabs>
             
-            <Box sx={{ p: 3, minHeight: '300px' }}>
+            <Box sx={{ p: isMobile ? 2 : 3, minHeight: '300px' }}>
               {activeTab === 0 && (
                 <Box>
                   <Typography variant="h6" sx={{ mb: 2, color: '#f0f0f0' }}>
@@ -427,60 +441,72 @@ const GuildSetupPage = () => {
                       <CircularProgress />
                     </Box>
                   ) : guilds.length > 0 ? (
-                    <Box sx={{ maxHeight: '400px', overflowY: 'auto' }}>
-                      {guilds.map(guild => (
-                        <Card 
-                          key={guild.id} 
-                          sx={{ 
-                            mb: 2, 
-                            bgcolor: 'rgba(30, 30, 30, 0.6)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            transition: 'transform 0.2s ease',
-                            '&:hover': {
-                              transform: 'translateY(-4px)',
-                              boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
-                            }
-                          }}
-                        >
-                          <CardContent>
-                            <Typography variant="h6" sx={{ color: '#f0f0f0' }}>
-                              {guild.name}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#bbb', mb: 1 }}>
-                              Owner: {guild.ownerName}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: '#bbb' }}>
-                              Members: {guild.memberCount}
-                            </Typography>
-                          </CardContent>
-                          <CardActions sx={{ justifyContent: 'flex-end', p: 2, pt: 0 }}>
-                          <Button 
-                              variant="outlined" 
-                              size="small"
-                              onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
-                              sx={{
-                                flexGrow: 1,
-                                borderColor: '#64748b',
-                                color: '#cbd5e1'
+                    <Box sx={{ maxHeight: isMobile ? '300px' : '400px', overflowY: 'auto' }}>
+                      <Grid container spacing={isMobile ? 1 : 2}>
+                        {guilds.map(guild => (
+                          <Grid item xs={12} sm={isMobile ? 12 : 6} md={isMobile ? 12 : 4} key={guild.id}>
+                            <Card 
+                              sx={{ 
+                                mb: isMobile ? 1 : 2, 
+                                bgcolor: 'rgba(30, 30, 30, 0.6)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                transition: 'transform 0.2s ease',
+                                '&:hover': {
+                                  transform: 'translateY(-4px)',
+                                  boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
+                                }
                               }}
                             >
-                              Apply
-                            </Button>
-                            <Button 
-                              variant="contained" 
-                              onClick={() => openJoinDialog(guild)}
-                              disabled={loading}
-                              sx={{
-                                bgcolor: '#90caf9',
-                                color: '#1a1a1a',
-                                '&:hover': { bgcolor: '#64b5f6' }
-                              }}
-                            >
-                              Join Guild
-                            </Button>
-                          </CardActions>
-                        </Card>
-                      ))}
+                              <CardContent sx={{ pt: 2, pb: 1 }}>
+                                <Typography variant="h6" sx={{ color: '#f0f0f0', fontSize: isMobile ? '1rem' : '1.25rem' }}>
+                                  {guild.name}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: '#bbb', mb: 1, fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
+                                  Owner: {guild.ownerName}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: '#bbb', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
+                                  Members: {guild.memberCount}
+                                </Typography>
+                              </CardContent>
+                              <CardActions sx={{ 
+                                justifyContent: 'flex-end', 
+                                p: isMobile ? 1 : 2, 
+                                pt: 0,
+                                flexDirection: isMobile ? 'column' : 'row' 
+                              }}>
+                                <Button 
+                                  variant="outlined" 
+                                  size="small"
+                                  onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
+                                  sx={{
+                                    flexGrow: 1,
+                                    borderColor: '#64748b',
+                                    color: '#cbd5e1',
+                                    mb: isMobile ? 1 : 0,
+                                    width: isMobile ? '100%' : 'auto'
+                                  }}
+                                >
+                                  Apply
+                                </Button>
+                                <Button 
+                                  variant="contained" 
+                                  onClick={() => openJoinDialog(guild)}
+                                  disabled={loading}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: '#90caf9',
+                                    color: '#1a1a1a',
+                                    '&:hover': { bgcolor: '#64b5f6' },
+                                    width: isMobile ? '100%' : 'auto'
+                                  }}
+                                >
+                                  Join Guild
+                                </Button>
+                              </CardActions>
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
                     </Box>
                   ) : (
                     <Typography sx={{ textAlign: 'center', color: '#bbb' }}>
@@ -543,10 +569,12 @@ const GuildSetupPage = () => {
         open={joinDialogOpen}
         onClose={() => !loading && setJoinDialogOpen(false)}
         PaperProps={{
-          sx: { bgcolor: '#1e1e1e', color: 'white' }
+          sx: { bgcolor: '#1e1e1e', color: 'white', width: isMobile ? '100%' : 'auto' }
         }}
+        fullWidth={isMobile}
+        maxWidth={isMobile ? "sm" : false}
       >
-        <DialogTitle>Join {selectedGuildName}</DialogTitle>
+        <DialogTitle>{isMobile ? 'Join Guild' : `Join ${selectedGuildName}`}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.7)' }}>
             Enter the guild's join code to become a member:

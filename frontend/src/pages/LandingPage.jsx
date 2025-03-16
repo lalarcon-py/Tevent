@@ -24,6 +24,7 @@ const API_URL = process.env.NODE_ENV === 'development'
 const LandingPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isAuthenticated, user, login } = useAuth();
   const navigate = useNavigate();
   
@@ -204,9 +205,9 @@ const LandingPage = () => {
       {/* Hero Section */}
       <Box 
         sx={{ 
-          pt: { xs: 12, md: 16 }, 
-          pb: { xs: 10, md: 14 },
-          px: 3,
+          pt: { xs: 8, sm: 10, md: 16 }, 
+          pb: { xs: 8, sm: 10, md: 14 },
+          px: { xs: 2, sm: 3, md: 3 },
           textAlign: 'center',
           background: 'linear-gradient(160deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.7) 100%)',
           position: 'relative',
@@ -233,7 +234,7 @@ const LandingPage = () => {
               fontWeight: 800,
               mb: 2,
               color: 'white',
-              fontSize: { xs: '3rem', sm: '4rem', md: '5rem' },
+              fontSize: { xs: '2.5rem', sm: '3.5rem', md: '5rem' },
               lineHeight: 1.1,
               textShadow: '0 0 30px rgba(120, 180, 255, 0.3)',
               position: 'relative'
@@ -267,23 +268,31 @@ const LandingPage = () => {
               mx: 'auto',
               mb: 6,
               fontWeight: 400,
-              lineHeight: 1.5
+              lineHeight: 1.5,
+              fontSize: { xs: '1rem', sm: '1.25rem', md: '1.5rem' }
             }}
           >
             The ultimate tool for guild leaders to manage members, events, loot, and more.
           </Typography>
           
           {/* Action Buttons */}
-          <Box sx={{ mt: 8, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'center', gap: 3 }}>
+          <Box sx={{ 
+            mt: { xs: 4, sm: 6, md: 8 }, 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' }, 
+            justifyContent: 'center', 
+            gap: { xs: 2, sm: 3 },
+            px: { xs: 2, sm: 0 }
+          }}>
             {!isAuthenticated ? (
               <Button 
                 variant="contained" 
-                size="large"
+                size={isMobile ? "medium" : "large"}
                 onClick={handleLoginClick}
                 sx={{
-                  py: 2, 
-                  px: 6,
-                  fontSize: '1.25rem',
+                  py: { xs: 1.5, md: 2 }, 
+                  px: { xs: 4, md: 6 },
+                  fontSize: { xs: '1rem', md: '1.25rem' },
                   fontWeight: 600,
                   borderRadius: '12px',
                   background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
@@ -303,10 +312,11 @@ const LandingPage = () => {
                   variant="contained" 
                   startIcon={<AddCircleIcon />}
                   onClick={() => setCreateDialogOpen(true)}
+                  fullWidth={isSmallMobile}
                   sx={{
-                    py: 2, 
-                    px: 4,
-                    fontSize: '1.1rem',
+                    py: { xs: 1.5, md: 2 }, 
+                    px: { xs: 3, md: 4 },
+                    fontSize: { xs: '0.9rem', md: '1.1rem' },
                     fontWeight: 600,
                     borderRadius: '12px',
                     background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
@@ -325,10 +335,11 @@ const LandingPage = () => {
                   variant="outlined"
                   startIcon={<GroupAddIcon />}
                   onClick={() => setJoinDialogOpen(true)}
+                  fullWidth={isSmallMobile}
                   sx={{
-                    py: 2, 
-                    px: 4,
-                    fontSize: '1.1rem',
+                    py: { xs: 1.5, md: 2 }, 
+                    px: { xs: 3, md: 4 },
+                    fontSize: { xs: '0.9rem', md: '1.1rem' },
                     fontWeight: 600,
                     borderRadius: '12px',
                     borderColor: '#60a5fa',
@@ -349,10 +360,11 @@ const LandingPage = () => {
                   variant="text"
                   startIcon={<VpnKeyIcon />}
                   onClick={() => setJoinCodeDialogOpen(true)}
+                  fullWidth={isSmallMobile}
                   sx={{
-                    py: 2, 
-                    px: 4,
-                    fontSize: '1.1rem',
+                    py: { xs: 1.5, md: 2 }, 
+                    px: { xs: 3, md: 4 },
+                    fontSize: { xs: '0.9rem', md: '1.1rem' },
                     fontWeight: 600,
                     color: '#60a5fa',
                     transition: 'all 0.3s ease',
@@ -375,8 +387,8 @@ const LandingPage = () => {
               bottom: -120,
               left: '50%',
               transform: 'translateX(-50%)',
-              width: '600px',
-              height: '600px',
+              width: { xs: '300px', md: '600px' },
+              height: { xs: '300px', md: '600px' },
               borderRadius: '50%',
               background: 'radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(15, 23, 42, 0) 70%)',
               filter: 'blur(40px)',
@@ -396,14 +408,16 @@ const LandingPage = () => {
           sx: { 
             bgcolor: '#1e293b', 
             color: 'white',
-            borderRadius: '16px',
+            borderRadius: isMobile ? '12px' : '16px',
             backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
-            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)'
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
+            margin: isMobile ? '16px' : 'auto',
+            width: isMobile ? 'calc(100% - 32px)' : undefined
           }
         }}
       >
         <DialogTitle sx={{ 
-          fontSize: '1.75rem', 
+          fontSize: isMobile ? '1.5rem' : '1.75rem', 
           pt: 3,
           fontWeight: 700,
           color: '#f8fafc',
@@ -500,20 +514,22 @@ const LandingPage = () => {
       <Dialog
         open={joinDialogOpen}
         onClose={() => !loading && setJoinDialogOpen(false)}
-        maxWidth="md"
+        maxWidth={isMobile ? "sm" : "md"}
         fullWidth
         PaperProps={{
           sx: { 
             bgcolor: '#1e293b', 
             color: 'white',
-            borderRadius: '16px',
+            borderRadius: isMobile ? '12px' : '16px',
             backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
-            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)'
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
+            margin: isMobile ? '16px' : 'auto',
+            width: isMobile ? 'calc(100% - 32px)' : undefined
           }
         }}
       >
         <DialogTitle sx={{ 
-          fontSize: '1.75rem', 
+          fontSize: isMobile ? '1.5rem' : '1.75rem', 
           pt: 3,
           fontWeight: 700,
           color: '#f8fafc',
@@ -546,12 +562,12 @@ const LandingPage = () => {
               <CircularProgress sx={{ color: '#60a5fa' }} />
             </Box>
           ) : guilds.length > 0 ? (
-            <Grid container spacing={2}>
+            <Grid container spacing={isMobile ? 1 : 2}>
               {guilds.map(guild => (
                 <Grid item xs={12} sm={6} md={4} key={guild.id}>
                   <Box
                     sx={{
-                      p: 3,
+                      p: isMobile ? 2 : 3,
                       borderRadius: '12px',
                       bgcolor: 'rgba(30, 41, 59, 0.7)',
                       border: '1px solid rgba(51, 65, 85, 0.8)',
@@ -567,19 +583,37 @@ const LandingPage = () => {
                       }
                     }}
                   >
-                    <Typography variant="h6" sx={{ color: '#f1f5f9', mb: 1, fontWeight: 600 }}>
+                    <Typography variant="h6" sx={{ 
+                      color: '#f1f5f9', 
+                      mb: 1, 
+                      fontWeight: 600,
+                      fontSize: isMobile ? '1rem' : '1.25rem'
+                    }}>
                       {guild.name}
                     </Typography>
                     
-                    <Typography variant="body2" sx={{ color: '#94a3b8', mb: 1 }}>
+                    <Typography variant="body2" sx={{ 
+                      color: '#94a3b8', 
+                      mb: 1,
+                      fontSize: isMobile ? '0.75rem' : '0.875rem'
+                    }}>
                       Owner: {guild.ownerName}
                     </Typography>
                     
-                    <Typography variant="body2" sx={{ color: '#94a3b8', mb: 2 }}>
+                    <Typography variant="body2" sx={{ 
+                      color: '#94a3b8', 
+                      mb: 2,
+                      fontSize: isMobile ? '0.75rem' : '0.875rem'
+                    }}>
                       Members: {guild.memberCount}
                     </Typography>
                     
-                    <Box sx={{ mt: 'auto', display: 'flex', gap: 1 }}>
+                    <Box sx={{ 
+                      mt: 'auto', 
+                      display: 'flex', 
+                      gap: 1,
+                      flexDirection: isMobile ? 'column' : 'row'
+                    }}>
                     <Button
                         variant="outlined"
                         size="small"
@@ -587,7 +621,8 @@ const LandingPage = () => {
                         sx={{
                           flexGrow: 1,
                           borderColor: '#64748b',
-                          color: '#cbd5e1'
+                          color: '#cbd5e1',
+                          fontSize: isMobile ? '0.75rem' : '0.875rem'
                         }}
                       >
                         Apply
@@ -602,7 +637,8 @@ const LandingPage = () => {
                           color: 'white',
                           '&:hover': {
                             bgcolor: '#2563eb'
-                          }
+                          },
+                          fontSize: isMobile ? '0.75rem' : '0.875rem'
                         }}
                       >
                         Join
@@ -693,14 +729,16 @@ const LandingPage = () => {
           sx: { 
             bgcolor: '#1e293b', 
             color: 'white',
-            borderRadius: '16px',
+            borderRadius: isMobile ? '12px' : '16px',
             backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
-            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)'
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
+            margin: isMobile ? '16px' : 'auto',
+            width: isMobile ? 'calc(100% - 32px)' : undefined
           }
         }}
       >
         <DialogTitle sx={{ 
-          fontSize: '1.75rem', 
+          fontSize: isMobile ? '1.5rem' : '1.75rem', 
           pt: 3,
           fontWeight: 700,
           color: '#f8fafc',

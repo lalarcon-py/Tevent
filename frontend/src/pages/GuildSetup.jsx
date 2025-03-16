@@ -1,13 +1,21 @@
 // frontend/src/pages/GuildSetup.jsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Tabs, Tab, TextField, Card, CardContent } from '@mui/material';
+import { Box, Typography, Button, Tabs, Tab, TextField, Card, CardContent, useMediaQuery, useTheme, CircularProgress, Alert } from '@mui/material';
 import axiosInstance from '../config/axios';
+import { useNavigate } from 'react-router-dom';
+
+const API_URL = process.env.NODE_ENV === 'development'
+  ? 'http://localhost:5000'
+  : process.env.REACT_APP_API_URL;
 
 const GuildSetup = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const navigate = useNavigate();
   const [tab, setTab] = useState(0);
   const [guilds, setGuilds] = useState([]);
   const [newGuildName, setNewGuildName] = useState('');
-  const [joinGuildId, setJoinGuildId] = useState('');
+  const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -15,10 +23,13 @@ const GuildSetup = () => {
     // Fetch available guilds
     const fetchGuilds = async () => {
       try {
+        setLoading(true);
         const response = await axiosInstance.get('/api/guilds/available');
         setGuilds(response.data);
+        setLoading(false);
       } catch (error) {
         console.error('Failed to fetch guilds:', error);
+        setLoading(false);
       }
     };
     
@@ -62,7 +73,6 @@ const GuildSetup = () => {
     } catch (error) {
       console.error('Failed to create guild:', error);
       setError(error.response?.data?.error || 'Failed to create guild');
-    } finally {
       setLoading(false);
     }
   };
@@ -78,7 +88,7 @@ const GuildSetup = () => {
         return;
       }
       
-      // Use the new endpoint that doesn't require a guild ID
+      // Use the API endpoint for joining by code
       const response = await fetch(`${API_URL}/api/guilds/join-by-code`, {
         method: 'POST',
         headers: {
@@ -96,7 +106,6 @@ const GuildSetup = () => {
       }
       
       const data = await response.json();
-      setJoinDialogOpen(false);
       
       try {
         localStorage.setItem('guildId', data.guild.id);
@@ -108,13 +117,20 @@ const GuildSetup = () => {
     } catch (error) {
       console.error('Failed to join guild:', error);
       setError(error.message || 'Failed to join guild');
-    } finally {
       setLoading(false);
     }
   };
   
   return (
-    <Box sx={{ maxWidth: 600, mx: 'auto', mt: 4, p: 3 }}>
+    <Box sx={{ 
+      maxWidth: 600, 
+      mx: 'auto', 
+      mt: 4, 
+      p: isMobile ? 2 : 3,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2
+    }}>
       <Typography variant="h4" sx={{ mb: 3 }}>
         Welcome to Guild Manager
       </Typography>
@@ -123,10 +139,21 @@ const GuildSetup = () => {
         You are not currently a member of any guild. You can create a new guild or join an existing one.
       </Typography>
       
-      <Tabs value={tab} onChange={(_, newValue) => setTab(newValue)} sx={{ mb: 3 }}>
+      <Tabs 
+        value={tab} 
+        onChange={(_, newValue) => setTab(newValue)} 
+        sx={{ mb: 3 }}
+        variant={isMobile ? "fullWidth" : "standard"}
+      >
         <Tab label="Create a Guild" />
         <Tab label="Join a Guild" />
       </Tabs>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
       
       {tab === 0 && (
         <Box>
@@ -143,8 +170,9 @@ const GuildSetup = () => {
             onClick={handleCreateGuild}
             disabled={!newGuildName || loading}
             sx={{ mt: 2 }}
+            fullWidth={isMobile}
           >
-            Create Guild
+            {loading ? <CircularProgress size={24} /> : 'Create Guild'}
           </Button>
         </Box>
       )}
@@ -155,7 +183,11 @@ const GuildSetup = () => {
             Available Guilds
           </Typography>
           
-          {guilds.length > 0 ? (
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : guilds.length > 0 ? (
             guilds.map(guild => (
               <Card key={guild.id} sx={{ mb: 2 }}>
                 <CardContent>
@@ -167,14 +199,33 @@ const GuildSetup = () => {
                     Members: {guild.memberCount}
                   </Typography>
                   
-                  <Button 
-                    variant="contained" 
-                    onClick={() => handleJoinGuild(guild.id)}
-                    disabled={loading}
-                    sx={{ mt: 2 }}
-                  >
-                    Join Guild
-                  </Button>
+                  <Box sx={{ 
+                    mt: 2, 
+                    display: 'flex', 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? 1 : 0,
+                    justifyContent: 'flex-end' 
+                  }}>
+                    <Button 
+                      variant="outlined" 
+                      onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
+                      sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 1 : 0 }}
+                      fullWidth={isMobile}
+                    >
+                      Apply
+                    </Button>
+                    <Button 
+                      variant="contained" 
+                      fullWidth={isMobile}
+                      onClick={() => {
+                        setJoinCode('');
+                        // Implementation for joining directly would go here
+                      }}
+                      disabled={loading}
+                    >
+                      Join Guild
+                    </Button>
+                  </Box>
                 </CardContent>
               </Card>
             ))
@@ -191,25 +242,20 @@ const GuildSetup = () => {
           <TextField
             fullWidth
             label="Guild Invitation Code"
-            value={joinGuildId}
-            onChange={(e) => setJoinGuildId(e.target.value)}
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
             sx={{ mb: 2 }}
           />
           
           <Button 
             variant="contained" 
-            onClick={() => handleJoinGuild(joinGuildId)}
-            disabled={!joinGuildId || loading}
+            onClick={handleJoinGuild}
+            disabled={!joinCode || loading}
+            fullWidth={isMobile}
           >
-            Join with Invitation
+            {loading ? <CircularProgress size={24} /> : 'Join with Invitation'}
           </Button>
         </Box>
-      )}
-      
-      {error && (
-        <Typography sx={{ color: 'error.main', mt: 2 }}>
-          {error}
-        </Typography>
       )}
     </Box>
   );
