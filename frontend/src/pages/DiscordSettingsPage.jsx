@@ -12,6 +12,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import TuneIcon from '@mui/icons-material/Tune';
 import { useGuild } from '../contexts/GuildContext';
 import axiosInstance from '../config/axios';
+import { useAuth } from '../contexts/AuthContext';
 
 // Channel configuration options - matches the requested channels
 const CHANNEL_TYPES = [
@@ -25,11 +26,11 @@ const CHANNEL_TYPES = [
 ];
 
 const DiscordSettingsPage = () => {
-  // Get guildId from URL or localStorage
   const { guildId: urlGuildId } = useParams();
   const currentGuildId = urlGuildId || localStorage.getItem('guildId');
-  
   const { guildRole } = useGuild();
+  
+  
   
   // Debug information for troubleshooting
   const [debugInfo, setDebugInfo] = useState({
@@ -51,8 +52,7 @@ const DiscordSettingsPage = () => {
   const [botConnected, setBotConnected] = useState(false);
   const [testResults, setTestResults] = useState(null);
   
-  // Check if user is Guild Master
-  const isGuildMaster = guildRole === 'Guild Master';
+  const [isGuildMaster, setIsGuildMaster] = useState(false);
   
   // Fetch Discord connection data
   useEffect(() => {
@@ -76,14 +76,26 @@ const DiscordSettingsPage = () => {
       return;
     }
     
-    if (!isGuildMaster) {
-      setLoading(false);
-      return;
-    }
-    
     const fetchData = async () => {
       try {
         setLoading(true);
+        
+        // First, fetch guild details to verify permissions (this is the key change)
+        const guildResponse = await axiosInstance.get(`/api/guilds/${currentGuildId}`);
+        console.log("Guild API response:", guildResponse.data);
+        
+        // Check if current user is guild master from response
+        const userRoleFromAPI = guildResponse.data.userRole;
+        console.log("Server-reported user role:", userRoleFromAPI);
+        
+        // Only trust the server response for permission checks
+        setIsGuildMaster(userRoleFromAPI === 'Guild Master');
+        
+        // If not a Guild Master, stop loading additional data
+        if (userRoleFromAPI !== 'Guild Master') {
+          setLoading(false);
+          return;
+        }
         
         // Get Discord connection status using the direct guild-mapping endpoint
         try {
@@ -92,17 +104,18 @@ const DiscordSettingsPage = () => {
           
           setBotConnected(mappingResponse.data.connected);
           
+          // Rest of the existing code for fetching Discord data
           if (mappingResponse.data.connected) {
             // Set selected Discord guild
             setSelectedGuild(mappingResponse.data.discordGuildId);
             
-            // Get Discord server info - falling back to simpler approach for now
+            // Get Discord server info
             setDiscordGuilds([{
               id: mappingResponse.data.discordGuildId,
               name: "Connected Discord Server"
             }]);
             
-            // Try to get channels - simplified for now
+            // Try to get channels
             try {
               const channelsResponse = await axiosInstance.get(
                 `/api/discord-bot/channels?guildId=${currentGuildId}&discordGuildId=${mappingResponse.data.discordGuildId}`
@@ -111,7 +124,7 @@ const DiscordSettingsPage = () => {
               if (channelsResponse.data && Array.isArray(channelsResponse.data)) {
                 setChannels(channelsResponse.data);
               } else {
-                // Fallback to show at least something
+                // Fallback
                 setChannels([
                   { id: 'general', name: 'general', type: 0 },
                   { id: 'announcements', name: 'announcements', type: 0 }
@@ -119,7 +132,7 @@ const DiscordSettingsPage = () => {
               }
             } catch (channelsError) {
               console.warn('Could not fetch Discord channels:', channelsError);
-              // Fallback channels for UI testing
+              // Fallback channels
               setChannels([
                 { id: 'general', name: 'general', type: 0 },
                 { id: 'announcements', name: 'announcements', type: 0 }
@@ -140,16 +153,27 @@ const DiscordSettingsPage = () => {
           console.error('Error checking Discord connection:', mappingError);
           setBotConnected(false);
         }
-      } catch (err) {
-        console.error('Error fetching Discord data:', err);
-        setError('Failed to load Discord settings. Please try again later.');
+      } catch (error) {
+        console.error('Failed to fetch guild data:', error);
+        
+        // Handle different error types
+        if (error.response) {
+          if (error.response.status === 403) {
+            setIsGuildMaster(false);
+            setError('You do not have permission to access Discord settings.');
+          } else {
+            setError(error.response.data?.error || 'Failed to load Discord settings. Please try again later.');
+          }
+        } else {
+          setError('Failed to load Discord settings. Please try again later.');
+        }
       } finally {
         setLoading(false);
       }
     };
     
     fetchData();
-  }, [currentGuildId, isGuildMaster, guildRole, botConnected]);
+  }, [currentGuildId]);
   
   // Handle Discord server selection change
   const handleGuildChange = async (discordGuildId) => {
