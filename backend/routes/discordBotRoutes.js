@@ -12,6 +12,7 @@ const pool = new Pool({
   } : false
 });
 
+
 // Discord bot service configuration
 const DISCORD_BOT_URL = process.env.NODE_ENV === 'production' 
   ? "http://heartfelt-sparkle.railway.internal:3300" 
@@ -129,30 +130,39 @@ router.get('/channels', async (req, res) => {
     }
     
     try {
-      // Call Discord bot service to get channels
-      // Fix this line to use guildId instead of appGuildId
-      const channels = await callDiscordBot(`/channels?guildId=${guildId}&discordGuildId=${discordGuildId}`);
+      console.log(`Fetching channels from Discord bot webhook endpoint`);
+      const discordBotResponse = await axios.post(`${DISCORD_BOT_URL}/webhook/channels`, {
+        guildId: guildId,
+        discordGuildId: discordGuildId,
+        secret: DISCORD_BOT_AUTH
+      });
       
-      // If we get here, format and return the channels
-      const formattedChannels = channels.map(channel => ({
-        id: channel.id,
-        name: channel.name,
-        type: channel.type,
-        parent_id: channel.parent_id,
-        position: channel.position
-      }));
-      
-      res.json(formattedChannels);
-    } catch (error) {
-      console.error('Error fetching Discord channels:', error);
-      
-      // Provide mock data for testing if Discord bot is unavailable
-      console.log('Returning mock channel data for testing');
-      res.json([
-        { id: 'general-mock', name: 'general', type: 0 },
-        { id: 'announcements-mock', name: 'announcements', type: 0 },
-        { id: 'bot-commands-mock', name: 'bot-commands', type: 0 },
-        { id: 'events-mock', name: 'events', type: 0 }
+      if (discordBotResponse.data && Array.isArray(discordBotResponse.data)) {
+        // Filter and format channels
+        const formattedChannels = discordBotResponse.data
+          .filter(channel => channel.type === 0) // Only text channels
+          .map(channel => ({
+            id: channel.id,
+            name: channel.name,
+            type: channel.type,
+            parent_id: channel.parent_id,
+            position: channel.position
+          }));
+        
+        console.log(`Found ${formattedChannels.length} text channels`);
+        return res.json(formattedChannels);
+      } else {
+        throw new Error('Invalid response format from Discord bot');
+      }
+    } catch (discordError) {
+      console.error('Error fetching channels from Discord bot:', discordError);
+
+      console.log('Falling back to mock channel data');
+      return res.json([
+        { id: 'mock-general', name: 'general (mock)', type: 0 },
+        { id: 'mock-events', name: 'events (mock)', type: 0 },
+        { id: 'mock-announcements', name: 'announcements (mock)', type: 0 },
+        { id: 'mock-bot-commands', name: 'bot-commands (mock)', type: 0 }
       ]);
     }
   } catch (error) {
