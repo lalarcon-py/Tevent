@@ -22,7 +22,9 @@ import {
   Button,
   TextField,
   DialogActions,
-  Tooltip
+  Tooltip,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EventIcon from '@mui/icons-material/Event';
@@ -37,6 +39,8 @@ import { useAuth } from '../../contexts/AuthContext';
 // Name edit dialog component
 const NameEditDialog = ({ open, onClose, member, onSave }) => {
   const [newName, setNewName] = useState(member?.username || '');
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const handleSave = () => {
     if (newName.trim() && newName !== member.username) {
@@ -53,10 +57,20 @@ const NameEditDialog = ({ open, onClose, member, onSave }) => {
       maxWidth="xs"
       fullWidth
       PaperProps={{
-        sx: { bgcolor: '#1e1e1e', color: 'white' }
+        sx: { 
+          bgcolor: '#1e1e1e', 
+          color: 'white',
+          margin: isMobile ? '16px' : null,
+          width: isMobile ? 'calc(100% - 32px)' : null
+        }
       }}
     >
-      <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+      <DialogTitle sx={{ 
+        bgcolor: '#1a1a1a', 
+        color: 'white',
+        fontSize: isMobile ? '1.25rem' : '1.5rem',
+        py: 2
+      }}>
         Edit Username
       </DialogTitle>
       <DialogContent sx={{ pt: 2, pb: 2 }}>
@@ -107,6 +121,10 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
   const [error, setError] = useState(null);
   const [nameEditOpen, setNameEditOpen] = useState(false);
   const [isDkpEnabled, setIsDkpEnabled] = useState(false);
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   
   // Gear check states
   const [gearCheckStatus, setGearCheckStatus] = useState('none'); // none, requested, pending, approved, denied
@@ -438,13 +456,17 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
       onClose={onClose}
       maxWidth="md"
       fullWidth
+      fullScreen={isMobile}
       PaperProps={{
         sx: {
           background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: '12px',
+          borderRadius: isMobile ? 0 : '12px',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          margin: isMobile ? 0 : null,
+          width: isMobile ? '100%' : null,
+          height: isMobile ? '100%' : null
         }
       }}
     >
@@ -453,47 +475,84 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
         justifyContent: 'space-between', 
         alignItems: 'center',
         backgroundColor: 'rgba(25, 25, 25, 0.6)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        p: isMobile ? 1.5 : 2
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: isMobile ? 1 : 2,
+          width: isMobile ? 'calc(100% - 48px)' : 'auto' // Allow space for close button
+        }}>
           <Avatar 
             src={member.avatarUrl || member.avatar_url}
             sx={{ 
-              width: 48, 
-              height: 48,
+              width: isMobile ? 36 : 48, 
+              height: isMobile ? 36 : 48,
               border: '2px solid #90caf9'
             }}
           >
             {member.username?.[0] || '?'}
           </Avatar>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="h6" sx={{ color: 'white' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: isMobile ? 'flex-start' : 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            overflow: 'hidden'
+          }}>
+            <Typography 
+              variant={isMobile ? "subtitle1" : "h6"} 
+              sx={{ 
+                color: 'white',
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                maxWidth: isMobile ? '200px' : '300px'
+              }}
+            >
               {member.username}
             </Typography>
             
             {/* Add pencil icon for name editing */}
-            {(member.id === user?.id) && (
-              <Tooltip title="Edit username">
-                <IconButton 
-                  size="small" 
-                  onClick={() => setNameEditOpen(true)}
-                  sx={{ 
-                    ml: 1,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    '&:hover': { color: '#90caf9' }
-                  }}
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            
-            <Typography variant="body2" sx={{ color: '#90caf9', ml: 1 }}>
-              {member.role}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {(member.id === user?.id) && (
+                <Tooltip title="Edit username">
+                  <IconButton 
+                    size="small" 
+                    onClick={() => setNameEditOpen(true)}
+                    sx={{ 
+                      ml: isMobile ? 0 : 1,
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      '&:hover': { color: '#90caf9' },
+                      padding: isMobile ? '2px' : '8px'
+                    }}
+                  >
+                    <EditIcon fontSize={isMobile ? "small" : "medium"} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#90caf9', 
+                  ml: isMobile ? 0 : 1,
+                  fontWeight: isMobile ? 500 : 400,
+                  fontSize: isMobile ? '0.7rem' : '0.875rem'
+                }}
+              >
+                {member.role}
+              </Typography>
+            </Box>
           </Box>
         </Box>
-        <IconButton onClick={onClose} sx={{ color: 'white' }}>
+        <IconButton 
+          onClick={onClose} 
+          sx={{ 
+            color: 'white',
+            padding: isMobile ? 1 : 'auto'
+          }}
+        >
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -501,42 +560,51 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
       <Tabs 
         value={currentTab} 
         onChange={handleTabChange}
-        variant="fullWidth"
+        variant={isMobile ? "scrollable" : "fullWidth"}
+        scrollButtons={isMobile ? "auto" : false}
+        allowScrollButtonsMobile
         sx={{
           backgroundColor: 'rgba(20, 20, 20, 0.6)',
           '& .MuiTab-root': {
             color: 'rgba(255, 255, 255, 0.7)',
-            '&.Mui-selected': { color: '#90caf9' }
+            '&.Mui-selected': { color: '#90caf9' },
+            minHeight: isMobile ? '48px' : '56px',
+            fontSize: isMobile ? '0.75rem' : '0.875rem',
+            minWidth: isMobile ? '80px' : '120px'
           },
           '& .MuiTabs-indicator': { backgroundColor: '#90caf9' }
         }}
       >
         <Tab 
-          icon={<BuildIcon />} 
-          label="Builds" 
+          icon={<BuildIcon fontSize={isMobile ? "small" : "medium"} />} 
+          label={isMobile ? "" : "Builds"} 
           iconPosition="start"
+          aria-label="Builds"
         />
         <Tab 
-          icon={<ListAltIcon />} 
-          label="Wishlist" 
+          icon={<ListAltIcon fontSize={isMobile ? "small" : "medium"} />} 
+          label={isMobile ? "" : "Wishlist"} 
           iconPosition="start"
+          aria-label="Wishlist"
         />
         <Tab 
-          icon={<EventIcon />} 
-          label="Attendance" 
+          icon={<EventIcon fontSize={isMobile ? "small" : "medium"} />} 
+          label={isMobile ? "" : "Attendance"} 
           iconPosition="start"
+          aria-label="Attendance"
         />
         <Tab 
-          icon={<VerifiedUserIcon />} 
-          label="Gear Check" 
+          icon={<VerifiedUserIcon fontSize={isMobile ? "small" : "medium"} />} 
+          label={isMobile ? "" : "Gear Check"} 
           iconPosition="start"
+          aria-label="Gear Check"
         />
       </Tabs>
       
       <DialogContent sx={{ 
-        p: 3, 
+        p: isMobile ? 1.5 : 3, 
         backgroundColor: 'rgba(30, 30, 30, 0.4)',
-        height: '500px',
+        height: isMobile ? 'calc(100% - 120px)' : '500px',
         overflowY: 'auto'
       }}>
         {loading && currentTab < 3 ? (
@@ -548,41 +616,79 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
             {/* Builds Tab */}
             <Box sx={{ display: currentTab === 0 ? 'block' : 'none' }}>
               {member.builds && member.builds.length > 0 ? (
-                <Grid container spacing={3}>
+                <Grid container spacing={isMobile ? 1.5 : 3}>
                   {member.builds.map((build, index) => (
                     <Grid item xs={12} sm={6} key={index}>
                       <Paper sx={{ 
-                        p: 2, 
+                        p: isMobile ? 1.5 : 2, 
                         backgroundColor: 'rgba(25, 25, 25, 0.6)',
                         border: '1px solid rgba(144, 202, 249, 0.2)',
                         borderRadius: '8px'
                       }}>
-                        <Typography variant="h6" sx={{ color: '#90caf9', mb: 1 }}>
+                        <Typography 
+                          variant={isMobile ? "subtitle1" : "h6"} 
+                          sx={{ 
+                            color: '#90caf9', 
+                            mb: 1,
+                            fontSize: isMobile ? '1rem' : '1.25rem'
+                          }}
+                        >
                           {getWeaponSpec(build.primary, build.secondary)}
                         </Typography>
                         
                         <Divider sx={{ mb: 2, borderColor: 'rgba(255, 255, 255, 0.1)' }} />
                         
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          mb: 2,
+                          flexDirection: isMobile ? 'column' : 'row',
+                          gap: isMobile ? 1 : 0
+                        }}>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 1
+                          }}>
                             <img 
                               src={getWeaponIcon(build.primary)} 
                               alt={build.primary}
-                              style={{ width: 36, height: 36 }}
+                              style={{ 
+                                width: isMobile ? 28 : 36, 
+                                height: isMobile ? 28 : 36
+                              }}
                               onError={(e) => { e.target.style.display = 'none' }}
                             />
-                            <Typography sx={{ color: 'white' }}>
+                            <Typography 
+                              sx={{ 
+                                color: 'white',
+                                fontSize: isMobile ? '0.875rem' : '1rem'
+                              }}
+                            >
                               {build.primary}
                             </Typography>
                           </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 1,
+                            justifyContent: isMobile ? 'flex-start' : 'flex-end'
+                          }}>
                             <img 
                               src={getWeaponIcon(build.secondary)} 
                               alt={build.secondary}
-                              style={{ width: 36, height: 36 }}
+                              style={{ 
+                                width: isMobile ? 28 : 36, 
+                                height: isMobile ? 28 : 36
+                              }}
                               onError={(e) => { e.target.style.display = 'none' }}
                             />
-                            <Typography sx={{ color: 'white' }}>
+                            <Typography 
+                              sx={{ 
+                                color: 'white',
+                                fontSize: isMobile ? '0.875rem' : '1rem'
+                              }}
+                            >
                               {build.secondary}
                             </Typography>
                           </Box>
@@ -598,13 +704,22 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                               color: build.spec === 'DPS' ? '#ff6666' : 
                                    build.spec === 'Tank' ? '#66b3ff' : 
                                    '#66ff66',
-                              fontWeight: 'bold'
+                              fontWeight: 'bold',
+                              fontSize: isMobile ? '0.75rem' : '0.875rem',
+                              height: isMobile ? '24px' : '32px'
                             }}
                           />
                         </Box>
                         
                         {member.combat_power && (
-                          <Typography sx={{ textAlign: 'center', color: '#ffd700', mt: 2 }}>
+                          <Typography 
+                            sx={{ 
+                              textAlign: 'center', 
+                              color: '#ffd700', 
+                              mt: 2,
+                              fontSize: isMobile ? '0.875rem' : '1rem'
+                            }}
+                          >
                             Combat Power: {member.combat_power}
                           </Typography>
                         )}
@@ -614,12 +729,17 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                 </Grid>
               ) : (
                 <Box sx={{ 
-                  p: 4, 
+                  p: isMobile ? 2 : 4, 
                   textAlign: 'center',
                   backgroundColor: 'rgba(25, 25, 25, 0.3)',
                   borderRadius: '8px'
                 }}>
-                  <Typography sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                  <Typography 
+                    sx={{ 
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: isMobile ? '0.875rem' : '1rem'
+                    }}
+                  >
                     No builds configured
                   </Typography>
                 </Box>
@@ -631,14 +751,17 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
               {wishlistItems.length > 0 ? (
                 <List sx={{ 
                   backgroundColor: 'rgba(25, 25, 25, 0.4)', 
-                  borderRadius: '8px'
+                  borderRadius: '8px',
+                  p: isMobile ? 0 : undefined
                 }}>
                   {wishlistItems.map((item) => (
                     <ListItem 
                       key={item.id}
                       sx={{ 
                         borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                        '&:last-child': { borderBottom: 'none' }
+                        '&:last-child': { borderBottom: 'none' },
+                        py: isMobile ? 1 : 2,
+                        px: isMobile ? 1 : 2
                       }}
                     >
                       <ListItemAvatar>
@@ -646,7 +769,9 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                           src={item.Item?.icon}
                           sx={{ 
                             bgcolor: 'rgba(144, 202, 249, 0.1)',
-                            border: '1px solid rgba(144, 202, 249, 0.2)'
+                            border: '1px solid rgba(144, 202, 249, 0.2)',
+                            width: isMobile ? 32 : 40, 
+                            height: isMobile ? 32 : 40
                           }}
                         >
                           {item.Item?.name?.[0] || item.item_name?.[0] || '?'}
@@ -654,39 +779,83 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                       </ListItemAvatar>
                       <ListItemText
                         primary={
-                          <Typography sx={{ color: 'white' }}>
-                            {item.Item?.name || item.item_name}
+                          <Box 
+                            sx={{ 
+                              display: 'flex', 
+                              alignItems: 'center',
+                              flexWrap: 'wrap'
+                            }}
+                          >
+                            <Typography 
+                              sx={{ 
+                                color: 'white',
+                                fontSize: isMobile ? '0.875rem' : '1rem',
+                                marginRight: 1,
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word'
+                              }}
+                            >
+                              {item.Item?.name || item.item_name}
+                            </Typography>
                             {item.priority > 0 && (
                               <Chip 
                                 label={`${item.priority} DKP`} 
                                 size="small"
                                 sx={{ 
-                                  ml: 1, 
+                                  ml: isMobile ? 0 : 1, 
+                                  mt: isMobile ? 0.5 : 0,
                                   bgcolor: 'rgba(255, 215, 0, 0.2)',
-                                  color: '#ffd700'
+                                  color: '#ffd700',
+                                  height: isMobile ? '20px' : '24px',
+                                  fontSize: isMobile ? '0.7rem' : '0.75rem'
                                 }}
                               />
                             )}
-                          </Typography>
+                          </Box>
                         }
                         secondary={
-                          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: 'rgba(255, 255, 255, 0.6)',
+                              fontSize: isMobile ? '0.75rem' : '0.875rem',
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word'
+                            }}
+                          >
                             {item.Item?.type || item.item_type || 'Unknown'}
                             {item.notes && ` - ${item.notes}`}
                           </Typography>
                         }
+                        primaryTypographyProps={{
+                          sx: { 
+                            fontSize: isMobile ? '0.875rem' : '1rem',
+                            whiteSpace: 'normal'
+                          }
+                        }}
+                        secondaryTypographyProps={{
+                          sx: { 
+                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                            whiteSpace: 'normal'
+                          }
+                        }}
                       />
                     </ListItem>
                   ))}
                 </List>
               ) : (
                 <Box sx={{ 
-                  p: 4, 
+                  p: isMobile ? 2 : 4, 
                   textAlign: 'center',
                   backgroundColor: 'rgba(25, 25, 25, 0.3)',
                   borderRadius: '8px'
                 }}>
-                  <Typography sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                  <Typography 
+                    sx={{ 
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: isMobile ? '0.875rem' : '1rem'
+                    }}
+                  >
                     No wishlist items found
                   </Typography>
                 </Box>
@@ -697,35 +866,66 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
             <Box sx={{ display: currentTab === 2 ? 'block' : 'none' }}>
               {attendanceData.length > 0 ? (
                 <>
-                  <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(144, 202, 249, 0.1)', borderRadius: '8px' }}>
-                    <Typography variant="h6" sx={{ color: '#90caf9', mb: 1 }}>
+                  <Box 
+                    sx={{ 
+                      mb: isMobile ? 2 : 3, 
+                      p: isMobile ? 1.5 : 2, 
+                      bgcolor: 'rgba(144, 202, 249, 0.1)', 
+                      borderRadius: '8px' 
+                    }}
+                  >
+                    <Typography 
+                      variant={isMobile ? "subtitle1" : "h6"} 
+                      sx={{ 
+                        color: '#90caf9', 
+                        mb: 1,
+                        fontSize: isMobile ? '1rem' : '1.25rem'
+                      }}
+                    >
                       Attendance Summary
                     </Typography>
-                    <Typography sx={{ color: 'white' }}>
+                    <Typography 
+                      sx={{ 
+                        color: 'white',
+                        fontSize: isMobile ? '0.875rem' : '1rem'
+                      }}
+                    >
                       Total Events: {attendanceData.length}
                     </Typography>
-                    <Typography sx={{ color: 'white' }}>
+                    <Typography 
+                      sx={{ 
+                        color: 'white',
+                        fontSize: isMobile ? '0.875rem' : '1rem'
+                      }}
+                    >
                       Attendance Rate: {Math.round(attendanceData.filter(a => a.attended).length / attendanceData.length * 100)}%
                     </Typography>
                   </Box>
                 
-                  <List sx={{ 
-                    backgroundColor: 'rgba(25, 25, 25, 0.4)', 
-                    borderRadius: '8px'
-                  }}>
+                  <List 
+                    sx={{ 
+                      backgroundColor: 'rgba(25, 25, 25, 0.4)', 
+                      borderRadius: '8px',
+                      p: isMobile ? 0 : undefined
+                    }}
+                  >
                     {attendanceData.slice(0, 10).map((attendance, index) => (
                       <ListItem 
                         key={attendance.id || index}
                         sx={{ 
                           borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                          '&:last-child': { borderBottom: 'none' }
+                          '&:last-child': { borderBottom: 'none' },
+                          py: isMobile ? 1 : 2,
+                          px: isMobile ? 1 : 2
                         }}
                       >
                         <ListItemAvatar>
                           <Avatar 
                             sx={{ 
                               bgcolor: attendance.attended ? 'rgba(102, 255, 102, 0.2)' : 'rgba(255, 102, 102, 0.2)',
-                              color: attendance.attended ? '#66ff66' : '#ff6666'
+                              color: attendance.attended ? '#66ff66' : '#ff6666',
+                              width: isMobile ? 32 : 40, 
+                              height: isMobile ? 32 : 40
                             }}
                           >
                             {attendance.attended ? '✓' : '✗'}
@@ -733,12 +933,23 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                         </ListItemAvatar>
                         <ListItemText
                           primary={
-                            <Typography sx={{ color: 'white' }}>
+                            <Typography 
+                              sx={{ 
+                                color: 'white',
+                                fontSize: isMobile ? '0.875rem' : '1rem'
+                              }}
+                            >
                               {attendance.event?.title || 'Unknown Event'}
                             </Typography>
                           }
                           secondary={
-                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                color: 'rgba(255, 255, 255, 0.6)',
+                                fontSize: isMobile ? '0.75rem' : '0.875rem'
+                              }}
+                            >
                               {new Date(attendance.event?.event_time || attendance.date).toLocaleString()}
                             </Typography>
                           }
@@ -749,7 +960,9 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                               size="small"
                               sx={{ 
                                 bgcolor: 'rgba(255, 215, 0, 0.2)',
-                                color: '#ffd700'
+                                color: '#ffd700',
+                                height: isMobile ? '20px' : '24px',
+                                fontSize: isMobile ? '0.7rem' : '0.75rem'
                               }}
                             />
                           )}
@@ -758,19 +971,31 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   </List>
                   
                   {attendanceData.length > 10 && (
-                    <Typography sx={{ mt: 2, textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+                    <Typography 
+                      sx={{ 
+                        mt: 2, 
+                        textAlign: 'center', 
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        fontSize: isMobile ? '0.75rem' : '0.875rem'
+                      }}
+                    >
                       Showing most recent 10 of {attendanceData.length} events
                     </Typography>
                   )}
                 </>
               ) : (
                 <Box sx={{ 
-                  p: 4, 
+                  p: isMobile ? 2 : 4, 
                   textAlign: 'center',
                   backgroundColor: 'rgba(25, 25, 25, 0.3)',
                   borderRadius: '8px'
                 }}>
-                  <Typography sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                  <Typography 
+                    sx={{ 
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: isMobile ? '0.875rem' : '1rem'
+                    }}
+                  >
                     Attendance tracking coming soon!
                   </Typography>
                 </Box>
@@ -781,24 +1006,59 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
             <Box sx={{ display: currentTab === 3 ? 'block' : 'none' }}>
               {/* User side - upload gear check */}
               {member.id === user?.id && (
-                <Box sx={{ mb: 3 }}>
+                <Box sx={{ mb: isMobile ? 2 : 3 }}>
                   {gearCheckStatus === 'none' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(25, 25, 25, 0.4)', borderRadius: '8px' }}>
-                      <Typography variant="h6" sx={{ color: '#90caf9', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(25, 25, 25, 0.4)', 
+                      borderRadius: '8px' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#90caf9', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         No Gear Check Requested
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 2 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         Guild officers haven't requested a gear check from you yet.
                       </Typography>
                     </Paper>
                   )}
                   
                   {gearCheckStatus === 'requested' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(255, 183, 77, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 183, 77, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#ffb74d', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(255, 183, 77, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 183, 77, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#ffb74d', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Requested
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 3 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 3,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         Please upload a screenshot of your character sheet showing your gear and stats.
                       </Typography>
                       
@@ -815,13 +1075,25 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                             variant="contained"
                             component="span"
                             startIcon={<CloudUploadIcon />}
-                            sx={{ mr: 2 }}
+                            sx={{ 
+                              mr: 2,
+                              py: isMobile ? 0.75 : 1,
+                              fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                            }}
                           >
                             Select Image
                           </Button>
                         </label>
                         {uploadedFile && (
-                          <Typography variant="body2" sx={{ color: 'white', display: 'inline' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: 'white', 
+                              display: 'inline',
+                              fontSize: isMobile ? '0.75rem' : '0.875rem',
+                              wordBreak: 'break-word'
+                            }}
+                          >
                             {uploadedFile.name}
                           </Typography>
                         )}
@@ -832,6 +1104,11 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                         color="primary"
                         onClick={uploadGearCheck}
                         disabled={!uploadedFile}
+                        fullWidth={isMobile}
+                        sx={{
+                          py: isMobile ? 0.75 : 1,
+                          fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                        }}
                       >
                         Submit Gear Check
                       </Button>
@@ -839,11 +1116,28 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   )}
                   
                   {gearCheckStatus === 'pending' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(255, 183, 77, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 183, 77, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#ffb74d', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(255, 183, 77, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 183, 77, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#ffb74d', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Pending Review
                       </Typography>
-                      <Typography sx={{ color: 'white' }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white',
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         Your gear check has been submitted and is awaiting review by a guild officer.
                       </Typography>
                       
@@ -852,7 +1146,12 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                           <img 
                             src={gearCheckImage} 
                             alt="Gear Check" 
-                            style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '4px' }} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              maxHeight: isMobile ? '200px' : '300px', 
+                              borderRadius: '4px',
+                              objectFit: 'contain'
+                            }} 
                           />
                         </Box>
                       )}
@@ -860,11 +1159,28 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   )}
                   
                   {gearCheckStatus === 'approved' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(102, 255, 102, 0.1)', borderRadius: '8px', border: '1px solid rgba(102, 255, 102, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#66ff66', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(102, 255, 102, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(102, 255, 102, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#66ff66', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Approved
                       </Typography>
-                      <Typography sx={{ color: 'white' }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white',
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         Your gear check has been reviewed and approved by a guild officer.
                       </Typography>
                       
@@ -873,7 +1189,12 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                           <img 
                             src={gearCheckImage} 
                             alt="Gear Check" 
-                            style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '4px' }} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              maxHeight: isMobile ? '200px' : '300px', 
+                              borderRadius: '4px',
+                              objectFit: 'contain'
+                            }} 
                           />
                         </Box>
                       )}
@@ -881,14 +1202,40 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   )}
                   
                   {gearCheckStatus === 'denied' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(255, 102, 102, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 102, 102, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#ff6666', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(255, 102, 102, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 102, 102, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#ff6666', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Denied
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 2 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         Please re-submit your gear check. It has been denied for the following reason(s):
                       </Typography>
-                      <Typography sx={{ color: '#ff6666', mb: 3, fontStyle: 'italic' }}>
+                      <Typography 
+                        sx={{ 
+                          color: '#ff6666', 
+                          mb: 3, 
+                          fontStyle: 'italic',
+                          fontSize: isMobile ? '0.875rem' : '1rem',
+                          wordBreak: 'break-word'
+                        }}
+                      >
                         "{gearCheckDenialReason}"
                       </Typography>
                       
@@ -905,13 +1252,25 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                             variant="contained"
                             component="span"
                             startIcon={<CloudUploadIcon />}
-                            sx={{ mr: 2 }}
+                            sx={{ 
+                              mr: 2,
+                              py: isMobile ? 0.75 : 1,
+                              fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                            }}
                           >
                             Select New Image
                           </Button>
                         </label>
                         {uploadedFile && (
-                          <Typography variant="body2" sx={{ color: 'white', display: 'inline' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: 'white', 
+                              display: 'inline',
+                              fontSize: isMobile ? '0.75rem' : '0.875rem',
+                              wordBreak: 'break-word'
+                            }}
+                          >
                             {uploadedFile.name}
                           </Typography>
                         )}
@@ -922,6 +1281,11 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                         color="primary"
                         onClick={uploadGearCheck}
                         disabled={!uploadedFile}
+                        fullWidth={isMobile}
+                        sx={{
+                          py: isMobile ? 0.75 : 1,
+                          fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                        }}
                       >
                         Re-submit Gear Check
                       </Button>
@@ -934,17 +1298,39 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
               {canAdminGearCheck() && member.id !== user?.id && (
                 <Box>
                   {gearCheckStatus === 'none' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(25, 25, 25, 0.4)', borderRadius: '8px' }}>
-                      <Typography variant="h6" sx={{ color: '#90caf9', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(25, 25, 25, 0.4)', 
+                      borderRadius: '8px' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#90caf9', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         No Gear Check Requested
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 2 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         No gear check has been requested from this member.
                       </Typography>
                       <Button
                         variant="contained"
                         color="primary"
                         onClick={requestGearCheck}
+                        fullWidth={isMobile}
+                        sx={{
+                          py: isMobile ? 0.75 : 1,
+                          fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                        }}
                       >
                         Request Gear Check
                       </Button>
@@ -952,22 +1338,57 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   )}
                   
                   {gearCheckStatus === 'requested' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(255, 183, 77, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 183, 77, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#ffb74d', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(255, 183, 77, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 183, 77, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#ffb74d', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Requested
                       </Typography>
-                      <Typography sx={{ color: 'white' }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white',
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         A gear check has been requested from this member. Waiting for their submission.
                       </Typography>
                     </Paper>
                   )}
                   
                   {gearCheckStatus === 'pending' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(255, 183, 77, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 183, 77, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#ffb74d', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(255, 183, 77, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 183, 77, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#ffb74d', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Pending Review
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 2 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         This member has submitted a gear check that needs review.
                       </Typography>
                       
@@ -976,17 +1397,31 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                           <img 
                             src={gearCheckImage} 
                             alt="Gear Check" 
-                            style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '4px' }} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              maxHeight: isMobile ? '200px' : '300px', 
+                              borderRadius: '4px',
+                              objectFit: 'contain'
+                            }} 
                           />
                         </Box>
                       )}
                       
-                      <Box sx={{ display: 'flex', gap: 2 }}>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        gap: 2,
+                        flexDirection: isMobile ? 'column' : 'row'
+                      }}>
                         <Button
                           variant="contained"
                           color="success"
                           onClick={approveGearCheck}
-                          sx={{ color: 'white' }}
+                          sx={{ 
+                            color: 'white',
+                            py: isMobile ? 0.75 : 1,
+                            fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                          }}
+                          fullWidth={isMobile}
                         >
                           Approve
                         </Button>
@@ -995,6 +1430,11 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                           variant="contained"
                           color="error"
                           onClick={() => setDenialDialog(true)}
+                          sx={{
+                            py: isMobile ? 0.75 : 1,
+                            fontSize: isMobile ? '0.875rem' : '0.9375rem'
+                          }}
+                          fullWidth={isMobile}
                         >
                           Deny
                         </Button>
@@ -1003,11 +1443,29 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   )}
                   
                   {gearCheckStatus === 'approved' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(102, 255, 102, 0.1)', borderRadius: '8px', border: '1px solid rgba(102, 255, 102, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#66ff66', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(102, 255, 102, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(102, 255, 102, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#66ff66', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Approved
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 2 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         This member's gear check has been approved.
                       </Typography>
                       
@@ -1016,7 +1474,12 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                           <img 
                             src={gearCheckImage} 
                             alt="Gear Check" 
-                            style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '4px' }} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              maxHeight: isMobile ? '200px' : '300px', 
+                              borderRadius: '4px',
+                              objectFit: 'contain'
+                            }} 
                           />
                         </Box>
                       )}
@@ -1024,17 +1487,48 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                   )}
                   
                   {gearCheckStatus === 'denied' && (
-                    <Paper sx={{ p: 3, bgcolor: 'rgba(255, 102, 102, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 102, 102, 0.3)' }}>
-                      <Typography variant="h6" sx={{ color: '#ff6666', mb: 2 }}>
+                    <Paper sx={{ 
+                      p: isMobile ? 2 : 3, 
+                      bgcolor: 'rgba(255, 102, 102, 0.1)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 102, 102, 0.3)' 
+                    }}>
+                      <Typography 
+                        variant={isMobile ? "subtitle1" : "h6"} 
+                        sx={{ 
+                          color: '#ff6666', 
+                          mb: 2,
+                          fontSize: isMobile ? '1rem' : '1.25rem'
+                        }}
+                      >
                         Gear Check Denied
                       </Typography>
-                      <Typography sx={{ color: 'white', mb: 2 }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         This member's gear check was denied with the following reason:
                       </Typography>
-                      <Typography sx={{ color: '#ff6666', mb: 3, fontStyle: 'italic' }}>
+                      <Typography 
+                        sx={{ 
+                          color: '#ff6666', 
+                          mb: 3, 
+                          fontStyle: 'italic',
+                          fontSize: isMobile ? '0.875rem' : '1rem',
+                          wordBreak: 'break-word'
+                        }}
+                      >
                         "{gearCheckDenialReason}"
                       </Typography>
-                      <Typography sx={{ color: 'white' }}>
+                      <Typography 
+                        sx={{ 
+                          color: 'white',
+                          fontSize: isMobile ? '0.875rem' : '1rem'
+                        }}
+                      >
                         Waiting for the member to re-submit their gear check.
                       </Typography>
                     </Paper>
@@ -1046,15 +1540,35 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
         )}
         
         {error && (
-          <Typography sx={{ color: '#ff6666', mt: 2, textAlign: 'center' }}>
+          <Typography 
+            sx={{ 
+              color: '#ff6666', 
+              mt: 2, 
+              textAlign: 'center',
+              fontSize: isMobile ? '0.875rem' : '1rem'
+            }}
+          >
             {error}
           </Typography>
         )}
       </DialogContent>
 
       {/* Denial reason dialog */}
-      <Dialog open={denialDialog} onClose={() => setDenialDialog(false)}>
-        <DialogTitle>Provide Reason for Denial</DialogTitle>
+      <Dialog 
+        open={denialDialog} 
+        onClose={() => setDenialDialog(false)}
+        PaperProps={{
+          sx: {
+            margin: isMobile ? '16px' : null,
+            width: isMobile ? 'calc(100% - 32px)' : null
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{ fontSize: isMobile ? '1.25rem' : '1.5rem' }}
+        >
+          Provide Reason for Denial
+        </DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -1068,12 +1582,26 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
             sx={{ mt: 1 }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDenialDialog(false)}>Cancel</Button>
+        <DialogActions sx={{
+          p: isMobile ? 2 : '8px 24px 24px',
+          flexDirection: isMobile ? 'column' : 'row',
+          '& > :not(:first-of-type)': {
+            mt: isMobile ? 1 : 0
+          }
+        }}>
+          <Button 
+            onClick={() => setDenialDialog(false)}
+            fullWidth={isMobile}
+            sx={{ py: isMobile ? 0.75 : undefined }}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={denyGearCheck} 
             color="error"
             disabled={!denialReason.trim()}
+            fullWidth={isMobile}
+            sx={{ py: isMobile ? 0.75 : undefined }}
           >
             Submit
           </Button>

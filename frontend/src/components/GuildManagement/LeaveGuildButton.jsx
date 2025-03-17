@@ -8,7 +8,9 @@ import {
   DialogContentText,
   DialogActions,
   Typography,
-  TextField // Add this import
+  TextField,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 
@@ -20,10 +22,11 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-
   const [confirmationText, setConfirmationText] = useState('');
   const [confirmError, setConfirmError] = useState(false);
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
@@ -85,26 +88,62 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
         sx={{
           borderRadius: '8px',
           fontWeight: 'bold',
+          py: isMobile ? 1 : 1.5,
+          px: isMobile ? 2 : 3,
+          fontSize: isMobile ? '0.875rem' : 'inherit',
+          minHeight: '44px', // Minimum touch target size
           '&:hover': {
             bgcolor: 'rgba(244, 67, 54, 0.1)',
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 15px rgba(244, 67, 54, 0.2)'
           },
-          transition: 'all 0.3s ease'
+          transition: 'all 0.3s ease',
+          width: isMobile ? '100%' : 'auto' // Full width on mobile
         }}
       >
         Leave Guild
       </Button>
       
-      <Dialog open={open} onClose={handleClose}>
-        <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+      <Dialog 
+        open={open} 
+        onClose={handleClose}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            margin: isMobile ? '16px' : null,
+            width: isMobile ? 'calc(100% - 32px)' : null,
+            maxHeight: isMobile ? 'calc(100% - 32px)' : null
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: '#1a1a1a', 
+          color: 'white',
+          fontSize: isMobile ? '1.25rem' : '1.5rem',
+          py: 2
+        }}>
           Leave Guild?
         </DialogTitle>
-        <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
-          <DialogContentText sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+        <DialogContent sx={{ 
+          bgcolor: '#1e1e1e', 
+          pt: 2,
+          px: isMobile ? 2 : 3
+        }}>
+          <DialogContentText sx={{ 
+            color: 'rgba(255, 255, 255, 0.7)',
+            fontSize: isMobile ? '0.9rem' : 'inherit'
+          }}>
             Are you sure you want to leave this guild? This action cannot be undone.
             {isGuildMaster && (
-              <Typography color="error" sx={{ mt: 2, fontWeight: 'bold' }}>
+              <Typography 
+                color="error" 
+                sx={{ 
+                  mt: 2, 
+                  fontWeight: 'bold',
+                  fontSize: isMobile ? '0.875rem' : 'inherit'
+                }}
+              >
                 As the Guild Master, your role will be transferred to another member if possible. 
                 If you're the only member, the guild will be scheduled for deletion.
               </Typography>
@@ -130,21 +169,42 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
                 color: 'white',
                 '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
               },
-              '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' }
+              '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' },
+              '& .MuiFormHelperText-root': {
+                fontSize: isMobile ? '0.7rem' : '0.75rem',
+                marginBottom: isMobile ? 0 : 2
+              }
             }}
           />
           
           {error && (
-            <Typography color="error" sx={{ mt: 2 }}>
+            <Typography 
+              color="error" 
+              sx={{ 
+                mt: 2,
+                fontSize: isMobile ? '0.875rem' : 'inherit'
+              }}
+            >
               {error}
             </Typography>
           )}
         </DialogContent>
-        <DialogActions sx={{ bgcolor: '#1e1e1e' }}>
+        <DialogActions sx={{ 
+          bgcolor: '#1e1e1e',
+          p: isMobile ? 2 : 3,
+          flexDirection: isMobile ? 'column' : 'row',
+          '& > :not(:first-of-type)': {
+            mt: isMobile ? 1 : 0
+          }
+        }}>
           <Button 
             onClick={handleClose} 
             disabled={loading}
-            sx={{ color: 'white' }}
+            sx={{ 
+              color: 'white',
+              width: isMobile ? '100%' : 'auto',
+              py: isMobile ? 1 : null
+            }}
           >
             Cancel
           </Button>
@@ -153,6 +213,11 @@ const LeaveGuildButton = ({ guildId, currentUserRole }) => {
             color="error" 
             variant="contained"
             disabled={loading || confirmationText !== "Leave guild"}
+            sx={{
+              width: isMobile ? '100%' : 'auto',
+              py: isMobile ? 1 : null,
+              minHeight: '36px'
+            }}
           >
             {loading ? 'Leaving...' : 'Leave Guild'}
           </Button>
