@@ -125,7 +125,7 @@ async function markItemAsClaimed(itemId, claimedBy) {
     if (!trackingResult.rows.length) return false;
     const tracking = trackingResult.rows[0];
     
-    // Get item details
+    // Get item details - note that it might have been removed already
     const itemResult = await pool.query(
       `SELECT gsi.*, i.name, i.type, i.icon 
        FROM guild_storage_items gsi
@@ -134,8 +134,31 @@ async function markItemAsClaimed(itemId, claimedBy) {
       [itemId]
     );
     
-    if (!itemResult.rows.length) return false;
-    const item = itemResult.rows[0];
+    // If item is gone from storage, get item details from loot request
+    let itemName = "Unknown Item";
+    let itemType = "Unknown";
+    
+    if (!itemResult.rows.length) {
+      // Get info from loot request instead
+      const requestResult = await pool.query(
+        `SELECT i.name, i.type 
+         FROM loot_requests lr
+         JOIN items i ON i.id = (
+           SELECT item_id FROM guild_storage_items 
+           WHERE id = lr.storage_item_id LIMIT 1
+         )
+         WHERE lr.storage_item_id = $1 LIMIT 1`,
+        [itemId]
+      );
+      
+      if (requestResult.rows.length) {
+        itemName = requestResult.rows[0].name;
+        itemType = requestResult.rows[0].type;
+      }
+    } else {
+      itemName = itemResult.rows[0].Item?.name || "Unknown Item";
+      itemType = itemResult.rows[0].Item?.type || "Unknown";
+    }
     
     // Get the message
     const channel = await client.channels.fetch(tracking.channel_id);
@@ -149,27 +172,36 @@ async function markItemAsClaimed(itemId, claimedBy) {
       .setTitle('📦 Item Claimed')
       .setDescription(`This item has been granted to **${claimedBy}**`)
       .addFields(
-        { name: '📦 Item', value: `**${item.name}**`, inline: false },
-        { name: 'Type', value: item.type || 'Unknown', inline: true },
-        { name: 'Requests', value: `❗ Need: ${tracking.need_count} | 💰 Greed: ${tracking.greed_count}`, inline: true },
+        { name: '📦 Item', value: `**${itemName}**`, inline: false },
+        { name: 'Type', value: itemType, inline: true },
+        { name: 'Requests', value: `**Need**: ${tracking.need_count} | **Greed**: ${tracking.greed_count}`, inline: true },
         { name: 'Status', value: '✅ Granted', inline: true }
       )
       .setColor('#9E9E9E') // Gray color to indicate no longer available
       .setTimestamp()
-      .setFooter({ text: `Item ID: ${itemId}` });
+      .setFooter({ text: `Item ID: ${itemId} • No longer available` });
     
-    if (item.trait) {
-      embed.addFields({ name: 'Trait', value: item.trait, inline: true });
-    }
+    // Create disabled buttons
+    const disabledNeedButton = new ButtonBuilder()
+      .setCustomId(`need_item_${itemId}`)
+      .setLabel('Need')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('❗')
+      .setDisabled(true);
+      
+    const disabledGreedButton = new ButtonBuilder()
+      .setCustomId(`greed_item_${itemId}`)
+      .setLabel('Greed')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('💰')
+      .setDisabled(true);
     
-    if (item.icon) {
-      embed.setThumbnail(item.icon);
-    }
+    const disabledRow = new ActionRowBuilder().addComponents(disabledNeedButton, disabledGreedButton);
     
-    // Update message with no components (removes buttons)
+    // Update message with disabled buttons
     await message.edit({ 
       embeds: [embed],
-      components: [] // Remove all buttons
+      components: [disabledRow]
     });
     
     return true;
@@ -550,18 +582,18 @@ app.post('/webhook/new-item', async (req, res) => {
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
     
-    // Create embed with initial counters
+    // Create embed for the item
     const embed = new EmbedBuilder()
-      .setTitle('📦 New Item Added to Guild Storage')
-      .setDescription(`**${item.name}** is now available in the guild bank.`)
+      .setTitle('📦 Item Available')
+      .setDescription(`**${item.name}** is available in the guild bank.`)
       .addFields(
         { name: '📦 Item', value: `**${item.name}**`, inline: false },
         { name: 'Type', value: item.type || 'Unknown', inline: true },
         { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
         { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
         { 
-          name: '📊 Current Requests', 
-          value: `❗ **Need**: 0 players\n💰 **Greed**: 0 players`, 
+          name: '📊 Requests', 
+          value: `**Need**: 0 | **Greed**: 0`, 
           inline: false 
         }
       )
@@ -577,20 +609,20 @@ app.post('/webhook/new-item', async (req, res) => {
       embed.setThumbnail(item.icon);
     }
     
-    // Create button row that visually integrates with the embed design
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`need_item_${item.id}`)
-          .setLabel('Need (High Priority)')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('❗'),
-        new ButtonBuilder()
-          .setCustomId(`greed_item_${item.id}`)
-          .setLabel('Greed (Low Priority)')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji('💰')
-      );
+    // Create button rows similar to Raid Helper format
+    const needButton = new ButtonBuilder()
+      .setCustomId(`need_item_${item.id}`)
+      .setLabel('Need')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('❗');
+      
+    const greedButton = new ButtonBuilder()
+      .setCustomId(`greed_item_${item.id}`)
+      .setLabel('Greed')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('💰');
+    
+    const primaryRow = new ActionRowBuilder().addComponents(needButton, greedButton);
     
     // Send the embed to the configured channel
     const message = await sendNotificationToConfiguredChannel(
@@ -599,12 +631,11 @@ app.post('/webhook/new-item', async (req, res) => {
       'storage', 
       embed,
       null,
-      [row]
+      [primaryRow]
     );
     
     // Store the message info for later updates
     if (message) {
-      // Create the tracking table if it doesn't exist
       try {
         await pool.query(`
           CREATE TABLE IF NOT EXISTS item_message_tracking (
@@ -620,11 +651,7 @@ app.post('/webhook/new-item', async (req, res) => {
             UNIQUE(item_id)
           )
         `);
-      } catch (tableError) {
-        console.error('Error ensuring item tracking table exists:', tableError);
-      }
-      
-      try {
+        
         await pool.query(
           `INSERT INTO item_message_tracking 
            (item_id, guild_id, channel_id, message_id, need_count, greed_count)
@@ -1432,6 +1459,7 @@ client.on('interactionCreate', async (interaction) => {
     }
     
     // Update approve_loot handler
+    // Inside the button handler for approve_loot
     else if (customId.startsWith('approve_loot_')) {
       const requestId = customId.replace('approve_loot_', '');
       await interaction.deferReply();
@@ -1474,41 +1502,63 @@ client.on('interactionCreate', async (interaction) => {
         const request = requestResult.rows[0];
         const storageItemId = request.storage_item_id;
         
-        // Update request and decrease quantity
-        const client = await pool.connect();
+        // Check if quantity will reach zero
+        const willReachZero = request.quantity <= 1;
+        
+        // Update request and handle item in a transaction
+        const dbClient = await pool.connect();
         try {
-          await client.query('BEGIN');
+          await dbClient.query('BEGIN');
           
           // Update request status
-          await client.query(
+          await dbClient.query(
             `UPDATE loot_requests 
             SET status = 'Approved', updated_at = NOW()
             WHERE id = $1`,
             [requestId]
           );
           
-          // Decrement item quantity
-          await client.query(
-            `UPDATE guild_storage_items
-            SET quantity = quantity - 1, updated_at = NOW()
-            WHERE id = $1 AND quantity > 0`,
-            [storageItemId]
-          );
+          if (willReachZero) {
+            // Item quantity will reach zero - remove it from storage
+            console.log(`Item ${storageItemId} quantity will reach zero - removing from storage`);
+            
+            // Deny all other pending requests with special status
+            await dbClient.query(
+              `UPDATE loot_requests 
+              SET status = 'Denied - Out of Stock', updated_at = NOW()
+              WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+              [storageItemId, requestId]
+            );
+            
+            // Delete the item from storage
+            await dbClient.query(
+              `DELETE FROM guild_storage_items WHERE id = $1`,
+              [storageItemId]
+            );
+          } else {
+            // Just decrement quantity
+            await dbClient.query(
+              `UPDATE guild_storage_items
+              SET quantity = quantity - 1, updated_at = NOW()
+              WHERE id = $1`,
+              [storageItemId]
+            );
+            
+            // Deny all other pending requests for this specific item
+            await dbClient.query(
+              `UPDATE loot_requests 
+              SET status = 'Denied - Granted to other', updated_at = NOW()
+              WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+              [storageItemId, requestId]
+            );
+          }
           
-          // Deny all other pending requests
-          await client.query(
-            `UPDATE loot_requests 
-             SET status = 'Denied - Granted to other', updated_at = NOW()
-             WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-            [storageItemId, requestId]
-          );
-          
-          await client.query('COMMIT');
+          await dbClient.query('COMMIT');
         } catch (error) {
-          await client.query('ROLLBACK');
+          await dbClient.query('ROLLBACK');
           throw error;
         } finally {
-          client.release();
+          dbClient.release();
         }
         
         // Mark item as claimed in the UI
@@ -1524,8 +1574,12 @@ client.on('interactionCreate', async (interaction) => {
           }
         }
         
+        const responseMessage = willReachZero
+          ? `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**. This was the last available item.`
+          : `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**.`;
+        
         await interaction.editReply({
-          content: `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**.`
+          content: responseMessage
         });
       } catch (error) {
         console.error(`[ERROR] Error approving request:`, error);
