@@ -30,8 +30,8 @@ module.exports = {
         return `{${escapedTraits.map(t => `"${t}"`).join(',')}}`;
       }
 
-      // Step 1: First remove duplicates from the existing database
-      console.log('Checking for and removing duplicates in the database...');
+      // Step 1: First handle duplicates from the existing database
+      console.log('Checking for duplicates in the database...');
       const findDuplicatesQuery = `
         SELECT name, array_agg(id ORDER BY created_at) as ids
         FROM items
@@ -47,25 +47,52 @@ module.exports = {
       console.log(`Found ${duplicateGroups.length} item names with duplicates in database`);
       
       // For each group of duplicates, keep only the first one (oldest by created_at)
+      // and update foreign key references to point to it
+      let updatedCount = 0;
       let deletedCount = 0;
+      
       for (const group of duplicateGroups) {
-        const [firstId, ...duplicateIds] = group.ids;
+        const [primaryId, ...duplicateIds] = group.ids;
         
         if (duplicateIds.length > 0) {
-          for (const id of duplicateIds) {
-            await queryInterface.sequelize.query(
-              `DELETE FROM items WHERE id = :id`,
-              {
-                replacements: { id },
-                type: queryInterface.sequelize.QueryTypes.DELETE
-              }
-            );
-            deletedCount++;
+          console.log(`Processing duplicates for ${group.name}: keeping ${primaryId}, redirecting ${duplicateIds.length} duplicates`);
+          
+          for (const duplicateId of duplicateIds) {
+            // Update any references in guild_storage_items table
+            try {
+              const updateQuery = `
+                UPDATE guild_storage_items 
+                SET item_id = :primaryId 
+                WHERE item_id = :duplicateId
+              `;
+              
+              const result = await queryInterface.sequelize.query(updateQuery, {
+                replacements: { primaryId, duplicateId },
+                type: queryInterface.sequelize.QueryTypes.UPDATE
+              });
+              
+              updatedCount += result[1]; // Get number of affected rows
+              
+              // Now try to delete the duplicate
+              await queryInterface.sequelize.query(
+                `DELETE FROM items WHERE id = :duplicateId`,
+                {
+                  replacements: { duplicateId },
+                  type: queryInterface.sequelize.QueryTypes.DELETE
+                }
+              );
+              
+              deletedCount++;
+              
+            } catch (error) {
+              console.error(`Failed to process duplicate ${duplicateId}:`, error.message);
+              // Continue with other duplicates even if this one fails
+            }
           }
         }
       }
       
-      console.log(`Removed ${deletedCount} duplicate items from the database`);
+      console.log(`Updated ${updatedCount} references and removed ${deletedCount} duplicate items`);
 
       // Step 2: Get remaining unique items in the database
       const existingItems = await queryInterface.sequelize.query(
@@ -82,13 +109,11 @@ module.exports = {
       for (const item of items) {
         // Skip if already in database
         if (existingItemNames.has(item.name)) {
-          console.log(`Skipping item already in database: ${item.name}`);
           continue;
         }
         
         // Skip duplicates within the JSON file
         if (seenItems.has(item.name)) {
-          console.log(`Skipping duplicate in JSON file: ${item.name}`);
           continue;
         }
         
