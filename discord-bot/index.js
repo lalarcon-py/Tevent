@@ -1333,6 +1333,138 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
+async function processLootApproval(requestId, discordGuildId, channelId, client) {
+  try {
+    // Get app guild ID
+    const mappingResult = await pool.query(
+      'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+      [discordGuildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      return { 
+        success: false, 
+        message: 'This Discord server is not linked to an application guild.' 
+      };
+    }
+    
+    const appGuildId = mappingResult.rows[0].app_guild_id;
+    
+    // Get request details
+    const requestResult = await pool.query(
+      `SELECT lr.*, 
+            gsi.quantity, 
+            i.name as item_name,
+            u.username, u.discord_id,
+            gsi.id as storage_item_id
+      FROM loot_requests lr
+      JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
+      JOIN items i ON gsi.item_id = i.id
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1 AND lr.guild_id = $2`,
+      [requestId, appGuildId]
+    );
+    
+    if (!requestResult.rows.length) {
+      return { 
+        success: false, 
+        message: 'Request not found or already processed.' 
+      };
+    }
+    
+    const request = requestResult.rows[0];
+    const storageItemId = request.storage_item_id;
+    const willReachZero = request.quantity <= 1;
+    
+    // Process with a transaction
+    const dbClient = await pool.connect();
+    try {
+      await dbClient.query('BEGIN');
+      
+      // 1. First update all other pending requests to avoid foreign key issues
+      if (willReachZero) {
+        await dbClient.query(
+          `UPDATE loot_requests 
+           SET status = 'Denied - Out of Stock', updated_at = NOW()
+           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+          [storageItemId, requestId]
+        );
+      } else {
+        await dbClient.query(
+          `UPDATE loot_requests 
+           SET status = 'Denied - Granted to other', updated_at = NOW()
+           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+          [storageItemId, requestId]
+        );
+      }
+      
+      // 2. Update this request status to approved
+      await dbClient.query(
+        `UPDATE loot_requests 
+         SET status = 'Approved', updated_at = NOW()
+         WHERE id = $1`,
+        [requestId]
+      );
+      
+      // 3. Handle the item in storage
+      if (willReachZero) {
+        // Delete the item from storage
+        await dbClient.query(
+          `DELETE FROM guild_storage_items WHERE id = $1`,
+          [storageItemId]
+        );
+      } else {
+        // Just decrement quantity
+        await dbClient.query(
+          `UPDATE guild_storage_items
+           SET quantity = quantity - 1, updated_at = NOW()
+           WHERE id = $1`,
+          [storageItemId]
+        );
+      }
+      
+      await dbClient.query('COMMIT');
+      
+      // Send notification to the user (outside the transaction)
+      if (request.discord_id) {
+        try {
+          const user = await client.users.fetch(request.discord_id);
+          await user.send(`✅ Your request for **${request.item_name}** has been approved!`).catch(() => {});
+        } catch (dmError) {
+          console.error(`Failed to DM user: ${dmError.message}`);
+        }
+      }
+      
+      // Update UI elements
+      try {
+        await markItemAsClaimed(storageItemId, request.username);
+      } catch (uiError) {
+        console.error(`Error marking item as claimed: ${uiError.message}`);
+      }
+      
+      const responseMessage = willReachZero
+        ? `✅ Request approved. **${request.item_name}** will be given to **${request.username}**. This was the last available item.`
+        : `✅ Request approved. **${request.item_name}** will be given to **${request.username}**.`;
+      
+      return { 
+        success: true, 
+        message: responseMessage,
+        publicMessage: responseMessage,
+        wasLastItem: willReachZero 
+      };
+    } catch (error) {
+      await dbClient.query('ROLLBACK');
+      console.error(`Transaction error: ${error.message}`);
+      throw error;
+    } finally {
+      dbClient.release();
+    }
+  } catch (error) {
+    console.error(`Error processing loot approval: ${error}`);
+    throw error;
+  }
+}
+
 // Button interaction handler
 // Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
@@ -2506,103 +2638,33 @@ client.on('interactionCreate', async (interaction) => {
       // Handle approve_loot button
       else if (customId.startsWith('approve_loot_')) {
         const requestId = customId.replace('approve_loot_', '');
-        await interaction.deferReply();
+        const discordGuildId = interaction.guild?.id;
+        const userId = interaction.user.id;
         
-        try {
-          // Get Discord server ID and app guild ID
-          const discordGuildId = interaction.guild?.id;
-          
-          // Get appGuildId from database
-          const mappingResult = await pool.query(
-            'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
-            [discordGuildId]
-          );
-          
-          if (!mappingResult.rows.length) {
-            return await interaction.editReply('This Discord server is not linked to an application guild.');
-          }
-          
-          const appGuildId = mappingResult.rows[0].app_guild_id;
-          
-          // Get request details first
-          const requestResult = await pool.query(
-            `SELECT lr.*, 
-                  gsi.quantity, 
-                  i.name as item_name,
-                  u.username, u.discord_id,
-                  gsi.id as storage_item_id
-            FROM loot_requests lr
-            JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
-            JOIN items i ON gsi.item_id = i.id
-            JOIN users u ON lr.user_id = u.id
-            WHERE lr.id = $1 AND lr.guild_id = $2`,
-            [requestId, appGuildId]
-          );
-          
-          if (!requestResult.rows || requestResult.rows.length === 0) {
-            return await interaction.editReply('Request not found or already processed.');
-          }
-          
-          const request = requestResult.rows[0];
-          const storageItemId = request.storage_item_id;
-          
-          // Update request and decrease quantity
-          const dbClient = await pool.connect();
-          try {
-            await dbClient.query('BEGIN');
+        // IMMEDIATELY acknowledge the interaction first - this is critical
+        await interaction.reply({ 
+          content: "Processing loot request...",
+          ephemeral: true 
+        }).catch(error => {
+          console.error(`Initial reply error: ${error.message}`);
+          // Continue anyway since we'll process the request
+        });
+        
+        // Now perform the actual processing - don't wait on this in the interaction handler
+        processLootApproval(requestId, discordGuildId, interaction.channelId, client)
+          .then(result => {
+            // Try to edit the reply, but don't worry if it fails
+            interaction.editReply(result.message).catch(() => {});
             
-            // Update request status
-            await dbClient.query(
-              `UPDATE loot_requests 
-              SET status = 'Approved', updated_at = NOW()
-              WHERE id = $1`,
-              [requestId]
-            );
-            
-            // Decrement item quantity
-            await dbClient.query(
-              `UPDATE guild_storage_items
-              SET quantity = quantity - 1, updated_at = NOW()
-              WHERE id = $1 AND quantity > 0`,
-              [storageItemId]
-            );
-            
-            // Deny all other pending requests
-            await dbClient.query(
-              `UPDATE loot_requests 
-               SET status = 'Denied - Granted to other', updated_at = NOW()
-               WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-              [storageItemId, requestId]
-            );
-            
-            await dbClient.query('COMMIT');
-          } catch (error) {
-            await dbClient.query('ROLLBACK');
-            throw error;
-          } finally {
-            dbClient.release();
-          }
-          
-          // Mark item as claimed in the UI
-          await markItemAsClaimed(storageItemId, request.username);
-          
-          // Send notification to the user
-          if (request.discord_id) {
-            try {
-              const user = await interaction.client.users.fetch(request.discord_id);
-              await user.send(`✅ Your request for **${request.item_name}** has been approved!`);
-            } catch (dmError) {
-              console.error(`Failed to DM user: ${dmError.message}`);
-            }
-          }
-          
-          await interaction.editReply({
-            content: `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**.`
+            // Post a public confirmation in the channel
+            interaction.channel.send(result.publicMessage).catch(error => {
+              console.error(`Error sending public confirmation: ${error.message}`);
+            });
+          })
+          .catch(error => {
+            console.error(`Error in loot approval process: ${error.message}`);
+            interaction.editReply("An error occurred while processing the request.").catch(() => {});
           });
-        } catch (error) {
-          console.error(`[ERROR] Error approving request:`, error);
-          await interaction.editReply('An error occurred while approving the request.');
-        }
       }
       
       // Handle deny_loot button
