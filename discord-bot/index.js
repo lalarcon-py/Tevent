@@ -555,6 +555,8 @@ app.post('/webhook/new-item', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
     
+    console.log(`[INFO] Received new item webhook for item ID: ${itemId}`);
+    
     // Fetch the item
     const itemResult = await pool.query(
       `SELECT gsi.*, i.name, i.type, i.icon 
@@ -584,55 +586,62 @@ app.post('/webhook/new-item', async (req, res) => {
     
     // Create embed for the item
     const embed = new EmbedBuilder()
-      .setTitle('📦 Item Available')
-      .setDescription(`**${item.name}** is available in the guild bank.`)
+      .setTitle('New Item Added to Storage')
+      .setDescription(`React to request this item:`)
       .addFields(
+        { name: '🔴 - Need (High Priority)', value: "\u200B", inline: false },
+        { name: '💰 - Greed (Low Priority)', value: "\u200B", inline: false },
         { name: '📦 Item', value: `**${item.name}**`, inline: false },
         { name: 'Type', value: item.type || 'Unknown', inline: true },
         { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
-        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
-        { 
-          name: '📊 Requests', 
-          value: `**Need**: 0 | **Greed**: 0`, 
-          inline: false 
-        }
+        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true }
       )
       .setColor('#4CAF50')
       .setTimestamp()
-      .setFooter({ text: `Item ID: ${item.id}` });
+      .setFooter({ text: `Item ID: ${itemId}` });
     
     if (item.trait) {
-      embed.addFields({ name: 'Trait', value: item.trait, inline: true });
+      embed.addFields({ name: 'Trait', value: item.trait, inline: false });
     }
     
     if (item.icon) {
       embed.setThumbnail(item.icon);
     }
     
-    // Create button rows similar to Raid Helper format
+    // THIS IS THE KEY PART: Create proper Discord UI buttons
     const needButton = new ButtonBuilder()
       .setCustomId(`need_item_${item.id}`)
-      .setLabel('Need')
-      .setStyle(ButtonStyle.Primary)
-      .setEmoji('❗');
+      .setLabel('Need (High Priority)')
+      .setStyle(ButtonStyle.Danger) // Red button for Need
+      .setEmoji('🔴');
       
     const greedButton = new ButtonBuilder()
       .setCustomId(`greed_item_${item.id}`)
-      .setLabel('Greed')
-      .setStyle(ButtonStyle.Secondary)
+      .setLabel('Greed (Low Priority)')
+      .setStyle(ButtonStyle.Secondary) // Gray button for Greed
       .setEmoji('💰');
     
-    const primaryRow = new ActionRowBuilder().addComponents(needButton, greedButton);
+    // Create button row
+    const buttonRow = new ActionRowBuilder().addComponents(needButton, greedButton);
     
-    // Send the embed to the configured channel
+    console.log("[DEBUG] Button row created:", JSON.stringify(buttonRow.toJSON()));
+    
+    // Send the embed with buttons to the configured channel
     const message = await sendNotificationToConfiguredChannel(
       guildId, 
       discordGuildId, 
       'storage', 
       embed,
       null,
-      [primaryRow]
+      [buttonRow] // Pass the array of components
     );
+    
+    if (!message) {
+      console.error("[ERROR] Failed to send message with buttons");
+      return res.status(500).json({ error: 'Failed to send notification' });
+    }
+    
+    console.log("[INFO] Message sent successfully with message ID:", message.id);
     
     // Store the message info for later updates
     if (message) {
@@ -3097,7 +3106,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
   try {
     console.log(`[INFO] Attempting to send ${type} notification for guild ${guildId}`);
     
-    // Get the latest channel configuration from the database - don't use cached results
+    // Get the latest channel configuration from the database
     const configResult = await pool.query(
       `SELECT channel_id FROM discord_channel_config 
        WHERE guild_id = $1 AND channel_type = $2 AND enabled = true
@@ -3128,24 +3137,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
         
         if (!anyChannelResult.rows.length) {
           console.log(`[INFO] No channels configured at all for guild ${guildId}`);
-          
-          // Last resort: try to find a system channel in the Discord guild
-          try {
-            const guild = await client.guilds.fetch(discordGuildId);
-            if (guild && guild.systemChannel) {
-              console.log(`[INFO] Using system channel ${guild.systemChannel.id}`);
-              const message = await guild.systemChannel.send({
-                content: content || '',
-                embeds: [embed],
-                components: components
-              });
-              return message;
-            }
-          } catch (discordError) {
-            console.error(`[ERROR] Could not fetch Discord guild:`, discordError);
-          }
-          
-          return false; // No channel configured or found
+          return false;
         }
         
         const channelId = anyChannelResult.rows[0].channel_id;
@@ -3157,6 +3149,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
           return false;
         }
         
+        // THIS IS THE IMPORTANT PART - properly pass the components
         const message = await channel.send({
           content: content ? content : `📢 New ${type} notification:`,
           embeds: [embed],
@@ -3176,6 +3169,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
         return false;
       }
       
+      // THIS IS THE IMPORTANT PART - properly pass the components
       const message = await generalChannel.send({
         content: content ? content : `📢 New ${type} notification:`,
         embeds: [embed],
@@ -3201,7 +3195,7 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
     }
     
     // Send notification
-    console.log(`[INFO] Sending message to channel ${channelId}`);
+    console.log(`[INFO] Sending message to channel ${channelId} with components:`, JSON.stringify(components));
     const message = await channel.send({
       content: content || '',
       embeds: [embed],
