@@ -4686,7 +4686,7 @@ function startItemPolling() {
           
           const embed = new EmbedBuilder()
             .setTitle('🆕 New Item Added to Storage')
-            .setDescription(`**React to request this item:**\n\n❗ - Need (High Priority)\n💰 - Greed (Low Priority)`)
+            .setDescription(`Request this item using the buttons below:`)
             .addFields(
               { name: '📦 Item', value: `**${item.name}**`, inline: false },
               { name: 'Type', value: item.type || 'Unknown', inline: true },
@@ -4705,126 +4705,56 @@ function startItemPolling() {
             embed.setThumbnail(item.icon);
           }
           
+          // Create request buttons
+          const requestRow = new ActionRowBuilder()
+            .addComponents(
+              new ButtonBuilder()
+                .setCustomId(`need_item_${item.id}`)
+                .setLabel('Need (High Priority)')
+                .setEmoji('🔴')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder()
+                .setCustomId(`greed_item_${item.id}`)
+                .setLabel('Greed (Low Priority)')
+                .setEmoji('💰')
+                .setStyle(ButtonStyle.Secondary)
+            );
+          
           const message = await sendNotificationToConfiguredChannel(
             item.guild_id, 
             item.discord_guild_id, 
             'storage', 
-            embed
+            embed,
+            null,
+            [requestRow]
           );
           
           if (message) {
-            await message.react('❗');
-            await message.react('💰');
+            // Create tracking table if needed
+            await pool.query(`
+              CREATE TABLE IF NOT EXISTS item_message_tracking (
+                id SERIAL PRIMARY KEY,
+                item_id UUID NOT NULL,
+                guild_id UUID NOT NULL,
+                channel_id VARCHAR(255) NOT NULL,
+                message_id VARCHAR(255) NOT NULL,
+                need_count INTEGER DEFAULT 0,
+                greed_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(item_id)
+              )
+            `);
             
-            const filter = (reaction, user) => {
-              return ['❗', '💰'].includes(reaction.emoji.name) && !user.bot;
-            };
-            
-            const collector = message.createReactionCollector({ filter, time: 604800000 }); // 7 days
-            
-            collector.on('collect', async (reaction, user) => {
-              try {
-                const priority = reaction.emoji.name === '❗' ? 'Need' : 'Greed';
-                
-                const userResult = await pool.query(
-                  'SELECT id, username FROM users WHERE discord_id = $1',
-                  [user.id]
-                );
-                
-                if (!userResult.rows.length) {
-                  try {
-                    await user.send(`You need to register on the website first before requesting items.`);
-                  } catch (dmError) {
-                    console.error(`Could not DM user ${user.id}:`, dmError);
-                  }
-                  return;
-                }
-                
-                const userId = userResult.rows[0].id;
-                
-                const currentItemResult = await pool.query(
-                  `SELECT quantity FROM guild_storage_items WHERE id = $1`,
-                  [item.id]
-                );
-                
-                if (!currentItemResult.rows.length || currentItemResult.rows[0].quantity < 1) {
-                  try {
-                    await user.send(`Sorry, "${item.name}" is no longer available.`);
-                  } catch (dmError) {
-                    console.error(`Could not DM user ${user.id}:`, dmError);
-                  }
-                  return;
-                }
-                
-                const existingRequestResult = await pool.query(
-                  `SELECT id FROM loot_requests 
-                   WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
-                  [item.id, userId]
-                );
-                
-                if (existingRequestResult.rows.length) {
-                  try {
-                    await user.send(`You already have a pending request for "${item.name}".`);
-                  } catch (dmError) {
-                    console.error(`Could not DM user ${user.id}:`, dmError);
-                  }
-                  return;
-                }
-                
-                const requestResult = await pool.query(
-                  `INSERT INTO loot_requests
-                   (id, guild_id, storage_item_id, user_id, status, priority, created_at, updated_at)
-                   VALUES
-                   (gen_random_uuid(), $1, $2, $3, 'Pending', $4, NOW(), NOW())
-                   RETURNING id`,
-                  [item.guild_id, item.id, userId, priority === 'Need' ? 1 : 0]
-                );
-                
-                const requestId = requestResult.rows[0].id;
-                
-                itemRequestMessages.set(requestId, {
-                  messageId: message.id,
-                  channelId: message.channel.id,
-                  itemId: item.id
-                });
-                
-                try {
-                  await user.send(`Your ${priority} request for "${item.name}" has been submitted!`);
-                } catch (dmError) {
-                  console.error(`Could not DM user ${user.id}:`, dmError);
-                }
-                
-                const requestEmbed = new EmbedBuilder()
-                  .setTitle('New Loot Request')
-                  .setDescription(`**${user.username}** has requested **${item.name}** (${priority})`)
-                  .setColor('#9c27b0')
-                  .setTimestamp()
-                  .setFooter({ text: `Request ID: ${requestId}` });
-                
-                const lootMessage = await sendNotificationToConfiguredChannel(
-                  item.guild_id, 
-                  item.discord_guild_id, 
-                  'loot', 
-                  requestEmbed,
-                  null,
-                  [
-                    new ActionRowBuilder()
-                      .addComponents(
-                        new ButtonBuilder()
-                          .setCustomId(`approve_loot_${requestId}`)
-                          .setLabel('Approve')
-                          .setStyle(ButtonStyle.Success),
-                        new ButtonBuilder()
-                          .setCustomId(`deny_loot_${requestId}`)
-                          .setLabel('Deny')
-                          .setStyle(ButtonStyle.Danger)
-                      )
-                  ]
-                );
-              } catch (error) {
-                console.error(`Error processing reaction:`, error);
-              }
-            });
+            // Store message info
+            await pool.query(
+              `INSERT INTO item_message_tracking 
+               (item_id, guild_id, channel_id, message_id, need_count, greed_count)
+               VALUES ($1, $2, $3, $4, 0, 0)
+               ON CONFLICT (item_id) DO UPDATE SET
+               channel_id = $3, message_id = $4, updated_at = NOW()`,
+              [item.id, item.guild_id, message.channelId, message.id]
+            );
           }
         } catch (itemError) {
           console.error(`Error processing item ${item.id}:`, itemError);
