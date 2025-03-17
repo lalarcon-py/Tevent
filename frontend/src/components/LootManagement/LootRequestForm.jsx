@@ -12,7 +12,8 @@ import {
   ListItemText,
   Paper,
   Alert,
-  Snackbar
+  Snackbar,
+  Chip
 } from '@mui/material';
 import axiosInstance from '../../config/axios.js';
 
@@ -32,9 +33,39 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
     const fetchAllItems = async () => {
       try {
         setLoading(true);
-        const response = await axiosInstance.get('/api/items/autocomplete');
-        console.log('Fetched items:', response.data);
-        setAllItems(Array.isArray(response.data) ? response.data : []);
+        
+        // Get guild ID from localStorage
+        const guildId = localStorage.getItem('guildId');
+        if (!guildId) {
+          console.error('No guild ID found');
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch storage items instead of all items
+        const response = await axiosInstance.get(`/api/guild-storage/items?guildId=${guildId}`);
+        
+        if (response.data && Array.isArray(response.data)) {
+          // Transform the data to include traits in display format
+          const formattedItems = response.data
+            .filter(item => item.quantity > 0) // Only show available items
+            .map(item => ({
+              id: item.id,
+              name: item.Item ? item.Item.name : 'Unknown Item',
+              type: item.Item ? item.Item.type : 'Unknown Type',
+              icon: item.Item ? item.Item.icon : null,
+              trait: item.trait || null,
+              dkpCost: item.dkp_cost || 0,
+              quantity: item.quantity || 0,
+              // Add a display name that includes the trait for filtering
+              displayName: `${item.Item ? item.Item.name : 'Unknown Item'}${item.trait ? ` (${item.trait})` : ''}`
+            }));
+          
+          setAllItems(formattedItems);
+          console.log('Fetched storage items for requests:', formattedItems);
+        } else {
+          setAllItems([]);
+        }
       } catch (error) {
         console.error('Failed to fetch items:', error);
         setAllItems([]);
@@ -51,7 +82,8 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
     if (!searchTerm) return options;
 
     const filtered = options.filter(option =>
-      option.name.toLowerCase().includes(searchTerm)
+      option.name.toLowerCase().includes(searchTerm) || 
+      (option.displayName && option.displayName.toLowerCase().includes(searchTerm))
     );
     return filtered;
   };
@@ -130,7 +162,7 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
         freeSolo={false}
         options={allItems}
         getOptionLabel={(option) => 
-          typeof option === 'string' ? option : (option?.name || '')
+          typeof option === 'string' ? option : (option?.displayName || option?.name || '')
         }
         inputValue={inputValue}
         onInputChange={(_, value, reason) => {
@@ -147,7 +179,7 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
         renderInput={(params) => (
           <TextField
             {...params}
-            label="Search Throne and Liberty Items"
+            label="Search Available Items"
             variant="outlined"
             fullWidth
             sx={{
@@ -201,17 +233,44 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
               </Avatar>
             </ListItemAvatar>
             <ListItemText
-              primary={option.name}
-              secondary={option.type}
+              primary={
+                <React.Fragment>
+                  {option.name}
+                  {option.trait && (
+                    <Chip
+                      label={option.trait}
+                      size="small"
+                      sx={{
+                        ml: 1,
+                        height: 20,
+                        background: 'rgba(144, 202, 249, 0.2)',
+                        color: '#90caf9',
+                        '& .MuiChip-label': {
+                          px: 1,
+                          fontSize: '0.6rem'
+                        }
+                      }}
+                    />
+                  )}
+                </React.Fragment>
+              }
+              secondary={
+                <React.Fragment>
+                  <Typography component="span" variant="body2" color="text.primary">
+                    {option.type}
+                  </Typography>
+                  {dkpEnabled && (
+                    <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                      DKP: {option.dkpCost}
+                    </Typography>
+                  )}
+                </React.Fragment>
+              }
               primaryTypographyProps={{
-                sx: {
-                  color: 'white'
-                }
+                sx: { color: 'white' }
               }}
               secondaryTypographyProps={{
-                sx: {
-                  color: 'rgba(255, 255, 255, 0.7)'
-                }
+                sx: { color: 'rgba(255, 255, 255, 0.7)' }
               }}
             />
           </ListItem>
@@ -227,7 +286,7 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
           border: '1px solid rgba(255,0,0,0.3)'
         }}>
           <Typography variant="body2" sx={{ color: '#ff6666' }}>
-            Item not found in database. Please contact an administrator.
+            Item not found in storage. Please contact an administrator.
           </Typography>
         </Box>
       )}
@@ -243,6 +302,22 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
           <Typography variant="body2" sx={{ color: '#66ff66' }}>
             Selected item: <strong>{selectedItem.name}</strong>
             {selectedItem.type ? ` (${selectedItem.type})` : ''}
+            {selectedItem.trait && (
+              <Chip
+                label={selectedItem.trait}
+                size="small"
+                sx={{
+                  ml: 1,
+                  height: 20,
+                  background: 'rgba(144, 202, 249, 0.2)',
+                  color: '#90caf9',
+                  '& .MuiChip-label': {
+                    px: 1,
+                    fontSize: '0.6rem'
+                  }
+                }}
+              />
+            )}
           </Typography>
         </Box>
       )}

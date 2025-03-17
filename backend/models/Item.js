@@ -1,3 +1,4 @@
+// backend/models/Item.js
 'use strict';
 const { Model } = require('sequelize');
 
@@ -28,7 +29,11 @@ module.exports = (sequelize, DataTypes) => {
     dkpCost: { type: DataTypes.INTEGER, defaultValue: 0 },
     inStorage: { type: DataTypes.BOOLEAN, defaultValue: false }, 
     quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
-    icon: { type: DataTypes.STRING }
+    icon: { type: DataTypes.STRING },
+    traits: { 
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: [] 
+    }
   }, {
     sequelize,
     modelName: 'Item',

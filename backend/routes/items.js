@@ -175,7 +175,7 @@ router.get('/autocomplete', async (req, res) => {
     }
     
     const items = await Item.findAll({
-      attributes: ['id', 'name', 'icon', 'type'],  // Add type to attributes
+      attributes: ['id', 'name', 'icon', 'type', 'traits'],  // Add traits to attributes
       order: [['name', 'ASC']]
     });
     res.json(items);

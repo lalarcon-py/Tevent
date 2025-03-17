@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 import { 
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, Typography, Button, TextField, Checkbox, IconButton, Chip,
-  Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText 
+  Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText,
+  Grid, Divider, Alert
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
@@ -22,7 +23,9 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     type: '',
     dkpCost: 0,
     quantity: 1,
-    icon: ''
+    icon: '',
+    availableTraits: [], // Store available traits for the item
+    selectedTrait: null   // Track selected trait
   });
 
   // Add permission check helper function
@@ -67,6 +70,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
       }
       
       const response = await axiosInstance.get(`/api/items/autocomplete?guildId=${guildId}`);
+      console.log('Fetched template items:', response.data);
       setTemplateItems(response.data);
     } catch (error) {
       console.error('Failed to fetch template items:', error);
@@ -160,6 +164,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         item_id: newItem.id,
         quantity: newItem.quantity,
         dkp_cost: newItem.dkpCost,
+        trait: newItem.selectedTrait, // Include selected trait
         guildId
       });
       
@@ -167,6 +172,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         item_id: newItem.id,
         quantity: newItem.quantity,
         dkp_cost: newItem.dkpCost,
+        trait: newItem.selectedTrait, // Include selected trait
         guildId
       });
       
@@ -180,7 +186,9 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         type: '',
         dkpCost: 0,
         quantity: 1,
-        icon: ''
+        icon: '',
+        availableTraits: [],
+        selectedTrait: null
       });
     } catch (error) {
       console.error('Failed to add item:', error);
@@ -237,6 +245,21 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     );
   }
 
+  // Helper function to check if item has traits available
+  const hasAvailableTraits = () => {
+    return newItem.id && 
+           newItem.availableTraits && 
+           Array.isArray(newItem.availableTraits) && 
+           newItem.availableTraits.length > 0;
+  };
+
+  console.log('Current item state:', {
+    id: newItem.id,
+    name: newItem.name,
+    traits: newItem.availableTraits,
+    hasTraits: hasAvailableTraits()
+  });
+
   return (
     <Box>
       <Paper sx={{ 
@@ -251,112 +274,174 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         }
       }}>
         <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add to Guild Storage</Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <Autocomplete
-            freeSolo
-            options={templateItems}
-            getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
-            value={newItem}
-            onChange={(_, newValue) => {
-              if (newValue && typeof newValue === 'object') {
-                setNewItem({
-                  id: newValue.id,
-                  name: newValue.name,
-                  type: newValue.type,
-                  icon: newValue.icon || '',
-                  dkpCost: newValue.dkpCost || 0,
-                  quantity: 1
-                });
-              }
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Item Name"
-                sx={{
-                  minWidth: 300,
-                  '& .MuiOutlinedInput-root': {
-                    background: 'rgba(30, 30, 30, 0.4)',
-                    backdropFilter: 'blur(12px)'
-                  }
-                }}
-              />
-            )}
-            renderOption={(props, option, state) => {
-              const { key, ...otherProps } = props;
-              return (
-                <ListItem 
-                  key={option.id || key} 
-                  {...otherProps}
-                >
-                  <ListItemAvatar>
-                    <Avatar
-                      src={option.icon}
-                      sx={{
-                        width: 40,
-                        height: 40,
-                        bgcolor: 'rgba(144, 202, 249, 0.1)',
-                        border: '1px solid rgba(144, 202, 249, 0.2)'
-                      }}
-                    >
-                      {!option.icon && option.name?.[0]}
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText 
-                    primary={option.name} 
-                    secondary={option.type}
-                  />
-                </ListItem>
-              );
-            }}
-          />
-          
-          {/* Only show DKP Cost field if DKP is enabled */}
-          {dkpEnabled && (
-            <TextField
-              label="DKP Cost"
-              type="number"
-              value={newItem.dkpCost}
-              onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  background: 'rgba(30, 30, 30, 0.4)',
-                  backdropFilter: 'blur(12px)'
+        
+        {/* First row: Item selection */}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={12} md={6}>
+            <Autocomplete
+              freeSolo
+              options={templateItems}
+              getOptionLabel={(option) => typeof option === 'string' ? option : option?.name || ''}
+              value={newItem}
+              onChange={(_, newValue) => {
+                if (newValue && typeof newValue === 'object') {
+                  console.log('Selected item with traits:', newValue.traits);
+                  setNewItem({
+                    id: newValue.id,
+                    name: newValue.name,
+                    type: newValue.type,
+                    icon: newValue.icon || '',
+                    dkpCost: newValue.dkpCost || 0,
+                    quantity: 1,
+                    availableTraits: newValue.traits || [], // Store all available traits
+                    selectedTrait: null // Reset selected trait
+                  });
                 }
               }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Item Name"
+                  fullWidth
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      background: 'rgba(30, 30, 30, 0.4)',
+                      backdropFilter: 'blur(12px)'
+                    }
+                  }}
+                />
+              )}
+              renderOption={(props, option, state) => {
+                const { key, ...otherProps } = props;
+                return (
+                  <ListItem 
+                    key={option.id || key} 
+                    {...otherProps}
+                  >
+                    <ListItemAvatar>
+                      <Avatar
+                        src={option.icon}
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          bgcolor: 'rgba(144, 202, 249, 0.1)',
+                          border: '1px solid rgba(144, 202, 249, 0.2)'
+                        }}
+                      >
+                        {!option.icon && option.name?.[0]}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary={option.name} 
+                      secondary={option.type}
+                    />
+                  </ListItem>
+                );
+              }}
             />
-          )}
-          
-          <TextField
-            label="Quantity"
-            type="number"
-            value={newItem.quantity}
-            onChange={(e) => setNewItem({ ...newItem, quantity: Math.max(1, Number(e.target.value)) })}
-            InputProps={{ inputProps: { min: 1 } }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                background: 'rgba(30, 30, 30, 0.4)',
-                backdropFilter: 'blur(12px)'
-              }
-            }}
-          />
-          <Button 
-            variant="contained" 
-            onClick={handleAddItem}
-            disabled={!newItem.id}
-            sx={{
-              background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
-              backdropFilter: 'blur(12px)',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
-              }
-            }}
-          >
-            Add to Storage
-          </Button>
-        </Box>
+          </Grid>
+        </Grid>
+        
+        {/* Show selected item details */}
+        {newItem.id && (
+          <Box sx={{ mb: 2, p: 2, bgcolor: 'rgba(144, 202, 249, 0.1)', borderRadius: 1 }}>
+            <Typography variant="subtitle1" sx={{ color: '#90caf9', mb: 1 }}>
+              Selected Item: {newItem.name} ({newItem.type})
+            </Typography>
+            
+            <Divider sx={{ my: 1, bgcolor: 'rgba(144, 202, 249, 0.2)' }} />
+            
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              {/* Trait selection */}
+              <Grid item xs={12} md={4}>
+                {hasAvailableTraits() ? (
+                  <Autocomplete
+                    options={newItem.availableTraits}
+                    getOptionLabel={(option) => option || ''}
+                    value={newItem.selectedTrait}
+                    onChange={(_, value) => setNewItem({ ...newItem, selectedTrait: value })}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Select Trait"
+                        fullWidth
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            background: 'rgba(30, 30, 30, 0.4)',
+                            backdropFilter: 'blur(12px)'
+                          }
+                        }}
+                      />
+                    )}
+                  />
+                ) : (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    This item has no available traits
+                  </Alert>
+                )}
+              </Grid>
+              
+              {/* DKP Cost - only if enabled */}
+              {dkpEnabled && (
+                <Grid item xs={6} md={3}>
+                  <TextField
+                    label="DKP Cost"
+                    type="number"
+                    fullWidth
+                    value={newItem.dkpCost}
+                    onChange={(e) => setNewItem({ ...newItem, dkpCost: Number(e.target.value) })}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        background: 'rgba(30, 30, 30, 0.4)',
+                        backdropFilter: 'blur(12px)'
+                      }
+                    }}
+                  />
+                </Grid>
+              )}
+              
+              {/* Quantity field */}
+              <Grid item xs={6} md={dkpEnabled ? 3 : 4}>
+                <TextField
+                  label="Quantity"
+                  type="number"
+                  fullWidth
+                  value={newItem.quantity}
+                  onChange={(e) => setNewItem({ ...newItem, quantity: Math.max(1, Number(e.target.value)) })}
+                  InputProps={{ inputProps: { min: 1 } }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      background: 'rgba(30, 30, 30, 0.4)',
+                      backdropFilter: 'blur(12px)'
+                    }
+                  }}
+                />
+              </Grid>
+              
+              {/* Add button */}
+              <Grid item xs={12} md={dkpEnabled ? 2 : 4}>
+                <Button 
+                  variant="contained" 
+                  fullWidth
+                  onClick={handleAddItem}
+                  disabled={!newItem.id}
+                  sx={{
+                    height: '100%',
+                    background: 'linear-gradient(45deg, rgba(144, 202, 249, 0.6), rgba(144, 202, 249, 0.8))',
+                    backdropFilter: 'blur(12px)',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 5px 15px rgba(144, 202, 249, 0.4)'
+                    }
+                  }}
+                >
+                  Add to Storage
+                </Button>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
       </Paper>
   
       <TableContainer component={Paper} sx={{
@@ -368,6 +453,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
             <TableRow>
               <TableCell>Item</TableCell>
               <TableCell>Type</TableCell>
+              <TableCell>Trait</TableCell> {/* Add trait column */}
               {/* Only show DKP Cost column if DKP is enabled */}
               {dkpEnabled && <TableCell>DKP Cost</TableCell>}
               <TableCell>In Storage</TableCell>
@@ -392,6 +478,24 @@ const AdminLootPanel = ({ dkpEnabled }) => {
                   </Box>
                 </TableCell>
                 <TableCell>{item.Item ? item.Item.type : item.type}</TableCell>
+                
+                {/* Trait cell */}
+                <TableCell>
+                  {item.trait ? (
+                    <Chip 
+                      label={item.trait}
+                      size="small"
+                      sx={{ 
+                        background: 'rgba(144, 202, 249, 0.2)',
+                        color: '#90caf9'
+                      }}
+                    />
+                  ) : (
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      No trait
+                    </Typography>
+                  )}
+                </TableCell>
                 
                 {/* Only show DKP Cost cell if DKP is enabled */}
                 {dkpEnabled && (

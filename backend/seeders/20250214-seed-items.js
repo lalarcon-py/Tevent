@@ -5,18 +5,8 @@ const path = require('path');
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     try {
-      // Check if items already exist
-      const existingItems = await queryInterface.sequelize.query(
-        'SELECT COUNT(*) FROM items',
-        { type: Sequelize.QueryTypes.SELECT }
-      );
-
-      // If items exist, skip seeding
-      if (existingItems[0].count > 0) {
-        console.log('📝 Items table already has data, skipping seed');
-        return;
-      }
-
+      console.log('Starting fresh items seeding process...');
+      
       // Read the JSON file
       const jsonData = await fs.readFile(
         path.join(__dirname, '../tnl_filtered_items.json'),
@@ -24,23 +14,43 @@ module.exports = {
       );
       const items = JSON.parse(jsonData);
       
-      console.log('📖 Read items from JSON:', items.length);
+      console.log(`📖 Read ${items.length} items from JSON`);
 
+      // Format traits for PostgreSQL array type
+      function formatTraitsForPostgres(traits) {
+        if (!traits || !Array.isArray(traits) || traits.length === 0) {
+          return '{}';
+        }
+        
+        // Escape single quotes and properly format the array
+        const escapedTraits = traits.map(trait => 
+          trait.replace(/'/g, "''") // Escape single quotes in PostgreSQL
+        );
+        
+        return `{${escapedTraits.map(t => `"${t}"`).join(',')}}`;
+      }
+
+      // Transform items for insertion
       const transformedItems = items.map(item => ({
+        id: Sequelize.fn('gen_random_uuid'),  // Generate new UUIDs
         name: item.name,
         type: item.type.charAt(0).toUpperCase() + item.type.slice(1),
         dkp_cost: item.dkp_value,
         icon: item.icon,
         in_storage: false,
         quantity: 0,
+        traits: formatTraitsForPostgres(item.traits),  // Properly formatted for PostgreSQL
         created_at: new Date(),
         updated_at: new Date()
       }));
 
-      console.log('🔄 First item to be inserted:', transformedItems[0]);
-
+      console.log(`Sample trait from first item: ${JSON.stringify(items[0].traits)}`);
+      console.log(`Formatted for Postgres: ${transformedItems[0].traits}`);
+      
+      console.log(`🌱 Inserting ${transformedItems.length} items into clean database`);
       await queryInterface.bulkInsert('items', transformedItems, {});
-      console.log(`🌱 Seeded ${transformedItems.length} items`);
+      
+      console.log('✅ Seeding completed successfully');
 
     } catch (error) {
       console.error('❌ Seeding failed:', error);

@@ -123,25 +123,36 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
                   <TableCell sx={{ color: 'white' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar 
-                        src={(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.icon : null}
+                        src={(request.storageItem && request.storageItem.Item) ? request.storageItem.Item.icon : null}
                         sx={{ width: 40, height: 40 }}
                       >
-                        {!request.StorageItem?.Item?.icon && (request.StorageItem?.Item?.name?.[0] || '?')}
+                        {!request.storageItem?.Item?.icon && (request.storageItem?.Item?.name?.[0] || '?')}
                       </Avatar>
                       <Box>
                         <Typography sx={{ color: 'white', fontWeight: 'medium' }}>
-                          {(request.StorageItem && request.StorageItem.Item) ? request.StorageItem.Item.name : 'Unknown Item'}
+                          {(request.storageItem && request.storageItem.Item) ? request.storageItem.Item.name : 'Unknown Item'}
                         </Typography>
-                        {request.StorageItem?.trait && (
-                          <Typography variant="caption" sx={{ color: '#90caf9' }}>
-                            {request.StorageItem.trait}
-                          </Typography>
+                        {request.storageItem?.trait && (
+                          <Chip
+                            label={request.storageItem.trait}
+                            size="small"
+                            sx={{ 
+                              mt: 0.5,
+                              height: 20,
+                              background: 'rgba(144, 202, 249, 0.2)',
+                              color: '#90caf9',
+                              '& .MuiChip-label': {
+                                px: 1,
+                                fontSize: '0.6rem'
+                              }
+                            }}
+                          />
                         )}
                       </Box>
                     </Box>
                   </TableCell>
                   <TableCell sx={{ color: 'white' }}>
-                    {request.StorageItem?.Item?.type || 'Unknown Type'}
+                    {request.storageItem?.Item?.type || 'Unknown Type'}
                   </TableCell>
                   <TableCell sx={{ color: 'white' }}>#{index + 1}</TableCell>
                   {/* Only show DKP Priority cell if DKP is enabled */}
