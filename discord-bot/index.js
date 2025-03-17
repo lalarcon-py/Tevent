@@ -1381,24 +1381,7 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
     try {
       await dbClient.query('BEGIN');
       
-      // 1. First update all other pending requests to avoid foreign key issues
-      if (willReachZero) {
-        await dbClient.query(
-          `UPDATE loot_requests 
-           SET status = 'Denied - Out of Stock', updated_at = NOW()
-           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-          [storageItemId, requestId]
-        );
-      } else {
-        await dbClient.query(
-          `UPDATE loot_requests 
-           SET status = 'Denied - Granted to other', updated_at = NOW()
-           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-          [storageItemId, requestId]
-        );
-      }
-      
-      // 2. Update this request status to approved
+      // 1. First update the current request to approved
       await dbClient.query(
         `UPDATE loot_requests 
          SET status = 'Approved', updated_at = NOW()
@@ -1406,9 +1389,27 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
         [requestId]
       );
       
-      // 3. Handle the item in storage
       if (willReachZero) {
-        // Delete the item from storage
+        console.log(`[INFO] Item ${storageItemId} quantity will reach zero - removing from storage`);
+        
+        // 2. Update other pending requests to a different status
+        await dbClient.query(
+          `UPDATE loot_requests 
+           SET status = 'Denied - Out of Stock', updated_at = NOW()
+           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+          [storageItemId, requestId]
+        );
+        
+        // 3. Delete the item from storage - ALSO DELETE ALL REFERENCES 
+        // This is key - we need to remove all references to the item first
+        // We've already updated all pending requests, so we can safely delete them now
+        await dbClient.query(
+          `DELETE FROM loot_requests 
+           WHERE storage_item_id = $1`,
+          [storageItemId]
+        );
+        
+        // Now we can safely delete the item
         await dbClient.query(
           `DELETE FROM guild_storage_items WHERE id = $1`,
           [storageItemId]
@@ -1420,6 +1421,14 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
            SET quantity = quantity - 1, updated_at = NOW()
            WHERE id = $1`,
           [storageItemId]
+        );
+        
+        // Update other pending requests
+        await dbClient.query(
+          `UPDATE loot_requests 
+           SET status = 'Denied - Granted to other', updated_at = NOW()
+           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+          [storageItemId, requestId]
         );
       }
       
@@ -1435,7 +1444,7 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
         }
       }
       
-      // Update UI elements
+      // Update UI elements - this might fail if the item is deleted, so we need to handle that
       try {
         await markItemAsClaimed(storageItemId, request.username);
       } catch (uiError) {
