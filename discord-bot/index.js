@@ -1763,29 +1763,32 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle approve_loot button
+      // Handle approve_loot button
       else if (customId.startsWith('approve_loot_')) {
         const requestId = customId.replace('approve_loot_', '');
         
-        // Immediately defer the reply to get more time
-        await interaction.deferReply().catch(console.error);
-        
         try {
-          // Get Discord server ID and app guild ID
+          try {
+            await interaction.deferReply();
+          } catch (deferError) {
+            console.warn(`Warning: Could not defer reply: ${deferError.message}`);
+          }
+          
           const discordGuildId = interaction.guild?.id;
           
-          // Get appGuildId from database
           const mappingResult = await pool.query(
             'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
             [discordGuildId]
           );
           
           if (!mappingResult.rows.length) {
-            return await interaction.editReply('This Discord server is not linked to an application guild.');
+            return await interaction.editReply({
+              content: 'This Discord server is not linked to an application guild.'
+            }).catch(console.error);
           }
           
           const appGuildId = mappingResult.rows[0].app_guild_id;
           
-          // Get request details first
           const requestResult = await pool.query(
             `SELECT lr.*, 
                   gsi.quantity, 
@@ -1801,22 +1804,21 @@ client.on('interactionCreate', async (interaction) => {
           );
           
           if (!requestResult.rows || requestResult.rows.length === 0) {
-            return await interaction.editReply('Request not found or already processed.');
+            return await interaction.editReply({
+              content: 'Request not found or already processed.'
+            }).catch(console.error);
           }
           
           const request = requestResult.rows[0];
           const storageItemId = request.storage_item_id;
           
-          // Check if this is the last of the item
           const willReachZero = request.quantity <= 1;
           console.log(`[DEBUG] Item quantity: ${request.quantity}, Will reach zero: ${willReachZero}`);
           
-          // Update request and handle item in a transaction
           const dbClient = await pool.connect();
           try {
             await dbClient.query('BEGIN');
             
-            // Update request status
             await dbClient.query(
               `UPDATE loot_requests 
               SET status = 'Approved', updated_at = NOW()
@@ -1825,32 +1827,26 @@ client.on('interactionCreate', async (interaction) => {
             );
             
             if (willReachZero) {
-              // Item quantity will reach zero - remove it from storage
               console.log(`[INFO] Item ${storageItemId} quantity will reach zero - removing from storage`);
               
-              // Deny all other pending requests with special status
               await dbClient.query(
                 `UPDATE loot_requests 
                 SET status = 'Denied - Out of Stock', updated_at = NOW()
-                WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-                [storageItemId, requestId]
+                WHERE storage_item_id = $1 AND status = 'Pending'`,
+                [storageItemId]
               );
-              
-              // Delete the item from storage
+
               await dbClient.query(
                 `DELETE FROM guild_storage_items WHERE id = $1`,
                 [storageItemId]
               );
             } else {
-              // Just decrement quantity
               await dbClient.query(
                 `UPDATE guild_storage_items
                 SET quantity = quantity - 1, updated_at = NOW()
                 WHERE id = $1`,
                 [storageItemId]
               );
-              
-              // Deny all other pending requests for this specific item
               await dbClient.query(
                 `UPDATE loot_requests 
                 SET status = 'Denied - Granted to other', updated_at = NOW()
@@ -1860,17 +1856,22 @@ client.on('interactionCreate', async (interaction) => {
             }
             
             await dbClient.query('COMMIT');
+            console.log(`[INFO] Transaction committed successfully`);
           } catch (error) {
             await dbClient.query('ROLLBACK');
+            console.error(`[ERROR] Transaction rolled back: ${error.message}`);
             throw error;
           } finally {
             dbClient.release();
           }
-          
-          // Mark item as claimed in the UI
-          await markItemAsClaimed(storageItemId, request.username);
-          
-          // Send notification to the user
+
+          try {
+            await markItemAsClaimed(storageItemId, request.username);
+          } catch (uiError) {
+            console.warn(`Warning: Could not update UI: ${uiError.message}`);
+            // Continue anyway - this is not critical
+          }
+
           try {
             if (request.discord_id) {
               const user = await interaction.client.users.fetch(request.discord_id);
@@ -1880,30 +1881,38 @@ client.on('interactionCreate', async (interaction) => {
             }
           } catch (dmError) {
             console.error(`Failed to DM user: ${dmError.message}`);
-            // Continue even if DM fails
           }
           
           const responseMessage = willReachZero
             ? `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**. This was the last available item.`
             : `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**.`;
-          
-          await interaction.editReply({
-            content: responseMessage
-          });
+
+          try {
+            await interaction.editReply({
+              content: responseMessage
+            });
+          } catch (replyError) {
+            console.warn(`Warning: Could not edit reply: ${replyError.message}`);
+            try {
+              await interaction.followUp({
+                content: responseMessage
+              });
+            } catch (followUpError) {
+              console.error(`Error sending followup: ${followUpError.message}`);
+            }
+          }
         } catch (error) {
           console.error(`[ERROR] Error approving request:`, error);
           try {
-            // Only try to reply if we haven't already
-            if (!interaction.replied) {
-              await interaction.editReply('An error occurred while approving the request.');
-            }
+            await interaction.editReply({
+              content: 'An error occurred while approving the request.'
+            }).catch(console.error);
           } catch (replyError) {
             console.error(`Error sending error message: ${replyError.message}`);
           }
         }
       }
       
-      // Handle deny_loot button
       else if (customId.startsWith('deny_loot_')) {
         const requestId = customId.replace('deny_loot_', '');
         await interaction.deferReply();
