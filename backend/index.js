@@ -760,18 +760,54 @@ app.get('/auth/discord/callback',
 );
 
 app.get('/auth/logout', (req, res) => {
+  // Get the desired redirect URL
+  const redirectUrl = req.query.redirectUrl || 
+                      process.env.FRONTEND_URL || 
+                      'http://localhost:3002';
+  
+  // Log the user out of our app
   req.logout(err => {
     if (err) {
       console.error('Logout error:', err);
-      return res.status(500).json({ error: 'Logout failed' });
     }
+    
+    // Destroy the session
     req.session.destroy(err => {
       if (err) {
         console.error('Session destroy error:', err);
-        return res.status(500).json({ error: 'Session destruction failed' });
       }
+      
+      // Clear the cookie
       res.clearCookie('connect.sid');
-      return res.redirect(process.env.CLIENT_BASE_URL || 'http://localhost:3002');
+      
+      // Simply redirect back to our frontend with a special flag
+      res.redirect(`${redirectUrl}?logout=success`);
+    });
+  });
+});
+
+app.get('/auth/discord/logout', (req, res) => {
+  // Get redirect URL from query params
+  const redirectUrl = req.query.redirectUrl || (process.env.CLIENT_BASE_URL || 'http://localhost:3002');
+  
+  // Log out the user from our application
+  req.logout(err => {
+    if (err) {
+      console.error('Discord logout error:', err);
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    
+    // Destroy the session
+    req.session.destroy(err => {
+      if (err) {
+        console.error('Session destroy error:', err);
+      }
+      
+      // Clear cookies
+      res.clearCookie('connect.sid');
+      
+      const discordLogoutUrl = `https://discord.com/api/oauth2/token/revoke`;
+      res.redirect(`${discordLogoutUrl}?redirect_uri=${encodeURIComponent(redirectUrl)}`);
     });
   });
 });

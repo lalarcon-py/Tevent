@@ -364,11 +364,29 @@ const Navigation = ({ guildId }) => {
           />
         </ListItem>
         
-        <ListItem
+        <ListItem 
           button
-          component={LogoutButton}
-          variant="text"
-          color="inherit"
+          onClick={async () => {
+            try {
+              // Clear localStorage safely
+              try {
+                localStorage.removeItem('guildId');
+                console.log('Successfully cleared localStorage');
+              } catch (storageError) {
+                console.warn('Failed to access localStorage:', storageError);
+              }
+              
+              // Get backend URL
+              const BACKEND_URL = process.env.NODE_ENV === 'production'
+                ? (process.env.REACT_APP_BACKEND_URL || window.location.origin)
+                : (process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000');
+              
+              // Redirect to backend logout endpoint
+              window.location.href = `${BACKEND_URL}/auth/logout?redirectUrl=${encodeURIComponent(window.location.origin)}`;
+            } catch (error) {
+              console.error('Logout process failed:', error);
+            }
+          }}
           sx={{ 
             color: 'white',
             py: 1.5,
