@@ -363,7 +363,6 @@ const Navigation = ({ guildId }) => {
             }}
           />
         </ListItem>
-        
         <ListItem 
           button
           onClick={async () => {

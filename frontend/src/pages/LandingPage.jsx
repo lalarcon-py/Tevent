@@ -3,18 +3,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, TextField, Button, CircularProgress,
   Alert, Container, Dialog, DialogTitle, DialogContent, 
-  DialogActions, useMediaQuery, useTheme, Grid, Divider
+  DialogActions, useMediaQuery, useTheme, Grid, Divider,
+  Paper, Snackbar
 } from '@mui/material';
 import { Link as MuiLink } from '@mui/material';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // Icons
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../config/axios';
 
 const API_URL = process.env.NODE_ENV === 'development'
@@ -23,6 +25,7 @@ const API_URL = process.env.NODE_ENV === 'development'
 
 const LandingPage = () => {
   const theme = useTheme();
+  const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isAuthenticated, user, login } = useAuth();
@@ -40,9 +43,36 @@ const LandingPage = () => {
   const [success, setSuccess] = useState(null);
   const [joinCode, setJoinCode] = useState('');
   
+  // Logout status notification
+  const [showLogoutNotice, setShowLogoutNotice] = useState(false);
+  
   // Guild join state
   const [selectedGuildId, setSelectedGuildId] = useState(null);
   const [selectedGuildName, setSelectedGuildName] = useState('');
+  
+  // Check if user just logged out
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('logout') === 'success') {
+      setShowLogoutNotice(true);
+    }
+  }, [location]);
+  
+  // Handle logout notice close
+  const handleLogoutNoticeClose = () => {
+    setShowLogoutNotice(false);
+    
+    // Remove the logout parameter from URL
+    const params = new URLSearchParams(location.search);
+    params.delete('logout');
+    navigate({ search: params.toString() }, { replace: true });
+  };
+  
+  // Handle Discord logout button click
+  const handleDiscordLogout = () => {
+    window.open('https://discord.com/logout', '_blank');
+    setShowLogoutNotice(false);
+  };
   
   /**
    * Fetch available guilds for joining
@@ -186,7 +216,7 @@ const LandingPage = () => {
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 179, 237, 0.1) 0%, rgba(13, 29, 45, 0) 60%)',
+      background: 'radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(59, 130, 246, 0.03) 0%, rgba(13, 29, 45, 0) 70%)',
       pointerEvents: 'none',
       zIndex: 0,
     }
@@ -196,21 +226,103 @@ const LandingPage = () => {
     <Box 
       sx={{ 
         minHeight: '100vh', 
-        bgcolor: '#0f172a', 
+        background: 'linear-gradient(135deg, #040812 0%, #0c1425 40%, #152039 100%)', // Cascading dark blue background
         position: 'relative',
         overflow: 'hidden',
-        ...backgroundAnimation
+        ...backgroundAnimation,
+        pt: { xs: 0, sm: 0 } // Remove top padding to hide header space
       }}
     >
+      {/* Background decorative elements for cascade effect */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          opacity: 0.5,
+          background: 
+            'radial-gradient(circle at 20% 30%, rgba(46, 73, 180, 0.03) 0%, transparent 30%), ' + 
+            'radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.02) 0%, transparent 40%), ' +
+            'radial-gradient(circle at 40% 80%, rgba(72, 109, 217, 0.04) 0%, transparent 30%)',
+          zIndex: 0,
+          pointerEvents: 'none'
+        }}
+      />
+      
+      {/* Subtle cascade overlay */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '100%',
+          background: 'linear-gradient(180deg, rgba(17, 24, 39, 0) 0%, rgba(17, 24, 39, 0.1) 70%, rgba(17, 24, 39, 0.2) 100%)',
+          zIndex: 0,
+          pointerEvents: 'none'
+        }}
+      />
+
+      {/* Logout Notification */}
+      <Snackbar
+        open={showLogoutNotice}
+        onClose={handleLogoutNoticeClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        sx={{ mt: 4 }}
+      >
+        <Paper 
+          elevation={4}
+          sx={{ 
+            p: 2, 
+            bgcolor: 'rgba(30, 41, 59, 0.95)',
+            border: '1px solid #3b82f6',
+            borderRadius: 2,
+            maxWidth: 450
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <CheckCircleOutlineIcon sx={{ color: '#3b82f6', mr: 1 }} />
+            <Typography variant="subtitle1" sx={{ color: 'white', fontWeight: 600 }}>
+              Logged out successfully
+            </Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: '#cbd5e1', mb: 2 }}>
+            For complete security, also sign out from Discord:
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button 
+              size="small"
+              onClick={handleDiscordLogout}
+              variant="contained"
+              sx={{ 
+                bgcolor: '#3b82f6',
+                '&:hover': { bgcolor: '#2563eb' }
+              }}
+            >
+              Logout from Discord
+            </Button>
+            <Button 
+              size="small"
+              onClick={handleLogoutNoticeClose}
+              sx={{ color: '#94a3b8' }}
+            >
+              Dismiss
+            </Button>
+          </Box>
+        </Paper>
+      </Snackbar>
+
       {/* Hero Section */}
       <Box 
         sx={{ 
-          pt: { xs: 8, sm: 10, md: 16 }, 
+          pt: { xs: 12, sm: 14, md: 16 }, // Increased top padding to account for missing header
           pb: { xs: 8, sm: 10, md: 14 },
           px: { xs: 2, sm: 3, md: 3 },
           textAlign: 'center',
-          background: 'linear-gradient(160deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.7) 100%)',
           position: 'relative',
+          zIndex: 1,
           '&::before': {
             content: '""',
             position: 'absolute',
@@ -218,10 +330,10 @@ const LandingPage = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundImage: 'url(/images/hero-bg.jpg)', // Add a background image for texture
+            backgroundImage: 'url(/images/hero-bg.jpg)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            opacity: 0.15,
+            opacity: 0.08, // Very subtle background texture
             zIndex: -1,
           }
         }}
@@ -236,7 +348,7 @@ const LandingPage = () => {
               color: 'white',
               fontSize: { xs: '2.5rem', sm: '3.5rem', md: '5rem' },
               lineHeight: 1.1,
-              textShadow: '0 0 30px rgba(120, 180, 255, 0.3)',
+              textShadow: '0 0 30px rgba(59, 130, 246, 0.15)', // Softer shadow
               position: 'relative'
             }}
           >
@@ -246,7 +358,7 @@ const LandingPage = () => {
               component="span" 
               sx={{ 
                 display: 'block',
-                background: 'linear-gradient(90deg, #60a5fa, #93c5fd)',
+                background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #93c5fd 100%)', // Cascading blue gradient
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
                 color: 'transparent',
@@ -295,11 +407,11 @@ const LandingPage = () => {
                   fontSize: { xs: '1rem', md: '1.25rem' },
                   fontWeight: 600,
                   borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
-                  boxShadow: '0 10px 25px rgba(59, 130, 246, 0.5)',
+                  background: 'linear-gradient(135deg, #4f86f7 0%, #3b82f6 60%, #2563eb 100%)', // Cascading blue button
+                  boxShadow: '0 10px 25px rgba(59, 130, 246, 0.25)', // Reduced shadow
                   transition: 'all 0.3s ease',
                   '&:hover': {
-                    boxShadow: '0 15px 30px rgba(59, 130, 246, 0.6)',
+                    boxShadow: '0 15px 30px rgba(59, 130, 246, 0.3)', // Reduced shadow on hover
                     transform: 'translateY(-3px)'
                   }
                 }}
@@ -319,11 +431,11 @@ const LandingPage = () => {
                     fontSize: { xs: '0.9rem', md: '1.1rem' },
                     fontWeight: 600,
                     borderRadius: '12px',
-                    background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
-                    boxShadow: '0 10px 25px rgba(59, 130, 246, 0.5)',
+                    background: 'linear-gradient(135deg, #4f86f7 0%, #3b82f6 60%, #2563eb 100%)', // Cascading blue button
+                    boxShadow: '0 10px 25px rgba(59, 130, 246, 0.25)', // Reduced shadow
                     transition: 'all 0.3s ease',
                     '&:hover': {
-                      boxShadow: '0 15px 30px rgba(59, 130, 246, 0.6)',
+                      boxShadow: '0 15px 30px rgba(59, 130, 246, 0.3)', // Reduced shadow on hover
                       transform: 'translateY(-3px)'
                     }
                   }}
@@ -342,13 +454,13 @@ const LandingPage = () => {
                     fontSize: { xs: '0.9rem', md: '1.1rem' },
                     fontWeight: 600,
                     borderRadius: '12px',
-                    borderColor: '#60a5fa',
+                    borderColor: '#3b82f6', // Darker blue
                     borderWidth: 2,
                     color: '#60a5fa',
                     transition: 'all 0.3s ease',
                     '&:hover': {
-                      borderColor: '#3b82f6',
-                      boxShadow: '0 5px 15px rgba(59, 130, 246, 0.3)',
+                      borderColor: '#2563eb',
+                      boxShadow: '0 5px 15px rgba(59, 130, 246, 0.15)', // Reduced shadow
                       transform: 'translateY(-3px)'
                     }
                   }}
@@ -370,7 +482,7 @@ const LandingPage = () => {
                     transition: 'all 0.3s ease',
                     '&:hover': {
                       color: '#3b82f6',
-                      background: 'rgba(59, 130, 246, 0.1)'
+                      background: 'rgba(59, 130, 246, 0.05)' // Very subtle hover state
                     }
                   }}
                 >
@@ -390,8 +502,8 @@ const LandingPage = () => {
               width: { xs: '300px', md: '600px' },
               height: { xs: '300px', md: '600px' },
               borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(15, 23, 42, 0) 70%)',
-              filter: 'blur(40px)',
+              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.03) 0%, rgba(15, 23, 42, 0) 70%)', // More subtle glow
+              filter: 'blur(60px)', // Increased blur for softer effect
               zIndex: -1
             }}
           />
@@ -409,7 +521,7 @@ const LandingPage = () => {
             bgcolor: '#1e293b', 
             color: 'white',
             borderRadius: isMobile ? '12px' : '16px',
-            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
+            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.02), rgba(15, 23, 42, 0))', // More subtle gradient
             boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
             margin: isMobile ? '16px' : 'auto',
             width: isMobile ? 'calc(100% - 32px)' : undefined
@@ -521,7 +633,7 @@ const LandingPage = () => {
             bgcolor: '#1e293b', 
             color: 'white',
             borderRadius: isMobile ? '12px' : '16px',
-            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
+            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.02), rgba(15, 23, 42, 0))', // More subtle gradient
             boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
             margin: isMobile ? '16px' : 'auto',
             width: isMobile ? 'calc(100% - 32px)' : undefined
@@ -730,7 +842,7 @@ const LandingPage = () => {
             bgcolor: '#1e293b', 
             color: 'white',
             borderRadius: isMobile ? '12px' : '16px',
-            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.05), rgba(15, 23, 42, 0))',
+            backgroundImage: 'linear-gradient(to bottom right, rgba(59, 130, 246, 0.02), rgba(15, 23, 42, 0))', // More subtle gradient
             boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
             margin: isMobile ? '16px' : 'auto',
             width: isMobile ? 'calc(100% - 32px)' : undefined

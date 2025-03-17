@@ -1824,6 +1824,67 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
+app.post('/webhook/item-request', async (req, res) => {
+  try {
+    const { guildId, itemId, userId, username, quantity, secret } = req.body;
+    
+    console.log(`[INFO] Received item request webhook - Item: ${itemId}, User: ${username}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get Discord guild ID from mapping
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Get item details
+    const itemResult = await pool.query(
+      `SELECT gsi.*, i.name, i.type 
+       FROM guild_storage_items gsi
+       JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.id = $1`,
+      [itemId]
+    );
+    
+    if (!itemResult.rows.length) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    
+    const item = itemResult.rows[0];
+    
+    // Create notification embed
+    const requestEmbed = new EmbedBuilder()
+      .setTitle('New Loot Request')
+      .setDescription(`**${username}** has requested **${item.name}**`)
+      .setColor('#9c27b0')
+      .setTimestamp()
+      .setFooter({ text: `Item ID: ${itemId}` });
+    
+    // Send notification to loot channel
+    await sendNotificationToConfiguredChannel(
+      guildId, 
+      discordGuildId, 
+      'loot', 
+      requestEmbed
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`[ERROR] Error processing item request webhook:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Link guild command handler
 const handleLinkGuildCommand = async (interaction) => {
   // Only server admins can use this command
