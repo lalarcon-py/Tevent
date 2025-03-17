@@ -573,20 +573,61 @@ module.exports = {
       console.log(`[DEBUG] Updating request status to Approved`);
       await request.update({ status: 'Approved' }, { transaction: t });
       
-      // Decrement quantity
-      console.log(`[DEBUG] Decrementing item quantity from ${request.storageItem.quantity} to ${request.storageItem.quantity - 1}`);
-      await request.storageItem.decrement('quantity', { transaction: t });
+      // Check if this is the last of the item
+      const willReachZero = request.storageItem.quantity <= 1;
+      
+      if (willReachZero) {
+        // If this is the last one, remove the item from storage
+        console.log(`[DEBUG] This is the last of the item - removing from storage`);
+        
+        // Deny all other pending requests for this item with "out of stock" status
+        await db.LootRequest.update(
+          { status: 'Denied - Out of Stock', updated_at: new Date() },
+          { 
+            where: {
+              storage_item_id: request.storageItem.id,
+              status: 'Pending',
+              id: { [db.Sequelize.Op.ne]: request.id }
+            },
+            transaction: t
+          }
+        );
+        
+        // Delete the item from storage
+        await db.GuildStorageItem.destroy({
+          where: { id: request.storageItem.id },
+          transaction: t
+        });
+      } else {
+        // Otherwise just decrement the quantity
+        console.log(`[DEBUG] Decrementing item quantity from ${request.storageItem.quantity} to ${request.storageItem.quantity - 1}`);
+        await request.storageItem.decrement('quantity', { transaction: t });
+        
+        // Deny other pending requests for this specific request (not all requests for the item)
+        await db.LootRequest.update(
+          { status: 'Denied - Granted to other', updated_at: new Date() },
+          { 
+            where: {
+              id: { [db.Sequelize.Op.ne]: request.id },
+              storage_item_id: request.storageItem.id,
+              status: 'Pending'
+            },
+            transaction: t
+          }
+        );
+      }
       
       console.log(`[DEBUG] Committing transaction`);
       await t.commit();
       
-      console.log(`[DEBUG] Approval successful`);
+      console.log(`[DEBUG] Approval successful ${willReachZero ? '(last item removed from storage)' : ''}`);
       return { 
         success: true,
         userId: request.user?.id,
         username: request.user?.username || 'Unknown',
         discordId: request.user?.discord_id,
-        itemName: request.storageItem?.Item?.name || 'Unknown Item'
+        itemName: request.storageItem?.Item?.name || 'Unknown Item',
+        wasLastItem: willReachZero
       };
     } catch (error) {
       console.error(`[ERROR] approveLootRequest failed: ${error.message}`);
