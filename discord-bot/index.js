@@ -47,6 +47,143 @@ const client = new Client({
   ] 
 });
 
+async function updateItemEmbed(itemId) {
+  try {
+    // Get message info from database
+    const messageInfoResult = await pool.query(
+      `SELECT channel_id, message_id, guild_id FROM item_message_tracking WHERE item_id = $1`,
+      [itemId]
+    );
+    
+    if (!messageInfoResult.rows.length) return false;
+    const messageInfo = messageInfoResult.rows[0];
+    
+    // Get item details
+    const itemResult = await pool.query(
+      `SELECT gsi.*, i.name, i.type, i.icon 
+       FROM guild_storage_items gsi
+       JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.id = $1`,
+      [itemId]
+    );
+    
+    if (!itemResult.rows.length) return false;
+    const item = itemResult.rows[0];
+    
+    // Get current request count
+    const requestCountResult = await pool.query(
+      `SELECT COUNT(*) as count 
+       FROM loot_requests 
+       WHERE storage_item_id = $1 AND status = 'Pending'`,
+      [itemId]
+    );
+    
+    const requestCount = parseInt(requestCountResult.rows[0].count) || 0;
+    
+    // Get message to update
+    const channel = await client.channels.fetch(messageInfo.channel_id);
+    if (!channel) return false;
+    
+    const message = await channel.messages.fetch(messageInfo.message_id);
+    if (!message) return false;
+    
+    // Create updated embed with request count
+    const embed = new EmbedBuilder()
+      .setTitle('📦 Item Available')
+      .setDescription(`**${item.name}** is available in the guild bank.`)
+      .addFields(
+        { name: '📦 Item', value: `**${item.name}**`, inline: false },
+        { name: 'Type', value: item.type || 'Unknown', inline: true },
+        { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
+        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
+        { name: 'Current Requests', value: requestCount.toString(), inline: true }
+      )
+      .setColor('#4CAF50')
+      .setTimestamp()
+      .setFooter({ text: `Item ID: ${itemId}` });
+    
+    if (item.trait) {
+      embed.addFields({ name: 'Trait', value: item.trait, inline: true });
+    }
+    
+    if (item.icon) {
+      embed.setThumbnail(item.icon);
+    }
+    
+    // Update the message
+    await message.edit({ embeds: [embed] });
+    return true;
+  } catch (error) {
+    console.error(`[ERROR] Error updating item embed:`, error);
+    return false;
+  }
+}
+
+// Function to mark item as claimed
+async function markItemAsClaimed(itemId, claimedBy) {
+  try {
+    // Get message info from database
+    const messageInfoResult = await pool.query(
+      `SELECT channel_id, message_id, guild_id FROM item_message_tracking WHERE item_id = $1`,
+      [itemId]
+    );
+    
+    if (!messageInfoResult.rows.length) return false;
+    const messageInfo = messageInfoResult.rows[0];
+    
+    // Get item details
+    const itemResult = await pool.query(
+      `SELECT gsi.*, i.name, i.type, i.icon 
+       FROM guild_storage_items gsi
+       JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.id = $1`,
+      [itemId]
+    );
+    
+    if (!itemResult.rows.length) return false;
+    const item = itemResult.rows[0];
+    
+    // Get message to update
+    const channel = await client.channels.fetch(messageInfo.channel_id);
+    if (!channel) return false;
+    
+    const message = await channel.messages.fetch(messageInfo.message_id);
+    if (!message) return false;
+    
+    // Create updated embed showing claimed status
+    const embed = new EmbedBuilder()
+      .setTitle('📦 Item Claimed')
+      .setDescription(`This item has been granted to **${claimedBy}**`)
+      .addFields(
+        { name: '📦 Item', value: `**${item.name}**`, inline: false },
+        { name: 'Type', value: item.type || 'Unknown', inline: true },
+        { name: 'Status', value: '✅ Granted', inline: true }
+      )
+      .setColor('#9E9E9E') // Gray color to indicate no longer available
+      .setTimestamp()
+      .setFooter({ text: `Item ID: ${itemId}` });
+    
+    if (item.trait) {
+      embed.addFields({ name: 'Trait', value: item.trait, inline: true });
+    }
+    
+    if (item.icon) {
+      embed.setThumbnail(item.icon);
+    }
+    
+    // Update message with no components (removes buttons)
+    await message.edit({ 
+      embeds: [embed],
+      components: [] // Remove all buttons
+    });
+    
+    return true;
+  } catch (error) {
+    console.error(`[ERROR] Error marking item as claimed:`, error);
+    return false;
+  }
+}
+
 
 // Add to your scheduled postings
 function setupScheduledPostings(client) {
@@ -418,15 +555,26 @@ app.post('/webhook/new-item', async (req, res) => {
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
     
-    // Create a modern embed with reaction instructions
+    // Get the current request count
+    const requestCountResult = await pool.query(
+      `SELECT COUNT(*) as count 
+       FROM loot_requests 
+       WHERE storage_item_id = $1 AND status = 'Pending'`,
+      [itemId]
+    );
+    
+    const requestCount = parseInt(requestCountResult.rows[0].count) || 0;
+    
+    // Create a modern embed with request count and buttons
     const embed = new EmbedBuilder()
-      .setTitle('🆕 New Item Added to Storage')
-      .setDescription(`**React with a number to request this item:**\n\n1️⃣ - Request 1\n2️⃣ - Request 2\n3️⃣ - Request 3\n4️⃣ - Request 4\n5️⃣ - Request 5`)
+      .setTitle('📦 New Item Added to Guild Storage')
+      .setDescription(`**${item.name}** is now available in the guild bank.`)
       .addFields(
         { name: '📦 Item', value: `**${item.name}**`, inline: false },
         { name: 'Type', value: item.type || 'Unknown', inline: true },
         { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
-        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true }
+        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
+        { name: 'Current Requests', value: requestCount.toString(), inline: true }
       )
       .setColor('#4CAF50')
       .setTimestamp()
@@ -440,122 +588,71 @@ app.post('/webhook/new-item', async (req, res) => {
       embed.setThumbnail(item.icon);
     }
     
-    // Send the embed to the configured channel
-    const message = await sendNotificationToConfiguredChannel(guildId, discordGuildId, 'storage', embed);
+    // Create button row
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`need_item_${item.id}`)
+          .setLabel('Need (High Priority)')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('❗'),
+        new ButtonBuilder()
+          .setCustomId(`greed_item_${item.id}`)
+          .setLabel('Greed (Low Priority)')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('💰')
+      );
     
-    // Add reaction buttons if message was sent successfully
+    // Send the embed to the configured channel
+    const message = await sendNotificationToConfiguredChannel(
+      guildId, 
+      discordGuildId, 
+      'storage', 
+      embed,
+      null,
+      [row]
+    );
+    
+    // Store the message info for later updates
     if (message) {
+      // Store message info in persistent database for better reliability
       try {
-        // Add reactions for different quantities
-        await message.react('1️⃣'); // Request 1
-        await message.react('2️⃣'); // Request 2
-        await message.react('3️⃣'); // Request 3
-        await message.react('4️⃣'); // Request 4
-        await message.react('5️⃣'); // Request 5
-        
-        // Set up reaction collector
-        const filter = (reaction, user) => {
-          return ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'].includes(reaction.emoji.name) && !user.bot;
-        };
-        
-        const collector = message.createReactionCollector({ filter, time: 604800000 }); // 7 days
-        
-        collector.on('collect', async (reaction, user) => {
-          try {
-            // Determine requested quantity based on reaction
-            let quantity = 1;
-            switch(reaction.emoji.name) {
-              case '2️⃣': quantity = 2; break;
-              case '3️⃣': quantity = 3; break;
-              case '4️⃣': quantity = 4; break;
-              case '5️⃣': quantity = 5; break;
-              default: quantity = 1;
-            }
-            
-            // Get user from database
-            const userResult = await pool.query(
-              'SELECT id, username FROM users WHERE discord_id = $1',
-              [user.id]
-            );
-            
-            if (!userResult.rows.length) {
-              try {
-                await user.send(`You need to register on the website first before requesting items.`);
-              } catch (dmError) {
-                console.error(`Could not DM user ${user.id}:`, dmError);
-              }
-              return;
-            }
-            
-            const userId = userResult.rows[0].id;
-            
-            // Check if item is still available in requested quantity
-            const currentItemResult = await pool.query(
-              `SELECT quantity FROM guild_storage_items WHERE id = $1`,
-              [itemId]
-            );
-            
-            if (!currentItemResult.rows.length || currentItemResult.rows[0].quantity < quantity) {
-              try {
-                await user.send(`Sorry, "${item.name}" is not available in the requested quantity.`);
-              } catch (dmError) {
-                console.error(`Could not DM user ${user.id}:`, dmError);
-              }
-              return;
-            }
-            
-            // Check for existing request
-            const existingRequestResult = await pool.query(
-              `SELECT id FROM loot_requests 
-               WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
-              [itemId, userId]
-            );
-            
-            if (existingRequestResult.rows.length) {
-              try {
-                await user.send(`You already have a pending request for "${item.name}".`);
-              } catch (dmError) {
-                console.error(`Could not DM user ${user.id}:`, dmError);
-              }
-              return;
-            }
-            
-            // Create loot request in database
-            await pool.query(
-              `INSERT INTO loot_requests
-               (id, guild_id, storage_item_id, user_id, status, created_at, updated_at)
-               VALUES
-               (gen_random_uuid(), $1, $2, $3, 'Pending', NOW(), NOW())`,
-              [guildId, itemId, userId]
-            );
-            
-            // Send confirmation to user
-            try {
-              await user.send(`Your request for ${quantity}x "${item.name}" has been submitted!`);
-            } catch (dmError) {
-              console.error(`Could not DM user ${user.id}:`, dmError);
-            }
-            
-            // Send notification to loot channel
-            const requestEmbed = new EmbedBuilder()
-              .setTitle('New Loot Request')
-              .setDescription(`**${user.username}** has requested **${quantity}x ${item.name}**`)
-              .setColor('#9c27b0')
-              .setTimestamp()
-              .setFooter({ text: `Item ID: ${itemId}` });
-            
-            await sendNotificationToConfiguredChannel(guildId, discordGuildId, 'loot', requestEmbed);
-          } catch (error) {
-            console.error('Error processing item request:', error);
-            try {
-              await user.send(`There was an error processing your request. Please try again later.`);
-            } catch (dmError) {
-              console.error(`Could not DM user ${user.id}:`, dmError);
-            }
-          }
-        });
-      } catch (reactionError) {
-        console.error(`Error setting up reactions:`, reactionError);
+        await pool.query(
+          `INSERT INTO item_message_tracking 
+           (item_id, guild_id, channel_id, message_id, created_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (item_id) DO UPDATE SET
+           channel_id = $3,
+           message_id = $4,
+           updated_at = NOW()`,
+          [item.id, guildId, message.channel.id, message.id]
+        );
+      } catch (dbError) {
+        // If the table doesn't exist yet, create it
+        if (dbError.code === '42P01') { // undefined_table
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS item_message_tracking (
+              id SERIAL PRIMARY KEY,
+              item_id UUID NOT NULL,
+              guild_id UUID NOT NULL,
+              channel_id VARCHAR(255) NOT NULL,
+              message_id VARCHAR(255) NOT NULL,
+              created_at TIMESTAMP DEFAULT NOW(),
+              updated_at TIMESTAMP DEFAULT NOW(),
+              UNIQUE(item_id)
+            )
+          `);
+          
+          // Try insert again
+          await pool.query(
+            `INSERT INTO item_message_tracking 
+             (item_id, guild_id, channel_id, message_id, created_at)
+             VALUES ($1, $2, $3, $4, NOW())`,
+            [item.id, guildId, message.channel.id, message.id]
+          );
+        } else {
+          console.error('Error storing message tracking info:', dbError);
+        }
       }
     }
     
@@ -1233,6 +1330,226 @@ client.on('interactionCreate', async (interaction) => {
       ephemeral: true
     });
   }
+
+  if (interaction.isButton()) {
+    const customId = interaction.customId;
+    
+    // Handle item request buttons (Need/Greed)
+    if (customId.startsWith('need_item_') || customId.startsWith('greed_item_')) {
+      const itemId = customId.replace(/^(need_item_|greed_item_)/, '');
+      const isNeed = customId.startsWith('need_item_');
+      const priority = isNeed ? 'Need' : 'Greed';
+      
+      await interaction.deferReply({ ephemeral: true });
+      
+      try {
+        // Get Discord server ID and app guild ID
+        const discordGuildId = interaction.guild?.id;
+        
+        // Get appGuildId from database
+        const mappingResult = await pool.query(
+          'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+          [discordGuildId]
+        );
+        
+        if (!mappingResult.rows.length) {
+          return await interaction.editReply('This Discord server is not linked to an application guild.');
+        }
+        
+        const appGuildId = mappingResult.rows[0].app_guild_id;
+        
+        // Get user by Discord ID
+        const userResult = await pool.query(
+          'SELECT id, username FROM users WHERE discord_id = $1',
+          [interaction.user.id]
+        );
+        
+        if (!userResult.rows.length) {
+          return await interaction.editReply('You need to register on the website first before requesting items.');
+        }
+        
+        const userId = userResult.rows[0].id;
+        
+        // Check if item is available
+        const itemResult = await pool.query(
+          `SELECT gsi.*, i.name 
+           FROM guild_storage_items gsi
+           JOIN items i ON gsi.item_id = i.id
+           WHERE gsi.id = $1`,
+          [itemId]
+        );
+        
+        if (!itemResult.rows.length || itemResult.rows[0].quantity < 1) {
+          return await interaction.editReply('This item is no longer available.');
+        }
+        
+        const item = itemResult.rows[0];
+        
+        // Check for existing request
+        const existingRequestResult = await pool.query(
+          `SELECT id FROM loot_requests 
+           WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
+          [itemId, userId]
+        );
+        
+        if (existingRequestResult.rows.length) {
+          return await interaction.editReply(`You already have a pending request for "${item.name}".`);
+        }
+        
+        // Create loot request
+        const requestResult = await pool.query(
+          `INSERT INTO loot_requests
+           (id, guild_id, storage_item_id, user_id, status, priority, created_at, updated_at)
+           VALUES
+           (gen_random_uuid(), $1, $2, $3, 'Pending', $4, NOW(), NOW())
+           RETURNING id`,
+          [appGuildId, itemId, userId, isNeed ? 1 : 0]
+        );
+        
+        const requestId = requestResult.rows[0].id;
+        
+        // Update the item embed with new request count
+        await updateItemEmbed(itemId);
+        
+        // Send notification to loot channel with approve/deny buttons
+        const requestEmbed = new EmbedBuilder()
+          .setTitle('New Loot Request')
+          .setDescription(`**${interaction.user.username}** has requested **${item.name}** (${priority})`)
+          .setColor('#9c27b0')
+          .setTimestamp()
+          .setFooter({ text: `Request ID: ${requestId}` });
+        
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`approve_loot_${requestId}`)
+              .setLabel('Approve')
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId(`deny_loot_${requestId}`)
+              .setLabel('Deny')
+              .setStyle(ButtonStyle.Danger)
+          );
+        
+        await sendNotificationToConfiguredChannel(
+          appGuildId, 
+          discordGuildId, 
+          'loot', 
+          requestEmbed,
+          null,
+          [row]
+        );
+        
+        await interaction.editReply(`Your ${priority} request for **${item.name}** has been submitted!`);
+      } catch (error) {
+        console.error(`[ERROR] Error processing item request:`, error);
+        await interaction.editReply('An error occurred while processing your request.');
+      }
+    }
+    
+    // Update approve_loot handler
+    else if (customId.startsWith('approve_loot_')) {
+      const requestId = customId.replace('approve_loot_', '');
+      await interaction.deferReply();
+      
+      try {
+        // Get Discord server ID and app guild ID
+        const discordGuildId = interaction.guild?.id;
+        
+        // Get appGuildId from database
+        const mappingResult = await pool.query(
+          'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+          [discordGuildId]
+        );
+        
+        if (!mappingResult.rows.length) {
+          return await interaction.editReply('This Discord server is not linked to an application guild.');
+        }
+        
+        const appGuildId = mappingResult.rows[0].app_guild_id;
+        
+        // Get request details first
+        const requestResult = await pool.query(
+          `SELECT lr.*, 
+                gsi.quantity, 
+                i.name as item_name,
+                u.username, u.discord_id,
+                gsi.id as storage_item_id
+          FROM loot_requests lr
+          JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
+          JOIN items i ON gsi.item_id = i.id
+          JOIN users u ON lr.user_id = u.id
+          WHERE lr.id = $1 AND lr.guild_id = $2`,
+          [requestId, appGuildId]
+        );
+        
+        if (!requestResult.rows || requestResult.rows.length === 0) {
+          return await interaction.editReply('Request not found or already processed.');
+        }
+        
+        const request = requestResult.rows[0];
+        const storageItemId = request.storage_item_id;
+        
+        // Update request and decrease quantity
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          
+          // Update request status
+          await client.query(
+            `UPDATE loot_requests 
+            SET status = 'Approved', updated_at = NOW()
+            WHERE id = $1`,
+            [requestId]
+          );
+          
+          // Decrement item quantity
+          await client.query(
+            `UPDATE guild_storage_items
+            SET quantity = quantity - 1, updated_at = NOW()
+            WHERE id = $1 AND quantity > 0`,
+            [storageItemId]
+          );
+          
+          // Deny all other pending requests
+          await client.query(
+            `UPDATE loot_requests 
+             SET status = 'Denied - Granted to other', updated_at = NOW()
+             WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+            [storageItemId, requestId]
+          );
+          
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
+        }
+        
+        // Mark item as claimed in the UI
+        await markItemAsClaimed(storageItemId, request.username);
+        
+        // Send notification to the user
+        if (request.discord_id) {
+          try {
+            const user = await interaction.client.users.fetch(request.discord_id);
+            await user.send(`✅ Your request for **${request.item_name}** has been approved!`);
+          } catch (dmError) {
+            console.error(`Failed to DM user: ${dmError.message}`);
+          }
+        }
+        
+        await interaction.editReply({
+          content: `✅ Loot request approved. **${request.item_name}** will be given to **${request.username}**.`
+        });
+      } catch (error) {
+        console.error(`[ERROR] Error approving request:`, error);
+        await interaction.editReply('An error occurred while approving the request.');
+      }
+    }
+  }
+
 });
 
 // Register slash commands
@@ -3657,14 +3974,110 @@ let lastItemPoll = new Date();
 const itemRequestMessages = new Map();
 
 
-client.on('ready', () => {
+client.on('ready', async () => {
   console.log(`Logged in as ${client.user.tag}!`);
+  
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS item_message_tracking (
+        id SERIAL PRIMARY KEY,
+        item_id UUID NOT NULL,
+        guild_id UUID NOT NULL,
+        channel_id VARCHAR(255) NOT NULL,
+        message_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(item_id)
+      )
+    `);
+    console.log('Item message tracking table verified');
+    
+    // Create event message tracking table if it doesn't exist already
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS discord_event_messages (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guild_id UUID NOT NULL,
+          event_id UUID NOT NULL,
+          channel_id VARCHAR(255) NOT NULL,
+          message_id VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(event_id)
+        )
+      `);
+      console.log('Event message tracking table verified');
+    } catch (tableError) {
+      console.error(`[ERROR] Error creating discord_event_messages table: ${tableError.message}`);
+      // Continue even if table creation fails
+    }
+    
+    // Create absentees table if it doesn't exist
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS event_absentees (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guild_id UUID NOT NULL,
+          event_id UUID NOT NULL,
+          user_id UUID NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW(),
+          UNIQUE(event_id, user_id)
+        )
+      `);
+      console.log('Event absentees table verified');
+    } catch (tableError) {
+      console.error(`[ERROR] Error creating event_absentees table: ${tableError.message}`);
+      // Continue even if table creation fails
+    }
+    
+    // Create channel config table if it doesn't exist
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS discord_channel_config (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guild_id UUID NOT NULL,
+          discord_guild_id VARCHAR(255) NOT NULL,
+          channel_id VARCHAR(255) NOT NULL,
+          channel_type VARCHAR(50) NOT NULL,
+          enabled BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('Channel configuration table verified');
+    } catch (tableError) {
+      console.error(`[ERROR] Error creating discord_channel_config table: ${tableError.message}`);
+      // Continue even if table creation fails
+    }
+  } catch (error) {
+    console.error('Error setting up database tables:', error);
+  }
+  
+  // Register slash commands
   registerCommands();
+  
+  // Set up scheduled tasks
   setupScheduledPostings(client);
+  
+  // Verify channel configurations
   verifyEventChannelConfigurations();
   
+  // Start polling for new items
   console.log('Starting storage item polling...');
   startItemPolling();
+  
+  // Log bot status
+  const guildCount = client.guilds.cache.size;
+  const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+  
+  console.log(`----- Bot Status -----`);
+  console.log(`Connected to ${guildCount} Discord servers`);
+  console.log(`Serving approximately ${totalMembers} users`);
+  console.log(`Running in ${process.env.NODE_ENV || 'production'} mode`);
+  console.log(`----------------------`);
+  
+  // Update bot status message
+  client.user.setActivity(`/${process.env.COMMAND_PREFIX || 'event'} help`, { type: 'LISTENING' });
 });
 
 function startItemPolling() {
