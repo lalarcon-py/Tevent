@@ -1765,7 +1765,9 @@ client.on('interactionCreate', async (interaction) => {
       // Handle approve_loot button
       else if (customId.startsWith('approve_loot_')) {
         const requestId = customId.replace('approve_loot_', '');
-        await interaction.deferReply();
+        
+        // Immediately defer the reply to get more time
+        await interaction.deferReply().catch(console.error);
         
         try {
           // Get Discord server ID and app guild ID
@@ -1805,8 +1807,9 @@ client.on('interactionCreate', async (interaction) => {
           const request = requestResult.rows[0];
           const storageItemId = request.storage_item_id;
           
-          // Check if quantity will reach zero
+          // Check if this is the last of the item
           const willReachZero = request.quantity <= 1;
+          console.log(`[DEBUG] Item quantity: ${request.quantity}, Will reach zero: ${willReachZero}`);
           
           // Update request and handle item in a transaction
           const dbClient = await pool.connect();
@@ -1823,7 +1826,7 @@ client.on('interactionCreate', async (interaction) => {
             
             if (willReachZero) {
               // Item quantity will reach zero - remove it from storage
-              console.log(`Item ${storageItemId} quantity will reach zero - removing from storage`);
+              console.log(`[INFO] Item ${storageItemId} quantity will reach zero - removing from storage`);
               
               // Deny all other pending requests with special status
               await dbClient.query(
@@ -1868,13 +1871,16 @@ client.on('interactionCreate', async (interaction) => {
           await markItemAsClaimed(storageItemId, request.username);
           
           // Send notification to the user
-          if (request.discord_id) {
-            try {
+          try {
+            if (request.discord_id) {
               const user = await interaction.client.users.fetch(request.discord_id);
-              await user.send(`✅ Your request for **${request.item_name}** has been approved!`);
-            } catch (dmError) {
-              console.error(`Failed to DM user: ${dmError.message}`);
+              await user.send(`✅ Your request for **${request.item_name}** has been approved!`).catch(err => 
+                console.log(`Could not DM user ${request.discord_id}: ${err.message}`)
+              );
             }
+          } catch (dmError) {
+            console.error(`Failed to DM user: ${dmError.message}`);
+            // Continue even if DM fails
           }
           
           const responseMessage = willReachZero
@@ -1886,7 +1892,14 @@ client.on('interactionCreate', async (interaction) => {
           });
         } catch (error) {
           console.error(`[ERROR] Error approving request:`, error);
-          await interaction.editReply('An error occurred while approving the request.');
+          try {
+            // Only try to reply if we haven't already
+            if (!interaction.replied) {
+              await interaction.editReply('An error occurred while approving the request.');
+            }
+          } catch (replyError) {
+            console.error(`Error sending error message: ${replyError.message}`);
+          }
         }
       }
       
