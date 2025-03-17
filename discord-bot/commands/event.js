@@ -157,7 +157,11 @@ module.exports = {
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_DPS`)
                 .setLabel('Sign up as DPS')
-                .setStyle(ButtonStyle.Danger)
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder()
+                .setCustomId(`signup_${event.id}_ABSENT`)
+                .setLabel('Mark as Absent')
+                .setStyle(ButtonStyle.Secondary)
             );
           
           // Get teams for this event
@@ -207,9 +211,31 @@ module.exports = {
               if (event) {
                 const embed = this.createEventEmbed(event);
                 
+                // Create signup buttons
+                const row = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_TANK`)
+                      .setLabel('Sign up as Tank')
+                      .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_HEALER`)
+                      .setLabel('Sign up as Healer')
+                      .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_DPS`)
+                      .setLabel('Sign up as DPS')
+                      .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_ABSENT`)
+                      .setLabel('Mark as Absent')
+                      .setStyle(ButtonStyle.Secondary)
+                  );
+                
                 await interaction.followUp({
                   content: 'Event signup updated:',
-                  embeds: [embed]
+                  embeds: [embed],
+                  components: [row]
                 });
               }
             } catch (refreshError) {

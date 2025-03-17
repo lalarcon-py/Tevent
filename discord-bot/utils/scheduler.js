@@ -59,10 +59,32 @@ module.exports = (client) => {
                 // Event starts in the next hour - send reminder
                 const embed = createEventEmbed(event);
                 
+                // Create signup buttons
+                const row = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_TANK`)
+                      .setLabel('Sign up as Tank')
+                      .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_HEALER`)
+                      .setLabel('Sign up as Healer')
+                      .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_DPS`)
+                      .setLabel('Sign up as DPS') 
+                      .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_ABSENT`)
+                      .setLabel('Mark as Absent')
+                      .setStyle(ButtonStyle.Secondary)
+                  );
+                
                 try {
                   await channel.send({
                     content: `@here Event starting in less than an hour!`,
-                    embeds: [embed]
+                    embeds: [embed],
+                    components: [row]
                   });
                 } catch (sendError) {
                   console.error(`Error sending event reminder to channel ${channelId}:`, sendError);
@@ -184,11 +206,35 @@ module.exports = (client) => {
           
           // Create embeds for each event (up to 10 - Discord limit)
           const embeds = [];
+          const components = [];
           
-          for (const event of todayEvents.slice(0, 10)) {
+          for (const event of todayEvents.slice(0, 5)) { // Limit to 5 events for button rows
             try {
               const embed = createEventEmbed(event);
               embeds.push(embed);
+              
+              // Create signup buttons for each event
+              const row = new ActionRowBuilder()
+                .addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${event.id}_TANK`)
+                    .setLabel(`Tank (${event.title.substring(0, 10)}...)`)
+                    .setStyle(ButtonStyle.Primary),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${event.id}_HEALER`)
+                    .setLabel(`Healer (${event.title.substring(0, 10)}...)`)
+                    .setStyle(ButtonStyle.Success),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${event.id}_DPS`)
+                    .setLabel(`DPS (${event.title.substring(0, 10)}...)`) 
+                    .setStyle(ButtonStyle.Danger),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${event.id}_ABSENT`)
+                    .setLabel(`Absent (${event.title.substring(0, 10)}...)`)
+                    .setStyle(ButtonStyle.Secondary)
+                );
+              
+              components.push(row);
             } catch (embedError) {
               console.error('Error creating event embed:', embedError);
               // Continue with other events
@@ -203,7 +249,8 @@ module.exports = (client) => {
           try {
             await channel.send({
               content: `📅 Events scheduled for today:`,
-              embeds: embeds
+              embeds: embeds,
+              components: components
             });
           } catch (sendError) {
             console.error(`Error sending daily events to channel ${channelId}:`, sendError);

@@ -146,6 +146,9 @@ function createStorageEmbed(items, currentPage, totalPages, dkpEnabled) {
       fieldValue += `\nTrait: ${item.trait}`;
     }
     
+    // Add item ID and request instructions
+    fieldValue += `\n\nID: ${item.id}\nUse \`/storage view ${item.id}\` to request this item`;
+    
     embed.addFields({
       name: itemName,
       value: fieldValue,
