@@ -120,7 +120,7 @@ async function updateItemEmbed(itemId) {
 }
 
 // Function to mark item as claimed
-async function markItemAsClaimed(itemId, claimedBy) {
+async function markItemAsClaimed(itemId, claimedBy, itemName = null, itemType = null) {
   try {
     // Get message info
     const trackingResult = await pool.query(
@@ -131,87 +131,111 @@ async function markItemAsClaimed(itemId, claimedBy) {
     if (!trackingResult.rows.length) return false;
     const tracking = trackingResult.rows[0];
     
-    // Get item details - might not exist if item was deleted
-    const itemResult = await pool.query(
-      `SELECT gsi.*, i.name, i.type, i.icon 
-       FROM guild_storage_items gsi
-       JOIN items i ON gsi.item_id = i.id
-       WHERE gsi.id = $1`,
-      [itemId]
-    );
+    // If itemName and itemType are provided, use them directly
+    let finalItemName = itemName || "Unknown Item";
+    let finalItemType = itemType || "Unknown";
     
-    // Try to get name from the database if item is gone
-    let itemName = "Unknown Item";
-    let itemType = "Unknown";
-    
-    if (itemResult.rows.length) {
-      itemName = itemResult.rows[0].name || "Unknown Item";
-      itemType = itemResult.rows[0].type || "Unknown";
-    } else {
-      // Try to get info from loot requests
-      const requestResult = await pool.query(
-        `SELECT i.name, i.type 
-         FROM loot_requests lr
-         JOIN items i ON i.id = (
-           SELECT item_id FROM guild_storage_items WHERE id = lr.storage_item_id LIMIT 1
-         )
-         WHERE lr.storage_item_id = $1 LIMIT 1`,
+    // Only try to get item details from the database if name and type weren't provided
+    if (!itemName || !itemType) {
+      console.log(`[DEBUG] No item name/type provided, trying to fetch from database for item ${itemId}`);
+      // Get item details - might not exist if item was deleted
+      const itemResult = await pool.query(
+        `SELECT gsi.*, i.name, i.type, i.icon 
+         FROM guild_storage_items gsi
+         JOIN items i ON gsi.item_id = i.id
+         WHERE gsi.id = $1`,
         [itemId]
       );
       
-      if (requestResult.rows.length) {
-        itemName = requestResult.rows[0].name;
-        itemType = requestResult.rows[0].type;
+      if (itemResult.rows.length) {
+        finalItemName = itemResult.rows[0].name || "Unknown Item";
+        finalItemType = itemResult.rows[0].type || "Unknown";
+        console.log(`[DEBUG] Found item in database: ${finalItemName}, type: ${finalItemType}`);
+      } else {
+        console.log(`[DEBUG] Item not found in storage table, trying to get from loot requests`);
+        // Try to get info from loot requests - improved query to get more reliable results
+        const requestResult = await pool.query(
+          `SELECT i.name, i.type 
+           FROM items i
+           JOIN guild_storage_items gsi ON i.id = gsi.item_id
+           WHERE gsi.id = $1
+           LIMIT 1`,
+          [itemId]
+        );
+        
+        if (requestResult.rows.length) {
+          finalItemName = requestResult.rows[0].name;
+          finalItemType = requestResult.rows[0].type;
+          console.log(`[DEBUG] Found item info from related tables: ${finalItemName}, type: ${finalItemType}`);
+        } else {
+          console.log(`[DEBUG] Could not find item info, using default values`);
+        }
       }
+    } else {
+      console.log(`[DEBUG] Using provided item name: ${finalItemName}, type: ${finalItemType}`);
     }
     
-    // Get the message
-    const channel = await client.channels.fetch(tracking.channel_id);
-    if (!channel) return false;
-    
-    const message = await channel.messages.fetch(tracking.message_id);
-    if (!message) return false;
-    
-    // Create updated embed showing claimed status
-    const embed = new EmbedBuilder()
-      .setTitle('Item Claimed')
-      .setDescription(`This item has been granted to **${claimedBy}**`)
-      .addFields(
-        { name: '📦 Item', value: `**${itemName}**`, inline: false },
-        { name: 'Type', value: itemType, inline: true },
-        { name: 'Requests', value: `🔴 Need: ${tracking.need_count} | 💰 Greed: ${tracking.greed_count}`, inline: true },
-        { name: 'Status', value: '✅ Granted', inline: true }
-      )
-      .setColor('#9E9E9E') // Gray color to indicate no longer available
-      .setTimestamp()
-      .setFooter({ text: `Item ID: ${itemId} • No longer available` });
-    
-    // Create disabled buttons
-    const disabledNeedButton = new ButtonBuilder()
-      .setCustomId(`need_item_${itemId}`)
-      .setLabel('Need (High Priority)')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('🔴')
-      .setDisabled(true);
+    // Get the message channel
+    try {
+      const channel = await client.channels.fetch(tracking.channel_id);
+      if (!channel) {
+        console.error(`[ERROR] Channel ${tracking.channel_id} not found`);
+        return false;
+      }
       
-    const disabledGreedButton = new ButtonBuilder()
-      .setCustomId(`greed_item_${itemId}`)
-      .setLabel('Greed (Low Priority)')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('💰')
-      .setDisabled(true);
-    
-    const disabledRow = new ActionRowBuilder().addComponents(disabledNeedButton, disabledGreedButton);
-    
-    // Update message with disabled buttons
-    await message.edit({ 
-      embeds: [embed],
-      components: [disabledRow]
-    });
-    
-    return true;
+      // Get the message
+      const message = await channel.messages.fetch(tracking.message_id);
+      if (!message) {
+        console.error(`[ERROR] Message ${tracking.message_id} not found`);
+        return false;
+      }
+      
+      // Create updated embed showing claimed status
+      const embed = new EmbedBuilder()
+        .setTitle('Item Claimed')
+        .setDescription(`This item has been granted to **${claimedBy}**`)
+        .addFields(
+          { name: '📦 Item', value: `**${finalItemName}**`, inline: false },
+          { name: 'Type', value: finalItemType, inline: true },
+          { name: 'Requests', value: `🔴 Need: ${tracking.need_count} | 💰 Greed: ${tracking.greed_count}`, inline: true },
+          { name: 'Status', value: '✅ Granted', inline: true }
+        )
+        .setColor('#9E9E9E') // Gray color to indicate no longer available
+        .setTimestamp()
+        .setFooter({ text: `Item ID: ${itemId} • No longer available` });
+      
+      // Create disabled buttons
+      const disabledNeedButton = new ButtonBuilder()
+        .setCustomId(`need_item_${itemId}`)
+        .setLabel('Need (High Priority)')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔴')
+        .setDisabled(true);
+        
+      const disabledGreedButton = new ButtonBuilder()
+        .setCustomId(`greed_item_${itemId}`)
+        .setLabel('Greed (Low Priority)')
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji('💰')
+        .setDisabled(true);
+      
+      const disabledRow = new ActionRowBuilder().addComponents(disabledNeedButton, disabledGreedButton);
+      
+      // Update message with disabled buttons
+      await message.edit({ 
+        embeds: [embed],
+        components: [disabledRow]
+      });
+      
+      console.log(`[INFO] Successfully marked item ${itemId} as claimed by ${claimedBy}`);
+      return true;
+    } catch (error) {
+      console.error(`[ERROR] Discord API error: ${error.message}`);
+      return false;
+    }
   } catch (error) {
-    console.error(`Error marking item as claimed:`, error);
+    console.error(`[ERROR] Error marking item as claimed: ${error.message}`);
+    console.error(error.stack);
     return false;
   }
 }
@@ -1355,6 +1379,7 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
       `SELECT lr.*, 
             gsi.quantity, 
             i.name as item_name,
+            i.type as item_type,
             u.username, u.discord_id,
             gsi.id as storage_item_id
       FROM loot_requests lr
@@ -1374,6 +1399,8 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
     
     const request = requestResult.rows[0];
     const storageItemId = request.storage_item_id;
+    const itemName = request.item_name;
+    const itemType = request.item_type || 'Unknown';
     const willReachZero = request.quantity <= 1;
     
     // Process with a transaction
@@ -1400,16 +1427,14 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
           [storageItemId, requestId]
         );
         
-        // 3. Delete the item from storage - ALSO DELETE ALL REFERENCES 
-        // This is key - we need to remove all references to the item first
-        // We've already updated all pending requests, so we can safely delete them now
+        // 3. Delete all loot requests for this item first to handle foreign key constraints
         await dbClient.query(
           `DELETE FROM loot_requests 
            WHERE storage_item_id = $1`,
           [storageItemId]
         );
         
-        // Now we can safely delete the item
+        // 4. Now we can safely delete the item
         await dbClient.query(
           `DELETE FROM guild_storage_items WHERE id = $1`,
           [storageItemId]
@@ -1433,27 +1458,28 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
       }
       
       await dbClient.query('COMMIT');
+      console.log(`[INFO] Transaction committed successfully for request ${requestId}`);
       
       // Send notification to the user (outside the transaction)
       if (request.discord_id) {
         try {
           const user = await client.users.fetch(request.discord_id);
-          await user.send(`✅ Your request for **${request.item_name}** has been approved!`).catch(() => {});
+          await user.send(`✅ Your request for **${itemName}** has been approved!`).catch(() => {});
         } catch (dmError) {
           console.error(`Failed to DM user: ${dmError.message}`);
         }
       }
       
-      // Update UI elements - this might fail if the item is deleted, so we need to handle that
+      // Update UI elements with the stored item name and type
       try {
-        await markItemAsClaimed(storageItemId, request.username);
+        await markItemAsClaimed(storageItemId, request.username, itemName, itemType);
       } catch (uiError) {
         console.error(`Error marking item as claimed: ${uiError.message}`);
       }
       
       const responseMessage = willReachZero
-        ? `✅ Request approved. **${request.item_name}** will be given to **${request.username}**. This was the last available item.`
-        : `✅ Request approved. **${request.item_name}** will be given to **${request.username}**.`;
+        ? `✅ Request approved. **${itemName}** will be given to **${request.username}**. This was the last available item.`
+        : `✅ Request approved. **${itemName}** will be given to **${request.username}**.`;
       
       return { 
         success: true, 
@@ -1471,6 +1497,22 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
   } catch (error) {
     console.error(`Error processing loot approval: ${error}`);
     throw error;
+  }
+}
+
+async function getItemType(dbClient, storageItemId) {
+  try {
+    const typeResult = await dbClient.query(
+      `SELECT i.type FROM guild_storage_items gsi
+       JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.id = $1`,
+      [storageItemId]
+    );
+    
+    return typeResult.rows.length ? typeResult.rows[0].type : 'Unknown';
+  } catch (error) {
+    console.error(`Error getting item type: ${error.message}`);
+    return 'Unknown';
   }
 }
 
