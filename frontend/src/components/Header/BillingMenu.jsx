@@ -4,15 +4,23 @@ import {
   Menu, MenuItem, Divider, Typography, Dialog, DialogTitle,
   DialogContent, DialogActions, Button, TextField, Box,
   ListItemIcon, ListItemText, List, ListItem, Card, CardContent,
-  FormControl, FormLabel, RadioGroup, FormControlLabel, Radio
+  FormControl, FormLabel, RadioGroup, FormControlLabel, Radio,
+  useMediaQuery, useTheme
 } from '@mui/material';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import HistoryIcon from '@mui/icons-material/History';
+import { useAuth } from '../../contexts/AuthContext';
 
 const BillingMenu = ({ anchorEl, open, handleClose }) => {
   const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
   const [openInvoicesDialog, setOpenInvoicesDialog] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { user } = useAuth();
+  
+  // Only show menu for Guild Masters
+  const isGuildMaster = user?.role === 'Guild Master';
   
   // Sample data (replace with actual data fetching)
   const invoices = [
@@ -36,6 +44,9 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
     setOpenPaymentDialog(false);
   };
   
+  // If not Guild Master, don't render the menu
+  if (!isGuildMaster) return null;
+  
   return (
     <>
       <Menu
@@ -44,7 +55,7 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
         onClose={handleClose}
         PaperProps={{
           sx: {
-            width: 240,
+            width: isMobile ? '100%' : 240,
             maxWidth: '100%',
             mt: 1.5,
             bgcolor: '#1e1e1e',
@@ -87,6 +98,7 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
         }}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>Update Payment Method</DialogTitle>
         <DialogContent>
@@ -124,7 +136,12 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
             />
           </Box>
           
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row', 
+            gap: 2, 
+            mb: 2 
+          }}>
             <TextField
               label="Expiration Date"
               placeholder="MM/YY"
@@ -141,7 +158,7 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
               label="CVV"
               placeholder="123"
               sx={{
-                width: '80px',
+                width: isMobile ? '100%' : '80px',
                 '& .MuiOutlinedInput-root': {
                   color: 'white',
                   '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
@@ -164,11 +181,20 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
             }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPaymentDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button 
+            onClick={() => setOpenPaymentDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Cancel
           </Button>
-          <Button onClick={handlePaymentSubmit} variant="contained" color="primary">
+          <Button 
+            onClick={handlePaymentSubmit} 
+            variant="contained" 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Save Payment Method
           </Button>
         </DialogActions>
@@ -183,6 +209,7 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
         }}
         maxWidth="md"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>Billing History</DialogTitle>
         <DialogContent>
@@ -198,7 +225,13 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
                   }}
                 >
                   <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: isMobile ? 'column' : 'row',
+                      justifyContent: 'space-between', 
+                      alignItems: isMobile ? 'flex-start' : 'center',
+                      gap: isMobile ? 1 : 0
+                    }}>
                       <Box>
                         <Typography color="white" variant="subtitle1">
                           Pro Plan Subscription
@@ -207,7 +240,7 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
                           Invoice #{invoice.id} • {new Date(invoice.date).toLocaleDateString()}
                         </Typography>
                       </Box>
-                      <Box sx={{ textAlign: 'right' }}>
+                      <Box sx={{ textAlign: isMobile ? 'left' : 'right' }}>
                         <Typography color="white" variant="subtitle1">
                           {invoice.amount}
                         </Typography>
@@ -234,8 +267,12 @@ const BillingMenu = ({ anchorEl, open, handleClose }) => {
             ))}
           </List>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenInvoicesDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1 }}>
+          <Button 
+            onClick={() => setOpenInvoicesDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Close
           </Button>
         </DialogActions>

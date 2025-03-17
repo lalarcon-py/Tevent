@@ -2,13 +2,17 @@
 import { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
-  TextField, Typography, Box, Chip, CircularProgress, Alert
+  TextField, Typography, Box, Chip, CircularProgress, Alert,
+  useMediaQuery, useTheme
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { useAuth } from '../../contexts/AuthContext';
 
 const SupportForm = ({ open, handleClose }) => {
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [formData, setFormData] = useState({
     email: user?.email || '',
     subject: '',
@@ -19,7 +23,6 @@ const SupportForm = ({ open, handleClose }) => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
 
-
   useEffect(() => {
     if (user?.email && !formData.email) {
       setFormData(prev => ({
@@ -28,8 +31,6 @@ const SupportForm = ({ open, handleClose }) => {
       }));
     }
   }, [user, formData.email]);
-
-  
   
   const handleFileChange = (event) => {
     const newFiles = Array.from(event.target.files);
@@ -38,8 +39,6 @@ const SupportForm = ({ open, handleClose }) => {
       images: [...formData.images, ...newFiles].slice(0, 5) // Limit to 5 files
     });
   };
-
-  
   
   const handleRemoveFile = (index) => {
     setFormData({
@@ -113,6 +112,7 @@ const SupportForm = ({ open, handleClose }) => {
       onClose={handleClose}
       maxWidth="md"
       fullWidth
+      fullScreen={isMobile}
       PaperProps={{
         sx: { bgcolor: '#1e1e1e', color: 'white' }
       }}
@@ -174,7 +174,7 @@ const SupportForm = ({ open, handleClose }) => {
               name="description"
               label="Description"
               multiline
-              rows={5}
+              rows={isMobile ? 4 : 5}
               required
               fullWidth
               margin="normal"
@@ -198,11 +198,12 @@ const SupportForm = ({ open, handleClose }) => {
                 {formData.images.map((file, index) => (
                   <Chip
                     key={index}
-                    label={file.name}
+                    label={file.name.length > 20 ? `${file.name.substring(0, 17)}...` : file.name}
                     onDelete={() => handleRemoveFile(index)}
                     sx={{ 
                       bgcolor: 'rgba(144, 202, 249, 0.2)',
-                      color: 'white'
+                      color: 'white',
+                      margin: '2px'
                     }}
                   />
                 ))}
@@ -223,6 +224,7 @@ const SupportForm = ({ open, handleClose }) => {
                   component="span"
                   startIcon={<CloudUploadIcon />}
                   disabled={formData.images.length >= 5}
+                  fullWidth={isMobile}
                 >
                   Upload Screenshots
                 </Button>
@@ -234,8 +236,12 @@ const SupportForm = ({ open, handleClose }) => {
           </>
         )}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} color="primary">
+      <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+        <Button 
+          onClick={handleClose} 
+          color="primary"
+          fullWidth={isMobile}
+        >
           Cancel
         </Button>
         <Button 
@@ -243,6 +249,7 @@ const SupportForm = ({ open, handleClose }) => {
           variant="contained" 
           color="primary"
           disabled={submitting || success}
+          fullWidth={isMobile}
         >
           {submitting ? <CircularProgress size={24} /> : 'Submit Ticket'}
         </Button>

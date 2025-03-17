@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 import { 
   Menu, MenuItem, Divider, Typography, Dialog, DialogTitle, 
   DialogContent, DialogActions, Button, TextField, Box,
-  ListItemIcon, ListItemText, Avatar, Link, AlertDialog
+  ListItemIcon, ListItemText, Avatar, Link, AlertDialog,
+  useMediaQuery, useTheme
 } from '@mui/material';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import EditIcon from '@mui/icons-material/Edit';
@@ -14,8 +15,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import LeaveGuildDialog from '../Guild/LeaveGuildDialog';
 import EmailIcon from '@mui/icons-material/Email';
 
-
 const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [email, setEmail] = useState('');
   const [openEmailDialog, setOpenEmailDialog] = useState(false);
   const { user, logout } = useAuth();
@@ -302,7 +304,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
         onClose={handleClose}
         PaperProps={{
           sx: {
-            width: 240,
+            width: isMobile ? '100%' : 240,
             maxWidth: '100%',
             mt: 1.5,
             bgcolor: '#1e1e1e',
@@ -376,6 +378,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       <Dialog 
         open={openEditDialog} 
         onClose={() => setOpenEditDialog(false)}
+        fullScreen={isMobile}
         PaperProps={{
           sx: { bgcolor: '#1e1e1e', color: 'white' }
         }}
@@ -400,11 +403,20 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenEditDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button 
+            onClick={() => setOpenEditDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Cancel
           </Button>
-          <Button onClick={handleUsernameSubmit} variant="contained" color="primary">
+          <Button 
+            onClick={handleUsernameSubmit} 
+            variant="contained" 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Save
           </Button>
         </DialogActions>
@@ -414,6 +426,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       <Dialog 
         open={openEmailDialog} 
         onClose={() => setOpenEmailDialog(false)}
+        fullScreen={isMobile}
         PaperProps={{
           sx: { bgcolor: '#1e1e1e', color: 'white' }
         }}
@@ -442,11 +455,20 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenEmailDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button 
+            onClick={() => setOpenEmailDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Cancel
           </Button>
-          <Button onClick={handleEmailSubmit} variant="contained" color="primary">
+          <Button 
+            onClick={handleEmailSubmit} 
+            variant="contained" 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Save
           </Button>
         </DialogActions>
@@ -456,6 +478,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       <Dialog 
         open={openGearDialog} 
         onClose={() => setOpenGearDialog(false)}
+        fullScreen={isMobile}
         PaperProps={{
           sx: { bgcolor: '#1e1e1e', color: 'white' }
         }}
@@ -475,7 +498,12 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
               onChange={handleFileChange}
             />
             <label htmlFor="gear-screenshot-upload">
-              <Button variant="outlined" component="span" startIcon={<PhotoCameraIcon />}>
+              <Button 
+                variant="outlined" 
+                component="span" 
+                startIcon={<PhotoCameraIcon />}
+                fullWidth={isMobile}
+              >
                 Select Screenshot
               </Button>
             </label>
@@ -491,13 +519,21 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
               <img 
                 src={URL.createObjectURL(gearImage)} 
                 alt="Gear Preview" 
-                style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }} 
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: isMobile ? '240px' : '200px', 
+                  objectFit: 'contain' 
+                }} 
               />
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenGearDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button 
+            onClick={() => setOpenGearDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Cancel
           </Button>
           <Button 
@@ -505,6 +541,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             variant="contained" 
             color="primary"
             disabled={!gearImage}
+            fullWidth={isMobile}
           >
             Upload
           </Button>
@@ -515,6 +552,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       <Dialog 
         open={openLinkDialog} 
         onClose={() => setOpenLinkDialog(false)}
+        fullScreen={isMobile}
         PaperProps={{
           sx: { bgcolor: '#1e1e1e', color: 'white' }
         }}
@@ -554,8 +592,12 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             </Link>
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenLinkDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button 
+            onClick={() => setOpenLinkDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Cancel
           </Button>
           <Button 
@@ -563,6 +605,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             variant="contained" 
             color="primary"
             disabled={!questlogUrl}
+            fullWidth={isMobile}
           >
             Save Link
           </Button>
@@ -573,6 +616,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       <Dialog 
         open={openDeleteDialog} 
         onClose={() => setOpenDeleteDialog(false)}
+        fullScreen={isMobile}
         PaperProps={{
           sx: { bgcolor: '#1e1e1e', color: 'white' }
         }}
@@ -616,8 +660,12 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)} color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 1, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button 
+            onClick={() => setOpenDeleteDialog(false)} 
+            color="primary"
+            fullWidth={isMobile}
+          >
             Cancel
           </Button>
           <Button 
@@ -625,6 +673,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
             variant="contained" 
             color="error"
             disabled={deleteConfirmation !== "DELETE"}
+            fullWidth={isMobile}
           >
             Delete Forever
           </Button>
