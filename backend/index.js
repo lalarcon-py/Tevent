@@ -48,6 +48,45 @@ const frontendURL = process.env.NODE_ENV === 'production'
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// New function for Chrome mobile compatibility
+function secureProxyMiddleware(req, res, next) {
+  // Fix protocol detection for proper cookie security
+  if (req.headers['x-forwarded-proto'] === 'https' || 
+      req.headers['x-forwarded-ssl'] === 'on' ||
+      process.env.NODE_ENV === 'production') {
+    req.secure = true;
+  }
+  next();
+}
+
+// New function for Chrome cookie handling
+function chromeCompatibilityMiddleware(req, res, next) {
+  const userAgent = req.headers['user-agent'] || '';
+  const isChromeOnMobile = /Chrome/i.test(userAgent) && 
+                          /Android|iPhone|iPad|iPod/i.test(userAgent);
+  
+  if (isChromeOnMobile) {
+    // Store the original cookie function
+    const originalCookie = res.cookie;
+    
+    // Override cookie function for Chrome mobile
+    res.cookie = function(name, value, options) {
+      options = options || {};
+      // Ensure SameSite is set properly for Chrome
+      if (process.env.NODE_ENV === 'production') {
+        options.sameSite = 'none';
+        options.secure = true;
+      }
+      return originalCookie.call(this, name, value, options);
+    };
+  }
+  next();
+}
+
+// Apply new middleware
+app.use(secureProxyMiddleware);
+app.use(chromeCompatibilityMiddleware);
+
 // Database connection check
 sequelize.authenticate()
  .then(async () => {
@@ -515,6 +554,89 @@ app.put('/api/members/:id', async (req, res) => {
   }
 });
 
+// New function for Chrome-specific auth handling
+function discordAuthForChrome(req, res, next) {
+  const userAgent = req.headers['user-agent'] || '';
+  const isChromeOnMobile = /Chrome/i.test(userAgent) && 
+                          /Android|iPhone|iPad|iPod/i.test(userAgent);
+  const redirectUrl = req.query.redirectUrl || '';
+  
+  if (isChromeOnMobile) {
+    // Store redirect URL in session for Chrome mobile
+    req.session.chromeRedirectUrl = redirectUrl;
+    console.log('Chrome Mobile: Storing redirect URL in session:', redirectUrl);
+    
+    // Use a simpler state for Chrome
+    passport.authenticate('discord', { 
+      scope: ['identify', 'guilds']
+    })(req, res, next);
+  } else {
+    // Continue to your existing handler
+    next();
+  }
+}
+
+// New function for Chrome auth callback handling
+function handleChromeAuthCallback(req, res, next) {
+  const userAgent = req.headers['user-agent'] || '';
+  const isChromeOnMobile = /Chrome/i.test(userAgent) && 
+                          /Android|iPhone|iPad|iPod/i.test(userAgent);
+  
+  if (isChromeOnMobile && req.session.chromeRedirectUrl) {
+    console.log('Chrome Mobile: Retrieving redirect URL from session');
+    
+    // Get the user's guild membership
+    db.GuildMember.findOne({
+      where: { user_id: req.user.id }
+    }).then(guildMember => {
+      const baseRedirect = req.session.chromeRedirectUrl || 
+                          (process.env.FRONTEND_URL || 'http://localhost:3002');
+      delete req.session.chromeRedirectUrl;
+      
+      if (guildMember) {
+        res.redirect(`${baseRedirect}/guilds/${guildMember.guild_id}/dashboard`);
+      } else {
+        res.redirect(`${baseRedirect}/guilds/setup`);
+      }
+    }).catch(error => {
+      console.error('Chrome auth callback error:', error);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/error`);
+    });
+  } else {
+    // Continue to your existing callback handler
+    next();
+  }
+}
+
+// Add debug route
+app.get('/api/debug-auth', (req, res) => {
+  // Don't reveal sensitive information
+  const sessionInfo = req.session ? {
+    exists: true,
+    authenticated: req.isAuthenticated(),
+    cookie: {
+      maxAge: req.session.cookie.maxAge,
+      expires: req.session.cookie.expires,
+      secure: req.session.cookie.secure,
+      httpOnly: req.session.cookie.httpOnly,
+      sameSite: req.session.cookie.sameSite
+    }
+  } : 'missing';
+  
+  res.json({
+    userAgent: req.headers['user-agent'],
+    secure: req.secure,
+    protocol: req.protocol,
+    host: req.headers.host,
+    origin: req.headers.origin,
+    referrer: req.headers.referer,
+    cookies: req.cookies ? 'present' : 'missing',
+    sessionInfo,
+    xForwardedProto: req.headers['x-forwarded-proto'],
+    xForwardedFor: req.headers['x-forwarded-for']
+  });
+});
+
 // Passport Discord Strategy
 passport.use(new DiscordStrategy({
   clientID: process.env.DISCORD_CLIENT_ID,
@@ -576,12 +698,23 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Authentication routes
+// Authentication routes - Apply Chrome-specific handling
+app.get('/auth/discord', discordAuthForChrome, (req, res, next) => {
+  const redirectUrl = req.query.redirectUrl || '';
+  const state = Buffer.from(JSON.stringify({ redirectUrl })).toString('base64');
+  
+  passport.authenticate('discord', { 
+    state,
+    scope: ['identify', 'guilds']
+  })(req, res, next);
+});
+
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { 
     failureRedirect: '/error', 
     failWithError: true 
   }),
+  handleChromeAuthCallback,
   async (req, res) => {
     try {
       // Check if user is authenticated
@@ -625,16 +758,6 @@ app.get('/auth/discord/callback',
     }
   }
 );
-
-app.get('/auth/discord', (req, res, next) => {
-  const redirectUrl = req.query.redirectUrl || '';
-  const state = Buffer.from(JSON.stringify({ redirectUrl })).toString('base64');
-  
-  passport.authenticate('discord', { 
-    state,
-    scope: ['identify', 'guilds']
-  })(req, res, next);
-});
 
 app.get('/auth/logout', (req, res) => {
   req.logout(err => {
