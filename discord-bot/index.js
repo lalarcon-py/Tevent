@@ -1598,7 +1598,6 @@ client.on('interactionCreate', async (interaction) => {
     else if (interaction.isButton()) {
       const customId = interaction.customId;
       
-      // Handle event signup buttons
       if (customId.startsWith('signup_')) {
         const [_, eventId, role] = customId.split('_');
         await interaction.deferReply({ ephemeral: true });
@@ -1622,28 +1621,28 @@ client.on('interactionCreate', async (interaction) => {
           }
 
           // Get user ID from discord ID
-          const user = await pool.query(
+          const userResult = await pool.query(
             'SELECT id, username FROM users WHERE discord_id = $1',
             [interaction.user.id]
           );
           
-          if (!user.rows || user.rows.length === 0) {
+          if (!userResult.rows || userResult.rows.length === 0) {
             return await interaction.editReply('You need to register on the website first before signing up for events.');
           }
           
-          const userId = user.rows[0].id;
+          const userId = userResult.rows[0].id;
           
           // Get the event details
-          const event = await pool.query(
+          const eventResult = await pool.query(
             'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
             [eventId, appGuildId]
           );
           
-          if (!event.rows || event.rows.length === 0) {
+          if (!eventResult.rows || eventResult.rows.length === 0) {
             return await interaction.editReply('Event not found.');
           }
           
-          const eventDetails = event.rows[0];
+          const eventDetails = eventResult.rows[0];
           
           // Handle "ABSENT" special case
           if (role === 'ABSENT') {
@@ -1657,9 +1656,9 @@ client.on('interactionCreate', async (interaction) => {
             await pool.query(
               `INSERT INTO event_absentees 
                 (id, guild_id, event_id, user_id, created_at, updated_at)
-               VALUES 
+              VALUES 
                 (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-               ON CONFLICT (event_id, user_id) DO NOTHING`,
+              ON CONFLICT (event_id, user_id) DO NOTHING`,
               [appGuildId, eventId, userId]
             );
             
@@ -1746,8 +1745,8 @@ client.on('interactionCreate', async (interaction) => {
             
             const absentees = await pool.query(
               `SELECT COUNT(*) as absent_count
-               FROM event_absentees
-               WHERE event_id = $1`,
+              FROM event_absentees
+              WHERE event_id = $1`,
               [eventId]
             );
             

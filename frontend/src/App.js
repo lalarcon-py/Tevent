@@ -17,6 +17,7 @@ import EventDetails from './components/EventPlanner/EventDetails';
 import TeamPlanner from './components/TeamPlanner/TeamPlanner';
 import { TeamProvider } from './contexts/TeamContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SimulatedRoleProvider } from './contexts/SimulatedRoleContext';
 import AuthError from './pages/AuthError';
 import theme from './theme';
 import EventSummaries from './components/EventSummaries/EventSummaries';
@@ -32,8 +33,7 @@ import ApplyToGuildPage from './pages/ApplyToGuildPage';
 import AdminPortal from './pages/AdminPortal';
 import DiscordSettingsPage from "./pages/DiscordSettingsPage";
 import DiscordSetupPage from './pages/DiscordSetupPage';
-
-
+import RoleSimulationBanner from './components/admin/RoleSimulationBanner';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -227,6 +227,7 @@ function AppContent() {
     <Router>
       <AppHeader showNavItems={true} />
       <Navigation guildId={currentGuildId} />
+      <RoleSimulationBanner />
       <Box
         component="main"
         sx={{
@@ -278,21 +279,23 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <AuthProvider>
-        <BillingProvider>
-        <GuildProvider>
-          <GuildSettingsProvider>
-            <LootProvider>
-              <AttendanceProvider>
-                <TeamProvider>
-                  <AppContent />
-                </TeamProvider>
-              </AttendanceProvider>
-            </LootProvider>
-          </GuildSettingsProvider>
-        </GuildProvider>
-        </BillingProvider>
-      </AuthProvider>
+      <SimulatedRoleProvider>
+        <AuthProvider>
+          <BillingProvider>
+            <GuildProvider>
+              <GuildSettingsProvider>
+                <LootProvider>
+                  <AttendanceProvider>
+                    <TeamProvider>
+                      <AppContent />
+                    </TeamProvider>
+                  </AttendanceProvider>
+                </LootProvider>
+              </GuildSettingsProvider>
+            </GuildProvider>
+          </BillingProvider>
+        </AuthProvider>
+      </SimulatedRoleProvider>
     </ThemeProvider>
   );
 }

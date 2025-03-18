@@ -21,6 +21,8 @@ import { format } from 'date-fns';
 import axiosInstance from '../config/axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useSimulatedRole } from '../contexts/SimulatedRoleContext';
+import AddFakeUserForm from '../components/admin/AddFakeUserForm';
 
 // Create a custom admin theme to avoid the gradient color issue
 const adminTheme = createTheme({
@@ -63,6 +65,11 @@ const adminTheme = createTheme({
 const AdminPortal = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { setSimulatedRole } = useSimulatedRole();
+  
+  const handleRoleSelect = (role) => {
+    setSimulatedRole(role);
+  };
   
   // General state
   const [loading, setLoading] = useState(true);
@@ -448,6 +455,7 @@ const AdminPortal = () => {
   return (
     <ThemeProvider theme={adminTheme}>
       <Container maxWidth="xl" sx={{ mt: 4 }}>
+        <RoleSimulator onRoleSelect={handleRoleSelect} />
         <Paper sx={{ p: 3, mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <SupervisorAccountIcon sx={{ fontSize: 36, mr: 2, color: '#3b82f6' }} />
@@ -1105,6 +1113,30 @@ const AdminPortal = () => {
                     )}
                   </Paper>
                 </Grid>
+
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Typography variant="h6">Test Tools</Typography>
+                    </Box>
+                    
+                    <AddFakeUserForm 
+                      guildId={selectedGuild?.id} 
+                      guildName={selectedGuild?.name}
+                      onSuccess={() => {
+                        // Refresh guild members after adding a fake user
+                        handleOpenGuildDetails(selectedGuild);
+                        setSuccessMessage('Fake user added successfully!');
+                        setOpenSnackbar(true);
+                      }}
+                    />
+                    
+                    <Typography variant="body2" color="text.secondary">
+                      Fake users can be used for testing features and permissions. They will appear as normal users 
+                      to all guild members but cannot log in.
+                    </Typography>
+                  </Paper>
+                </Grid>
                 
                 <Grid item xs={12}>
                   <Paper sx={{ p: 2 }}>
@@ -1448,5 +1480,33 @@ const AdminPortal = () => {
     </ThemeProvider>
   );
 };
+
+const RoleSimulator = ({ onRoleSelect }) => {
+  const [selectedRole, setSelectedRole] = useState('Guild Member');
+  
+  const handleChange = (event) => {
+    const role = event.target.value;
+    setSelectedRole(role);
+    onRoleSelect(role);
+  };
+  
+  return (
+    <Paper sx={{ p: 2, mb: 3 }}>
+      <Typography variant="h6" gutterBottom>View App As:</Typography>
+      <FormControl fullWidth>
+        <Select
+          value={selectedRole}
+          onChange={handleChange}
+        >
+          <MenuItem value="Guild Member">Guild Member</MenuItem>
+          <MenuItem value="Guild Guardian">Guild Guardian</MenuItem>
+          <MenuItem value="Guild Advisor">Guild Advisor</MenuItem>
+          <MenuItem value="Guild Master">Guild Master</MenuItem>
+        </Select>
+      </FormControl>
+    </Paper>
+  );
+};
+
 
 export default AdminPortal;

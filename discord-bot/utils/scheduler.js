@@ -65,20 +65,24 @@ module.exports = (client) => {
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_TANK`)
                       .setLabel('Sign up as Tank')
+                      .setEmoji('🛡️')
                       .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_HEALER`)
                       .setLabel('Sign up as Healer')
+                      .setEmoji('💚')
                       .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_DPS`)
                       .setLabel('Sign up as DPS') 
+                      .setEmoji('⚔️')
                       .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_ABSENT`)
                       .setLabel('Mark as Absent')
+                      .setEmoji('❌')
                       .setStyle(ButtonStyle.Secondary)
-                  );
+  );
                 
                 try {
                   await channel.send({

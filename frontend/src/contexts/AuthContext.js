@@ -1,6 +1,7 @@
 // src/contexts/AuthContext.js - Fixed version
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import axiosInstance from '../config/axios';
+import { useSimulatedRole } from './SimulatedRoleContext';
 
 // Create the auth context
 const AuthContext = createContext();
@@ -11,6 +12,9 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { simulatedRole } = useSimulatedRole();
+
+  const effectiveRole = simulatedRole || user?.role;
   
   // Refs to prevent multiple simultaneous auth checks
   const authCheckInProgress = useRef(false);

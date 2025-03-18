@@ -409,6 +409,140 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+const { v4: uuidv4 } = require('uuid'); // Make sure to import this at the top
+
+// Add fake user for testing
+router.post('/fake-users', async (req, res) => {
+  try {
+    const { username, role, avatar_url, combat_power, status, guildId } = req.body;
+    
+    // Validate inputs
+    if (!username || !guildId) {
+      return res.status(400).json({ error: 'Username and guildId are required' });
+    }
+
+    // Generate a proper UUID instead of a fake-prefixed string
+    const fakeUserId = uuidv4();
+    const fakeTag = `FAKE-${Math.random().toString(36).substring(2, 6)}`;
+    
+    // Check if guild exists
+    const guild = await db.Guild.findByPk(guildId);
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    
+    // Begin transaction
+    const t = await db.sequelize.transaction();
+    
+    try {
+      // Create user record with guild_id = null (global user)
+      const user = await db.User.create({
+        id: fakeUserId,
+        username: `${username} [${fakeTag}]`, // Add a tag to indicate fake user
+        discord_id: `fake-${Math.random().toString(36).substring(2, 9)}`,
+        avatar_url: avatar_url || null,
+        role: 'Member',
+        status: status || 'Active',
+        combat_power: combat_power || 1000,
+        builds: [
+          {
+            primary: 'Greatsword',
+            secondary: 'Crossbow',
+            spec: 'DPS'
+          }
+        ],
+        // Store fake status in metadata since we don't have an is_fake_user field
+        email: `fake-test-user@example.com` // Use email field to track fake users
+      }, { transaction: t });
+      
+      // Create guild member entry
+      await db.GuildMember.create({
+        guild_id: guildId,
+        user_id: fakeUserId,
+        role: role || 'Guild Member',
+        joined_via_invite: false,
+        created_at: new Date(),
+        updated_at: new Date()
+      }, { transaction: t });
+      
+      // Track fake users in admin logs
+      await db.AdminLog.create({
+        admin_id: req.user.id,
+        action: 'CREATE_FAKE_USER',
+        details: { username, role, guildId, fakeTag },
+        target_type: 'user',
+        target_id: fakeUserId
+      }, { transaction: t });
+      
+      await t.commit();
+      
+      res.status(201).json({
+        id: fakeUserId,
+        username: `${username} [${fakeTag}]`,
+        role,
+        message: 'Fake user created successfully'
+      });
+    } catch (error) {
+      await t.rollback();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Create fake user error:', error);
+    res.status(500).json({ 
+      error: 'Failed to create fake user',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Update delete fake users endpoint to check the email field
+router.delete('/fake-users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Only allow deleting fake test users
+    const user = await db.User.findByPk(userId);
+    if (!user || !user.email || !user.email.startsWith('fake-test-user')) {
+      return res.status(403).json({ error: 'Can only delete fake test users' });
+    }
+    
+    const t = await db.sequelize.transaction();
+    
+    try {
+      // Remove from all guilds
+      await db.GuildMember.destroy({
+        where: { user_id: userId },
+        transaction: t
+      });
+      
+      // Delete the user
+      await db.User.destroy({
+        where: { id: userId },
+        transaction: t
+      });
+      
+      // Log admin action
+      await db.AdminLog.create({
+        admin_id: req.user.id,
+        action: 'DELETE_FAKE_USER',
+        details: { userId, username: user.username },
+        target_type: 'user',
+        target_id: userId
+      }, { transaction: t });
+      
+      await t.commit();
+      
+      res.json({ message: 'Fake user deleted successfully' });
+    } catch (error) {
+      await t.rollback();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Delete fake user error:', error);
+    res.status(500).json({ error: 'Failed to delete fake user' });
+  }
+});
+
 // Delete guild storage item
 router.delete('/guilds/:guildId/storage/:id', async (req, res) => {
   try {

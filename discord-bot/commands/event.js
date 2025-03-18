@@ -4,6 +4,16 @@ const database = require('../utils/database');
 const embedBuilder = require('../utils/embed_builder');
 const { sequelize } = require('../../../config/database');
 
+async function ensureDatabaseConnection() {
+  try {
+    await sequelize.authenticate();
+    return true;
+  } catch (error) {
+    console.error('Database connection error in command:', error);
+    return false;
+  }
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('event')
@@ -50,7 +60,6 @@ module.exports = {
     ),
 
   async execute(interaction) {
-
     if (!await ensureDatabaseConnection()) {
       return interaction.reply({ 
         content: 'Unable to connect to the database. Please try again later or contact the bot administrator.',
@@ -105,15 +114,23 @@ module.exports = {
               new ButtonBuilder()
                 .setCustomId(`signup_${events[0].id}_TANK`)
                 .setLabel('Sign up as Tank')
+                .setEmoji('🛡️')
                 .setStyle(ButtonStyle.Primary),
               new ButtonBuilder()
                 .setCustomId(`signup_${events[0].id}_HEALER`)
                 .setLabel('Sign up as Healer')
+                .setEmoji('💚')
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder()
                 .setCustomId(`signup_${events[0].id}_DPS`)
                 .setLabel('Sign up as DPS')
-                .setStyle(ButtonStyle.Danger)
+                .setEmoji('⚔️')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder()
+                .setCustomId(`signup_${events[0].id}_ABSENT`)
+                .setLabel('Mark as Absent')
+                .setEmoji('❌')
+                .setStyle(ButtonStyle.Secondary)
             );
           
           await interaction.reply({ 
@@ -149,18 +166,22 @@ module.exports = {
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_TANK`)
                 .setLabel('Sign up as Tank')
+                .setEmoji('🛡️')
                 .setStyle(ButtonStyle.Primary),
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_HEALER`)
                 .setLabel('Sign up as Healer')
+                .setEmoji('💚')
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_DPS`)
                 .setLabel('Sign up as DPS')
+                .setEmoji('⚔️')
                 .setStyle(ButtonStyle.Danger),
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_ABSENT`)
                 .setLabel('Mark as Absent')
+                .setEmoji('❌')
                 .setStyle(ButtonStyle.Secondary)
             );
           
@@ -211,24 +232,28 @@ module.exports = {
               if (event) {
                 const embed = this.createEventEmbed(event);
                 
-                // Create signup buttons
+                // Create signup buttons for the updated event display
                 const row = new ActionRowBuilder()
                   .addComponents(
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_TANK`)
                       .setLabel('Sign up as Tank')
+                      .setEmoji('🛡️')
                       .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_HEALER`)
                       .setLabel('Sign up as Healer')
+                      .setEmoji('💚')
                       .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_DPS`)
                       .setLabel('Sign up as DPS')
+                      .setEmoji('⚔️')
                       .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_ABSENT`)
                       .setLabel('Mark as Absent')
+                      .setEmoji('❌')
                       .setStyle(ButtonStyle.Secondary)
                   );
                 
@@ -265,7 +290,7 @@ module.exports = {
     }
   },
   
-  // Fixed helper method for event embed creation
+  // Event embed creation method
   createEventEmbed: (event) => {
     try {
       // Convert event_time to Date if it's a string

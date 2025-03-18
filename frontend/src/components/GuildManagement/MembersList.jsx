@@ -10,6 +10,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 import MemberProfileModal from './MemberProfileModal';
 import axiosInstance from '../../config/axios';
 
@@ -74,6 +75,10 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   const [confirmTransfer, setConfirmTransfer] = useState(false);
   const [username, setUsername] = useState(member.username);
   const [error, setError] = useState(null);
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
+  
+  // Use effective role (simulated or actual)
+  const effectiveRole = simulatedRole || currentUserRole;
   
   // Add a flag to check if this is a guild master transfer
   const isGuildMasterTransfer = selectedRole === 'Guild Master';
@@ -81,10 +86,10 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   // First useEffect - check for Guild Master permission
   useEffect(() => {
     // Close the dialog if not Guild Master
-    if (currentUserRole !== 'Guild Master') {
+    if (effectiveRole !== 'Guild Master') {
       onClose();
     }
-  }, [currentUserRole, onClose]);
+  }, [effectiveRole, onClose]);
 
   // Update state when member changes
   useEffect(() => {
@@ -97,10 +102,10 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   useEffect(() => {
     // If trying to edit someone else's profile and not an admin, close the dialog
     if (member && currentUser && member.id !== currentUser.id && 
-       !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser.role)) {
+       !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole)) {
       onClose();
     }
-  }, [member, currentUser, onClose]);
+  }, [member, currentUser, effectiveRole, onClose]);
 
   
 
@@ -140,7 +145,7 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
   };
 
   const getAvailableRoles = () => {
-    if (currentUserRole !== 'Guild Master') {
+    if (effectiveRole !== 'Guild Master') {
       return [];
     }
     
@@ -162,7 +167,7 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
         maxWidth="sm"
         fullWidth
       >
-        {currentUserRole === 'Guild Master' ? (
+        {effectiveRole === 'Guild Master' ? (
           <>
             <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
               Manage {member.username}'s Profile
@@ -231,7 +236,7 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
       </Dialog>
   
       <Dialog
-        open={confirmTransfer && currentUserRole === 'Guild Master'}
+        open={confirmTransfer && effectiveRole === 'Guild Master'}
         maxWidth="md"
         fullWidth
       >
@@ -287,6 +292,7 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
 // Edit button functions
 
 const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
   const [editedMember, setEditedMember] = useState(member ? {
     ...member,
     builds: member.builds || [{
@@ -302,8 +308,11 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
 
   useEffect(() => {
     if (member) {
+      // Use effective role (simulated or actual)
+      const effectiveRole = simulatedRole || currentUser?.role;
+      
       const isCurrentUser = member.id === currentUser?.id;
-      const currentUserHasAdminRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser?.role);
+      const currentUserHasAdminRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
       
       // Only show combat power if it's your own profile OR if you're an admin
       setShowCombatPower(isCurrentUser || currentUserHasAdminRole);
@@ -318,15 +327,18 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
         combat_power: member.combat_power || ''
       });
     }
-  }, [member, currentUser]);
+  }, [member, currentUser, simulatedRole]);
 
   // Add the new permission check
   useEffect(() => {
+    // Use effective role (simulated or actual)
+    const effectiveRole = simulatedRole || currentUser?.role;
+    
     if (member && currentUser && member.id !== currentUser.id && 
-        !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser.role)) {
+        !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole)) {
       onClose();
     }
-  }, [member, currentUser, onClose]);
+  }, [member, currentUser, simulatedRole, onClose]);
 
   const weapons = [
     'Greatsword', 'Sword and Shield', 'Staff', 'Crossbow',
@@ -635,6 +647,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user: authCurrentUser } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
   const [roleManagementMember, setRoleManagementMember] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
   const [editMember, setEditMember] = useState(null);
@@ -651,6 +664,48 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
   const effectiveCurrentUser = propCurrentUser || authCurrentUser;
 
+  // Helper functions for permission checks - ADDED/FIXED
+  const canEditProfile = (member) => {
+    // Get effective role (simulated or real)
+    const effectiveRole = simulatedRole || effectiveCurrentUser?.role;
+    
+    // Any user can edit their own profile
+    const isOwnProfile = member.id === effectiveCurrentUser?.id;
+    // Admins can edit any profile
+    const hasAdminRole = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
+    
+    // For debugging
+    if (simulatedRole) {
+      console.log('Role simulation active:', {
+        simulatedRole,
+        actualRole: effectiveCurrentUser?.role,
+        isOwnProfile,
+        hasAdminPrivileges: hasAdminRole
+      });
+    }
+    
+    return isOwnProfile || hasAdminRole;
+  };
+
+  const canEditName = (member) => {
+    // Get effective role (simulated or real)
+    const effectiveRole = simulatedRole || effectiveCurrentUser?.role;
+    
+    // Any user can edit their own name
+    const isOwnProfile = member.id === effectiveCurrentUser?.id;
+    // Only Guild Masters can edit other people's names
+    const isGuildMaster = effectiveRole === 'Guild Master';
+    
+    return isOwnProfile || isGuildMaster;
+  };
+
+  const canManageRoles = () => {
+    // Get effective role (simulated or real)
+    const effectiveRole = simulatedRole || effectiveCurrentUser?.role;
+    
+    return effectiveRole === 'Guild Master';
+  };
+
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -660,10 +715,10 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   };
 
   useEffect(() => {
-    if (roleManagementMember && currentUserRole !== 'Guild Master') {
+    if (roleManagementMember && !canManageRoles()) {
       setRoleManagementMember(null);
     }
-  }, [roleManagementMember, currentUserRole]);
+  }, [roleManagementMember]);
 
   useEffect(() => {
     const fetchCurrentUserRole = async () => {
@@ -682,7 +737,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
   const handleRoleSave = async (updatedMember) => {
     try {
-      if (currentUserRole !== 'Guild Master') {
+      if (!canManageRoles()) {
         console.error('Permission denied: Only Guild Masters can change roles');
         setError('Permission denied: Only Guild Masters can change roles');
         return;
@@ -755,7 +810,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       }
       
       // Check if user has permission to edit this name
-      if (nameEditMember.id !== effectiveCurrentUser?.id && effectiveCurrentUser?.role !== 'Guild Master') {
+      if (!canEditName(nameEditMember)) {
         alert('You do not have permission to edit this name');
         setNameEditMember(null);
         return;
@@ -881,6 +936,12 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       const guildId = localStorage.getItem('guildId');
       if (!guildId) {
         console.error('No guild ID found');
+        return;
+      }
+      
+      // FIXED: Add permission check before saving
+      if (!canEditProfile(updatedMember)) {
+        console.error('Permission denied: Cannot edit this profile');
         return;
       }
       
@@ -1015,9 +1076,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 sx={{ color: 'white' }}
               />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, ml: 'auto' }}>
-                {/* Edit button */}
-                {(member.id === effectiveCurrentUser?.id || 
-                  ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role)) && (
+                {/* FIXED: Edit button - always show for own profile */}
+                {canEditProfile(member) && (
                   <IconButton
                     size="small"
                     onClick={(e) => {
@@ -1035,7 +1095,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 )}
                 
                 {/* Role management button - only for Guild Masters */}
-                {effectiveCurrentUser?.role === 'Guild Master' && (
+                {canManageRoles() && (
                   <IconButton
                     size="small"
                     onClick={(e) => {
@@ -1103,7 +1163,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 <Typography variant="h6" color="white">
                   {member.username}
                 </Typography>
-                {(member.id === effectiveCurrentUser?.id || effectiveCurrentUser?.role === 'Guild Master') && (
+                {canEditName(member) && (
                   <IconButton 
                     size="small"
                     onClick={() => {
@@ -1122,7 +1182,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
             </Box>
             
             {/* Role management button for Guild Masters */}
-            {effectiveCurrentUser?.role === 'Guild Master' && member.id !== effectiveCurrentUser.id && (
+            {canManageRoles() && member.id !== effectiveCurrentUser.id && (
               <Button
                 variant="outlined"
                 size="small"
@@ -1230,6 +1290,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
               </Box>
             ))}
             
+            {/* Edit builds button */}
             <Button
               variant="contained"
               fullWidth
@@ -1239,15 +1300,12 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
               }}
               sx={{ 
                 mt: 2,
-                bgcolor: member.id === effectiveCurrentUser?.id || 
-                ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role) ? 
-                '#90caf9' : '#666',
+                bgcolor: canEditProfile(member) ? '#90caf9' : '#666',
                 color: '#000',
                 '&:hover': { bgcolor: '#64b5f6' },
                 '&.Mui-disabled': { bgcolor: '#444', color: '#888' }
               }}
-              disabled={member.id !== effectiveCurrentUser?.id && 
-                !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role)}
+              disabled={!canEditProfile(member)}
             >
               Edit Builds
             </Button>
@@ -1375,8 +1433,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                         {member.username}
                       </Typography>
                       
-                      {/* Show edit icon for current user OR if current user is Guild Master */}
-                      {(member.id === effectiveCurrentUser?.id || effectiveCurrentUser?.role === 'Guild Master') && (
+                      {/* FIXED: Show edit icon for current user OR if current user is Guild Master */}
+                      {canEditName(member) && (
                         <IconButton 
                           size="small"
                           className="name-edit-icon"
@@ -1495,9 +1553,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                   
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: isTablet ? 0 : 1 }}>
-                      {/* Show edit icon if it's the current user's own profile OR if the current user has admin privileges */}
-                      {(member.id === effectiveCurrentUser?.id || 
-                        ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveCurrentUser?.role)) && (
+                      {/* FIXED: Show edit icon based on permission check */}
+                      {canEditProfile(member) && (
                         <Tooltip title="Edit Builds">
                           <IconButton 
                             onClick={(e) => {
@@ -1518,8 +1575,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                         </Tooltip>
                       )}
                       
-                      {/* King chess piece button ONLY appears if the current user is a Guild Master */}
-                      {effectiveCurrentUser?.role === 'Guild Master' && (
+                      {/* King chess piece button ONLY appears for Guild Masters */}
+                      {canManageRoles() && (
                         <Tooltip title="Manage Guild Role">
                           <IconButton 
                             onClick={(e) => {
