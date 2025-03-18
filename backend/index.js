@@ -842,6 +842,153 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 
+app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
+  try {
+    console.log(`DELETE request received to remove member ${req.params.memberId} from guild ${req.params.guildId}`);
+    
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { guildId, memberId } = req.params;
+    
+    // Validate IDs
+    if (!validateUUID(guildId) || !validateUUID(memberId)) {
+      return res.status(400).json({ error: 'Invalid guild or member ID' });
+    }
+    
+    // Verify requester is a Guild Master of this guild
+    const requesterMembership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!requesterMembership || requesterMembership.role !== 'Guild Master') {
+      return res.status(403).json({ 
+        error: 'Permission denied', 
+        details: 'Only Guild Masters can remove members' 
+      });
+    }
+    
+    // Prevent Guild Masters from removing themselves
+    if (memberId === req.user.id) {
+      return res.status(400).json({
+        error: 'Invalid operation',
+        details: 'Guild Masters cannot remove themselves from the guild'
+      });
+    }
+    
+    // Use raw SQL for better debugging
+    console.log('Searching for member to remove...');
+    
+    // First check if the member exists using raw query
+    const [memberCheck] = await sequelize.query(
+      `SELECT gm.id, gm.role, u.username 
+       FROM guild_members gm
+       JOIN users u ON gm.user_id = u.id
+       WHERE gm.guild_id = :guildId AND gm.user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+    
+    if (!memberCheck) {
+      return res.status(404).json({ error: 'Member not found in this guild' });
+    }
+    
+    // Prevent removing other Guild Masters
+    if (memberCheck.role === 'Guild Master') {
+      return res.status(400).json({
+        error: 'Invalid operation',
+        details: 'Cannot remove a Guild Master'
+      });
+    }
+    
+    console.log(`Found member to remove: ${memberCheck.username}`);
+    
+    // Delete using raw SQL to ensure it works
+    const deleteResult = await sequelize.query(
+      `DELETE FROM guild_members 
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE
+      }
+    );
+    
+    console.log('Delete operation result:', deleteResult);
+    
+    // Return success with username from the check we did earlier
+    res.json({ 
+      success: true, 
+      message: `${memberCheck.username} has been removed from the guild`,
+      removedMemberId: memberId
+    });
+    
+  } catch (error) {
+    console.error('Error removing guild member:', error);
+    res.status(500).json({ error: 'Failed to remove member from guild' });
+  }
+});
+
+// Add this endpoint to directly remove a member when the normal endpoint isn't working
+app.post('/api/direct-member-delete', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { guildId, memberId, forceDirect } = req.body;
+    
+    if (!forceDirect) {
+      return res.status(400).json({ error: 'Direct deletion not allowed without force flag' });
+    }
+    
+    // Verify requester is a Guild Master of this guild
+    const requesterMembership = await db.GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: req.user.id,
+        role: 'Guild Master'
+      }
+    });
+    
+    if (!requesterMembership) {
+      return res.status(403).json({ error: 'Only Guild Masters can perform this operation' });
+    }
+    
+    // Use raw SQL to ensure deletion works
+    const deleteResult = await sequelize.query(
+      `DELETE FROM guild_members 
+       WHERE guild_id = :guildId AND user_id = :memberId 
+       AND user_id != :requesterId`,
+      {
+        replacements: { 
+          guildId, 
+          memberId,
+          requesterId: req.user.id  // Prevent self-deletion
+        },
+        type: sequelize.QueryTypes.DELETE
+      }
+    );
+    
+    console.log('Direct delete result:', deleteResult);
+    
+    res.json({ 
+      success: true, 
+      message: 'Member removed with direct database operation',
+      affected: deleteResult[1] // Number of rows affected
+    });
+    
+  } catch (error) {
+    console.error('Direct member deletion error:', error);
+    res.status(500).json({ error: 'Failed to remove member' });
+  }
+});
+
 
 // UUID validation helper
 function validateUUID(uuid) {

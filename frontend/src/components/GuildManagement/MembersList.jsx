@@ -149,13 +149,15 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
       return [];
     }
     
+    // Return all roles including Guild Master
     return Object.keys(GUILD_ROLES).filter(role => {
+      // Filter out redundant Member/Guild Member entries
       if ((role === 'Member' && GUILD_ROLES['Guild Member']) || 
           (role === 'Guild Member' && GUILD_ROLES['Member'] && role !== member.role)) {
         return false;
       }
       
-      return role !== 'Guild Master' || member.role === 'Guild Master';
+      return true; // Show all roles including Guild Master
     });
   };
 
@@ -661,6 +663,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   const [selectedMember, setSelectedMember] = useState(null);
   const [mobileDetailDrawer, setMobileDetailDrawer] = useState(false);
   const [activeMobileMember, setActiveMobileMember] = useState(null);
+  const [kickMemberConfirm, setKickMemberConfirm] = useState(null);
   
   const effectiveCurrentUser = propCurrentUser || authCurrentUser;
 
@@ -712,6 +715,102 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+  };
+
+  const handleKickMember = async () => {
+    try {
+      console.log("Starting member removal process...");
+      
+      if (!kickMemberConfirm) {
+        console.error("No member selected for removal");
+        return;
+      }
+      
+      const memberToRemove = kickMemberConfirm;
+      console.log(`Attempting to remove member: ${memberToRemove.username} (ID: ${memberToRemove.id})`);
+      
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found in localStorage');
+        alert("Error: Guild ID not found. Please refresh the page and try again.");
+        return;
+      }
+      
+      // Store current members for comparison later
+      const currentMembers = [...members];
+      
+      // Immediately update the UI (optimistic update)
+      setMembers(prevMembers => prevMembers.filter(member => member.id !== memberToRemove.id));
+      
+      // Close the dialog
+      setKickMemberConfirm(null);
+      
+      // Make the DELETE request
+      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members/${memberToRemove.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("Response status:", response.status);
+      
+      if (!response.ok) {
+        // Revert UI if request failed
+        setMembers(currentMembers);
+        alert(`Error: Failed to remove member (status ${response.status})`);
+        return;
+      }
+      
+      // Try to parse response
+      let responseData;
+      try {
+        responseData = await response.json();
+        console.log("Response data:", responseData);
+      } catch (jsonError) {
+        console.log("No JSON response or invalid JSON");
+      }
+      
+      // Check if the member is still in the response data (which means delete failed)
+      if (Array.isArray(responseData)) {
+        const memberStillExists = responseData.some(m => m.id === memberToRemove.id);
+        
+        if (memberStillExists) {
+          console.log("Member still exists in response - making direct database request");
+          
+          // Try direct database DELETE as a fallback
+          const directDeleteResponse = await fetch(`${API_URL}/api/direct-member-delete`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              guildId,
+              memberId: memberToRemove.id,
+              forceDirect: true  // Signal to backend this is a direct operation
+            })
+          });
+          
+          if (!directDeleteResponse.ok) {
+            console.error("Direct delete also failed");
+            setMembers(responseData); // Use the server's current state
+            alert("Could not remove member. Please try again later.");
+            return;
+          }
+        }
+      }
+      
+      // Success - keep our optimistic update
+      alert(`${memberToRemove.username} has been removed from the guild.`);
+      
+    } catch (error) {
+      console.error('Error removing member:', error);
+      // Refresh member list to ensure UI matches server state
+      fetchMembers();
+      alert(`Error: ${error.message || "Failed to remove member"}`);
+    }
   };
 
   useEffect(() => {
@@ -888,7 +987,6 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
 
   const fetchMembers = async () => {
     try {
-      // Get current guild ID
       const guildId = localStorage.getItem('guildId');
       
       if (!guildId) {
@@ -899,8 +997,14 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
       console.log('Fetching members for guild:', guildId);
       
-      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members`, {
-        credentials: 'include'
+      // Add cache-busting parameter and headers
+      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members?timestamp=${Date.now()}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
       
       if (!response.ok) {
@@ -1111,6 +1215,23 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                     <span role="img" aria-label="king" style={{ fontSize: '14px' }}>♚</span>
                   </IconButton>
                 )}
+
+                {canManageRoles() && member.id !== effectiveCurrentUser.id && member.role !== 'Guild Master' && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setKickMemberConfirm(member);
+                    }}
+                    sx={{ 
+                      color: '#ff4444',
+                      padding: '8px',
+                      '&:hover': { bgcolor: 'rgba(255, 68, 68, 0.2)' }
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                )}
               </Box>
             </ListItem>
             {index < sortedMembers.length - 1 && <Divider variant="inset" component="li" sx={{ bgcolor: '#333' }} />}
@@ -1199,6 +1320,27 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                 }}
               >
                 Change Role
+              </Button>
+            )}
+
+            {canManageRoles() && member.id !== effectiveCurrentUser.id && member.role !== 'Guild Master' && (
+              <Button
+                variant="outlined"
+                size="small"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={() => {
+                  setMobileDetailDrawer(false);
+                  setKickMemberConfirm(member);
+                }}
+                sx={{ 
+                  mt: 2,
+                  borderColor: '#ff4444',
+                  color: '#ff4444',
+                  '&:hover': { borderColor: '#ff4444', bgcolor: 'rgba(255, 68, 68, 0.1)' }
+                }}
+              >
+                Remove from Guild
               </Button>
             )}
           </Box>
@@ -1596,6 +1738,27 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
                           </IconButton>
                         </Tooltip>
                       )}
+
+                  {canManageRoles() && member.id !== effectiveCurrentUser.id && member.role !== 'Guild Master' && (
+                        <Tooltip title="Remove from Guild">
+                          <IconButton 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setKickMemberConfirm(member);
+                            }}
+                            sx={{ 
+                              color: '#ff4444', // Red color for delete
+                              padding: isTablet ? '6px' : '8px',
+                              '&:hover': { 
+                                bgcolor: 'rgba(255, 68, 68, 0.2)',
+                                transform: 'scale(1.1)'
+                              }
+                            }}
+                          >
+                            <DeleteIcon fontSize={isTablet ? "small" : "medium"} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -1644,8 +1807,57 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           onClose={() => setSelectedMember(null)}
         />
       )}
+
+      {kickMemberConfirm && (
+        <KickMemberDialog
+          member={kickMemberConfirm}
+          onClose={() => setKickMemberConfirm(null)}
+          onConfirm={handleKickMember}
+        />
+      )}
     </>
   );
 }
+
+const KickMemberDialog = ({ member, onClose, onConfirm }) => {
+  if (!member) return null;
+  
+  return (
+    <Dialog
+      open={true}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle sx={{ 
+        bgcolor: '#1a1a1a', 
+        color: 'red',
+        fontSize: '20px'
+      }}>
+        ⚠️ Remove Member from Guild
+      </DialogTitle>
+      <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
+        <Typography color="white" sx={{ mb: 3 }}>
+          Are you sure you want to remove <strong>{member.username}</strong> from the guild?
+        </Typography>
+        <Typography color="white" sx={{ mb: 2 }}>
+          This action cannot be undone. The member will need to be invited again to rejoin.
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ bgcolor: '#1e1e1e', p: 2 }}>
+        <Button onClick={onClose} sx={{ color: 'white' }}>
+          Cancel
+        </Button>
+        <Button 
+          onClick={onConfirm} 
+          variant="contained"
+          color="error"
+        >
+          Remove Member
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
 
 export default MembersList;
