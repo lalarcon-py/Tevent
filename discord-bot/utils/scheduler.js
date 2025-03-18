@@ -349,33 +349,7 @@ module.exports = (client) => {
   });
   
   // Helper functions for creating embeds
-  // Complete createEventEmbed function
-function createEventEmbed(event) {
-  // Format event time
-  const eventDate = new Date(event.event_time);
-  const dateString = eventDate.toLocaleDateString();
-  const timeString = eventDate.toLocaleTimeString();
-  
-  // Get participant counts
-  const tankCount = parseInt(event.tank_count || event.participants?.tank_count || 0);
-  const healerCount = parseInt(event.healer_count || event.participants?.healer_count || 0);
-  const dpsCount = parseInt(event.dps_count || event.participants?.dps_count || 0);
-  
-  return new EmbedBuilder()
-    .setTitle(event.title)
-    .setDescription(event.description || 'No description provided')
-    .addFields(
-      { name: 'Date', value: dateString, inline: true },
-      { name: 'Time', value: timeString, inline: true },
-      { name: 'Location', value: event.location || 'Not specified', inline: true },
-      { name: 'Tanks', value: `${tankCount}/${event.tanks}`, inline: true },
-      { name: 'Healers', value: `${healerCount}/${event.healers}`, inline: true },
-      { name: 'DPS', value: `${dpsCount}/${event.dps}`, inline: true },
-      { name: 'Event ID', value: event.id, inline: false }
-    )
-    .setColor('#00cc99')
-    .setFooter({ text: `Event ID: ${event.id}` });
-}
+  const createEventEmbed = embedBuilder.createEventEmbed;
   
   function createAttendanceEmbed(stats) {
     try {

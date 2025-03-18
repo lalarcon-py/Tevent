@@ -298,7 +298,7 @@ function setupScheduledPostings(client) {
         
         // Post each event as a separate message with reactions
         for (const event of eventsResult.rows) {
-          const eventEmbed = createEventEmbed({
+          const eventEmbed = EmbedBuilder.createEventEmbed({
             ...event,
             participants: {
               tank_count: event.tank_count,
@@ -513,7 +513,7 @@ function setupScheduledPostings(client) {
               
               if (updatedEventResult.rows.length) {
                 const updatedEvent = updatedEventResult.rows[0];
-                const updatedEmbed = createEventEmbed({
+                const updatedEmbed = EmbedBuilder.createEventEmbed({
                   ...updatedEvent,
                   participants: {
                     tank_count: updatedEvent.tank_count,
@@ -3064,7 +3064,7 @@ async function handleEventsCommand(interaction, appGuildId) {
       }
       
       const event = eventResult.rows[0];
-      const embed = createEventEmbed({
+      const embed = EmbedBuilder.createEventEmbed({
         ...event,
         participants: {
           tank_count: event.tank_count,
@@ -3135,7 +3135,7 @@ async function handleEventsCommand(interaction, appGuildId) {
     }
     
     const events = eventsResult.rows;
-    const embeds = events.map(event => createEventEmbed({
+    const embeds = events.map(event => EmbedBuilder.createEventEmbed({
       ...event,
       participants: {
         tank_count: event.tank_count,
@@ -3648,97 +3648,6 @@ async function handleMembersCommand(interaction, appGuildId) {
   } catch (error) {
     console.error('Error fetching guild members:', error);
     await interaction.editReply('Failed to fetch guild members.');
-  }
-}
-
-// Event embed creation method
-createEventEmbed: (event) => {
-  try {
-    // Convert event_time to Date if it's a string
-    const eventTime = typeof event.event_time === 'string' 
-      ? new Date(event.event_time) 
-      : event.event_time;
-    
-    // Handle case where participants might be undefined
-    const participants = event.participants || [];
-    
-    // Group participants by role
-    const tanks = participants.filter(p => p.role === 'TANK');
-    const healers = participants.filter(p => p.role === 'HEALER');
-    const dps = participants.filter(p => p.role === 'DPS');
-    const absentees = participants.filter(p => p.role === 'ABSENT');
-    
-    // Format participant lists with numbers and weapons
-    const formatParticipants = (roleParticipants) => {
-      if (roleParticipants.length === 0) return '—';
-      return roleParticipants.map((p, idx) => {
-        let weaponText = '';
-        // Process builds if available
-        if (p.builds) {
-          try {
-            const builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
-            if (Array.isArray(builds) && builds.length > 0) {
-              const build = builds[0];
-              if (build && (build.primary || build.secondary)) {
-                weaponText = ' ';
-                if (build.primary) weaponText += `${build.primary} `;
-                if (build.secondary) weaponText += `${build.secondary}`;
-              }
-            }
-          } catch (error) {
-            console.error(`[ERROR] Error parsing builds for user ${p.username}:`, error);
-          }
-        }
-        return `${idx + 1} ${p.username}${weaponText}`;
-      }).join('\n');
-    };
-    
-    const embed = new EmbedBuilder()
-      .setTitle(`${eventData.title || 'Event'}`)
-      .setColor('#1a64f3')
-      .setDescription(description)
-      .addFields(
-        { 
-          name: `${totalSignups} (${absentees.length})`, 
-          value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
-          inline: false 
-        },
-        { 
-          name: `🛡️ Tank (${participants.TANK.length}/${eventData.tanks || 0})`, 
-          value: formatParticipants(participantsResult.rows.filter(p => p.role === 'TANK')), 
-          inline: true 
-        },
-        { 
-          name: `⚔️ Dps (${participants.DPS.length}/${eventData.dps || 0})`, 
-          value: formatParticipants(participantsResult.rows.filter(p => p.role === 'DPS')),
-          inline: true 
-        },
-        { 
-          name: `💚 Healer (${participants.HEALER.length}/${eventData.healers || 0})`, 
-          value: formatParticipants(participantsResult.rows.filter(p => p.role === 'HEALER')),
-          inline: true 
-        }
-      )
-      .setFooter({ text: `ID: ${event.id}` })
-      .setTimestamp();
-    
-    // Add absentees if there are any
-    if (absentees.length > 0) {
-      embed.addFields({
-        name: `⛔ Absence (${absentees.length})`,
-        value: absentees.map(p => p.User?.username || p.username).join(', '),
-        inline: false
-      });
-    }
-    
-    return embed;
-  } catch (error) {
-    console.error('Error creating event embed:', error);
-    // Return a simple fallback embed if there's an error
-    return new EmbedBuilder()
-      .setTitle('Event Details')
-      .setDescription('Error creating detailed event information')
-      .setColor('#ff0000');
   }
 }
 
