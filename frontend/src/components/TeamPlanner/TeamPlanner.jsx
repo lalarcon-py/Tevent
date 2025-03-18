@@ -1092,22 +1092,23 @@ const TeamPlanner = () => {
               >
                 Create Team
               </Button>
+              
+              {/* Announce Teams button - only for Guild Master, Guild Advisor, and Guild Guardian */}
+              <Button
+                variant="contained"
+                onClick={handleAnnounceTeams}
+                disabled={isAnnouncingTeams || teams.length === 0}
+                startIcon={<SendIcon />}
+                sx={{
+                  bgcolor: '#9c27b0',
+                  '&:hover': { bgcolor: '#7B1FA2' },
+                  '&.Mui-disabled': { bgcolor: 'rgba(156, 39, 176, 0.3)' }
+                }}
+              >
+                {isAnnouncingTeams ? 'Sending...' : 'Announce Teams'}
+              </Button>
             </>
           )}
-          {/* Announce button is visible to all but only active if teams exist */}
-          <Button
-            variant="contained"
-            onClick={handleAnnounceTeams}
-            disabled={isAnnouncingTeams || teams.length === 0}
-            startIcon={<SendIcon />}
-            sx={{
-              bgcolor: '#9c27b0',
-              '&:hover': { bgcolor: '#7B1FA2' },
-              '&.Mui-disabled': { bgcolor: 'rgba(156, 39, 176, 0.3)' }
-            }}
-          >
-            {isAnnouncingTeams ? 'Sending...' : 'Announce Teams'}
-          </Button>
         </Box>
       </Box>
   
