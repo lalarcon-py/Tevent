@@ -801,7 +801,7 @@ app.post('/webhook/new-event', async (req, res) => {
     
     // Get current participants
     const participantsResult = await pool.query(
-      `SELECT ep.role, u.username, u.discord_id, u.builds, ep.user_id
+      `SELECT ep.role, u.username, u.discord_id, u.builds
        FROM event_participants ep
        JOIN users u ON ep.user_id = u.id
        WHERE ep.event_id = $1
@@ -819,39 +819,68 @@ app.post('/webhook/new-event', async (req, res) => {
       [eventId]
     );
     
-    console.log(`[DEBUG] Found ${participantsResult.rows.length} participants and ${absenteesResult.rows.length} absentees`);
+    console.log(`[DEBUG] Absences query returned ${absenteesResult.rows.length} rows`);
     
-    // Format participants for embedBuilder
-    const formattedParticipants = participantsResult.rows.map(p => ({
-      role: p.role,
-      User: {
-        username: p.username,
-        discord_id: p.discord_id,
-        id: p.user_id
-      }
-    }));
+    // DIRECT EMBED CREATION - NO EXTERNAL DEPENDENCIES
+    const embed = new EmbedBuilder()
+      .setTitle(eventData.title || 'Event')
+      .setColor('#0099ff')
+      .setDescription(eventData.description || '')
+      .addFields(
+        { 
+          name: '⏰ Time', 
+          value: `📅 ${new Date(eventData.event_time).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} ⌚ ${new Date(eventData.event_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`, 
+          inline: false 
+        },
+        { 
+          name: '📍 Location', 
+          value: eventData.location || 'Not specified', 
+          inline: false 
+        },
+        { 
+          name: `🛡️ Tanks (${participantsResult.rows.filter(p => p.role === 'TANK').length}/${eventData.tanks || 0})`, 
+          value: participantsResult.rows.filter(p => p.role === 'TANK').length > 0 ? 
+            participantsResult.rows.filter(p => p.role === 'TANK').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—', 
+          inline: true 
+        },
+        { 
+          name: `💚 Healers (${participantsResult.rows.filter(p => p.role === 'HEALER').length}/${eventData.healers || 0})`, 
+          value: participantsResult.rows.filter(p => p.role === 'HEALER').length > 0 ? 
+            participantsResult.rows.filter(p => p.role === 'HEALER').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—', 
+          inline: true 
+        },
+        { 
+          name: `⚔️ DPS (${participantsResult.rows.filter(p => p.role === 'DPS').length}/${eventData.dps || 0})`, 
+          value: participantsResult.rows.filter(p => p.role === 'DPS').length > 0 ? 
+            participantsResult.rows.filter(p => p.role === 'DPS').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—', 
+          inline: true 
+        }
+      )
+      .setFooter({ text: `Event ID: ${eventId}` });
     
-    // Format absentees for embedBuilder
-    const formattedAbsentees = absenteesResult.rows.map(a => ({
-      username: a.username,
-      User: {
-        username: a.username,
-        id: a.user_id
-      }
-    }));
+    // Add absentee field if there are any
+    if (absenteesResult.rows.length > 0) {
+      embed.addFields({
+        name: `❌ Absent (${absenteesResult.rows.length})`,
+        value: absenteesResult.rows.map((a, i) => `${i+1}. ${a.username}`).join('\n') || '—',
+        inline: true
+      });
+    } else {
+      embed.addFields({
+        name: `❌ Absent (0)`,
+        value: '—',
+        inline: true
+      });
+    }
     
-    // USE THE EMBED BUILDER INSTEAD OF MANUAL CONSTRUCTION
-    const embed = embedBuilder.createEventEmbed({
-      id: eventId,
-      title: eventData.title,
-      event_time: eventData.event_time,
-      location: eventData.location || 'Not specified',
-      description: eventData.description,
-      tanks: eventData.tanks || 0,
-      healers: eventData.healers || 0,
-      dps: eventData.dps || 0,
-      participants: formattedParticipants,
-      absentees: formattedAbsentees
+    // Add a tentative field to match the expected layout
+    embed.addFields({
+      name: `⏳ Tentative (0)`,
+      value: '—',
+      inline: true
     });
     
     try {
