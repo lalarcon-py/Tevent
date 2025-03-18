@@ -328,10 +328,10 @@ function setupScheduledPostings(client) {
             console.log(`[INFO] Reaction collected: ${reaction.emoji.name} from user: ${user.id} (${user.tag})`);
             
             try {
-              // Get user from database with more detailed logging
+              // Get user from database with more detailed logging - NOW INCLUDES BUILDS
               console.log(`[DEBUG] Looking up user with Discord ID: ${user.id}`);
               const userResult = await pool.query(
-                'SELECT id, username FROM users WHERE discord_id = $1',
+                'SELECT id, username, builds FROM users WHERE discord_id = $1',
                 [user.id]
               );
               
@@ -765,7 +765,7 @@ app.post('/webhook/new-event', async (req, res) => {
     
     const eventData = eventResult.rows[0];
     
-    // Get current participants
+    // Get current participants - NOW INCLUDES BUILDS
     const participantsResult = await pool.query(
       `SELECT ep.role, u.username, u.discord_id, u.builds
        FROM event_participants ep
@@ -2531,34 +2531,184 @@ client.on('interactionCreate', async (interaction) => {
       // Handle event signup buttons
       else if (customId.startsWith('signup_')) {
         const [_, eventId, role] = customId.split('_');
+        await interaction.deferReply({ ephemeral: true });
         
-        // Check guild mapping first
-        const discordGuildId = interaction.guild?.id;
-        if (!discordGuildId) {
-          return await interaction.reply({
-            content: 'This button must be used in a Discord server.',
-            ephemeral: true
-          });
-        }
-        
-        const appGuildId = await getGuildMapping(discordGuildId);
-        if (!appGuildId) {
-          return await interaction.reply({
-            content: 'This Discord server is not linked to an application guild.',
-            ephemeral: true
-          });
-        }
-        
-        // Create a fake interaction options object to reuse the signup handler
-        interaction.options = {
-          getString: (name) => {
-            if (name === 'event_id') return eventId;
-            if (name === 'role') return role;
-            return null;
+        try {
+          // Check guild mapping first
+          const discordGuildId = interaction.guild?.id;
+          if (!discordGuildId) {
+            return await interaction.editReply({
+              content: 'This button must be used in a Discord server.',
+              ephemeral: true
+            });
           }
-        };
-        
-        await handleEventSignupCommand(interaction, appGuildId);
+          
+          const appGuildId = await getGuildMapping(discordGuildId);
+          if (!appGuildId) {
+            return await interaction.editReply({
+              content: 'This Discord server is not linked to an application guild.',
+              ephemeral: true
+            });
+          }
+      
+          // Get user ID from discord ID - NOW INCLUDES BUILDS
+          const userResult = await pool.query(
+            'SELECT id, username, builds FROM users WHERE discord_id = $1',
+            [interaction.user.id]
+          );
+          
+          if (!userResult.rows || userResult.rows.length === 0) {
+            return await interaction.editReply('You need to register on the website first before signing up for events.');
+          }
+          
+          const userId = userResult.rows[0].id;
+          
+          // Get the event details
+          const eventResult = await pool.query(
+            'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
+            [eventId, appGuildId]
+          );
+          
+          if (!eventResult.rows || eventResult.rows.length === 0) {
+            return await interaction.editReply('Event not found.');
+          }
+          
+          const eventDetails = eventResult.rows[0];
+          
+          // Handle "ABSENT" special case
+          if (role === 'ABSENT') {
+            // Remove from participants
+            await pool.query(
+              'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, userId]
+            );
+            
+            // Add to absentees
+            await pool.query(
+              `INSERT INTO event_absentees 
+                (id, guild_id, event_id, user_id, created_at, updated_at)
+              VALUES 
+                (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+              ON CONFLICT (event_id, user_id) DO NOTHING`,
+              [appGuildId, eventId, userId]
+            );
+            
+            await interaction.editReply(`You have been marked as absent for "${eventDetails.title}".`);
+          } else {
+            // Regular role signup
+            
+            // Check if already signed up
+            const existingSignup = await pool.query(
+              'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+              [eventId, userId]
+            );
+            
+            if (existingSignup.rows && existingSignup.rows.length > 0) {
+              // Update existing signup
+              await pool.query(
+                'UPDATE event_participants SET role = $1 WHERE id = $2',
+                [role, existingSignup.rows[0].id]
+              );
+              
+              await interaction.editReply(`Your role for "${eventDetails.title}" has been updated to ${role}.`);
+            } else {
+              // Check role capacity
+              const roleCountsResult = await pool.query(
+                `SELECT 
+                  COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+                  COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+                  COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
+                FROM event_participants
+                WHERE event_id = $1`,
+                [eventId]
+              );
+              
+              const roleCounts = roleCountsResult.rows[0];
+              
+              // Verify there's room for this role
+              const roleLimits = {
+                'TANK': eventDetails.tanks || 0,
+                'HEALER': eventDetails.healers || 0,
+                'DPS': eventDetails.dps || 0
+              };
+              
+              const currentCounts = {
+                'TANK': parseInt(roleCounts?.tank_count || 0),
+                'HEALER': parseInt(roleCounts?.healer_count || 0),
+                'DPS': parseInt(roleCounts?.dps_count || 0)
+              };
+              
+              if (currentCounts[role] >= roleLimits[role]) {
+                return await interaction.editReply(`Sorry, the ${role} spots are full for this event.`);
+              }
+              
+              // Remove from absentees if marked before
+              await pool.query(
+                'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              // Create new signup
+              await pool.query(
+                `INSERT INTO event_participants 
+                  (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                VALUES
+                  (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                [appGuildId, eventId, userId, role]
+              );
+              
+              await interaction.editReply(`You have been signed up for "${eventDetails.title}" as ${role}.`);
+            }
+          }
+          
+          // Update the message to reflect new counts
+          try {
+            // Get updated counts
+            const updatedCounts = await pool.query(
+              `SELECT 
+                COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+                COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+                COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
+              FROM event_participants
+              WHERE event_id = $1`,
+              [eventId]
+            );
+            
+            const absentees = await pool.query(
+              `SELECT COUNT(*) as absent_count
+              FROM event_absentees
+              WHERE event_id = $1`,
+              [eventId]
+            );
+            
+            // Only update original message if it's from the current interaction
+            const message = interaction.message;
+            if (message && message.embeds && message.embeds.length > 0) {
+              const originalEmbed = message.embeds[0];
+              const updatedEmbed = EmbedBuilder.from(originalEmbed)
+                .setFields(
+                  { name: '⏰ Time', value: originalEmbed.fields[0].value, inline: false },
+                  { name: '📍 Location', value: originalEmbed.fields[1].value, inline: false },
+                  { name: '🛡️ Tanks', value: `${updatedCounts.rows[0].tank_count}/${eventDetails.tanks || 0}`, inline: true },
+                  { name: '💚 Healers', value: `${updatedCounts.rows[0].healer_count}/${eventDetails.healers || 0}`, inline: true },
+                  { name: '⚔️ DPS', value: `${updatedCounts.rows[0].dps_count}/${eventDetails.dps || 0}`, inline: true }
+                );
+              
+              await message.edit({ embeds: [updatedEmbed] });
+            }
+            
+            // Post public confirmation
+            await interaction.followUp({
+              content: `${interaction.user.username} has signed up for "${eventDetails.title}" as ${role === 'ABSENT' ? 'absent' : role}.`,
+              ephemeral: false
+            });
+          } catch (updateError) {
+            console.error(`Error updating event message:`, updateError);
+          }
+        } catch (error) {
+          console.error(`Error processing signup button:`, error);
+          await interaction.editReply('An error occurred while processing your signup.');
+        }
       }
     }
     // Handle select menu interactions
@@ -3337,9 +3487,9 @@ async function handleEventSignupCommand(interaction, appGuildId) {
     
     const event = eventResult.rows[0];
     
-    // Get user ID from discord ID
+    // Get user ID from discord ID - NOW INCLUDES BUILDS
     const userResult = await pool.query(
-      'SELECT id, username FROM users WHERE discord_id = $1',
+      'SELECT id, username, builds FROM users WHERE discord_id = $1',
       [discordUserId]
     );
     
@@ -4044,7 +4194,7 @@ app.post('/webhook/update-event-signup', async (req, res) => {
         return res.status(404).json({ error: 'Message not found' });
       }
       
-      // Get updated participant counts to refresh the embed
+      // Get updated participant counts to refresh the embed - NOW INCLUDES BUILDS
       const participantsResult = await pool.query(
         `SELECT ep.role, ep.user_id, u.username, u.discord_id, u.builds
          FROM event_participants ep
