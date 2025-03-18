@@ -3651,88 +3651,95 @@ async function handleMembersCommand(interaction, appGuildId) {
   }
 }
 
-function createEventEmbed(event) {
-  // Format date
-  const eventDate = new Date(event.event_time);
-  const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
-  
-  // Format time
-  const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
-  
-  // Get participant counts
-  const tankCount = parseInt(event.tank_count || event.participants?.tank_count || 0);
-  const healerCount = parseInt(event.healer_count || event.participants?.healer_count || 0);
-  const dpsCount = parseInt(event.dps_count || event.participants?.dps_count || 0);
-  const totalSignups = tankCount + healerCount + dpsCount;
-  const absentCount = parseInt(event.absent_count || 0);
-  
-  const embed = new EmbedBuilder()
-    .setTitle(`${event.title || 'Event'}`)
-    .setColor('#1a64f3') // Raid-Helper blue color
-    .setDescription(event.description || 'No description provided')
-    .addFields(
-      { 
-        name: `${totalSignups} (${absentCount})`, 
-        value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
-        inline: false 
-      }
-    );
+// Event embed creation method
+createEventEmbed: (event) => {
+  try {
+    // Convert event_time to Date if it's a string
+    const eventTime = typeof event.event_time === 'string' 
+      ? new Date(event.event_time) 
+      : event.event_time;
     
-  // Add role fields with numbered participants
-  let tankValue = '—';
-  let dpsValue = '—';
-  let healerValue = '—';
-  
-  // We'd normally populate these with actual participant names from the database
-  // This is a placeholder for the embed structure
-  if (event.participants) {
-    const tankParticipants = event.participants.filter(p => p.role === 'TANK').map(p => p.User.username);
-    const dpsParticipants = event.participants.filter(p => p.role === 'DPS').map(p => p.User.username);
-    const healerParticipants = event.participants.filter(p => p.role === 'HEALER').map(p => p.User.username);
+    // Handle case where participants might be undefined
+    const participants = event.participants || [];
     
-    if (tankParticipants.length > 0) {
-      tankValue = tankParticipants.map((name, i) => `${i+1} ${name}`).join('\n');
+    // Group participants by role
+    const tanks = participants.filter(p => p.role === 'TANK');
+    const healers = participants.filter(p => p.role === 'HEALER');
+    const dps = participants.filter(p => p.role === 'DPS');
+    const absentees = participants.filter(p => p.role === 'ABSENT');
+    
+    // Format participant lists with numbers and weapons
+    const formatParticipants = (roleParticipants) => {
+      if (roleParticipants.length === 0) return '—';
+      return roleParticipants.map((p, idx) => {
+        let weaponText = '';
+        // Process builds if available
+        if (p.builds) {
+          try {
+            const builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+            if (Array.isArray(builds) && builds.length > 0) {
+              const build = builds[0];
+              if (build && (build.primary || build.secondary)) {
+                weaponText = ' ';
+                if (build.primary) weaponText += `${build.primary} `;
+                if (build.secondary) weaponText += `${build.secondary}`;
+              }
+            }
+          } catch (error) {
+            console.error(`[ERROR] Error parsing builds for user ${p.username}:`, error);
+          }
+        }
+        return `${idx + 1} ${p.username}${weaponText}`;
+      }).join('\n');
+    };
+    
+    const embed = new EmbedBuilder()
+      .setTitle(`${eventData.title || 'Event'}`)
+      .setColor('#1a64f3')
+      .setDescription(description)
+      .addFields(
+        { 
+          name: `${totalSignups} (${absentees.length})`, 
+          value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
+          inline: false 
+        },
+        { 
+          name: `🛡️ Tank (${participants.TANK.length}/${eventData.tanks || 0})`, 
+          value: formatParticipants(participantsResult.rows.filter(p => p.role === 'TANK')), 
+          inline: true 
+        },
+        { 
+          name: `⚔️ Dps (${participants.DPS.length}/${eventData.dps || 0})`, 
+          value: formatParticipants(participantsResult.rows.filter(p => p.role === 'DPS')),
+          inline: true 
+        },
+        { 
+          name: `💚 Healer (${participants.HEALER.length}/${eventData.healers || 0})`, 
+          value: formatParticipants(participantsResult.rows.filter(p => p.role === 'HEALER')),
+          inline: true 
+        }
+      )
+      .setFooter({ text: `ID: ${event.id}` })
+      .setTimestamp();
+    
+    // Add absentees if there are any
+    if (absentees.length > 0) {
+      embed.addFields({
+        name: `⛔ Absence (${absentees.length})`,
+        value: absentees.map(p => p.User?.username || p.username).join(', '),
+        inline: false
+      });
     }
     
-    if (dpsParticipants.length > 0) {
-      dpsValue = dpsParticipants.map((name, i) => `${i+1} ${name}`).join('\n');
-    }
-    
-    if (healerParticipants.length > 0) {
-      healerValue = healerParticipants.map((name, i) => `${i+1} ${name}`).join('\n');
-    }
+    return embed;
+  } catch (error) {
+    console.error('Error creating event embed:', error);
+    // Return a simple fallback embed if there's an error
+    return new EmbedBuilder()
+      .setTitle('Event Details')
+      .setDescription('Error creating detailed event information')
+      .setColor('#ff0000');
   }
-  
-  embed.addFields(
-    { 
-      name: `🛡️ Tank (${tankCount})`, 
-      value: tankValue, 
-      inline: true 
-    },
-    { 
-      name: `⚔️ Dps (${dpsCount})`, 
-      value: dpsValue, 
-      inline: true 
-    },
-    { 
-      name: `💚 Healer (${healerCount})`, 
-      value: healerValue, 
-      inline: true 
-    }
-  );
-  
-  // Add absence section if there are any absentees
-  if (event.absentees && event.absentees.length > 0) {
-    embed.addFields({ 
-      name: `⛔ Absence (${event.absentees.length})`, 
-      value: event.absentees.map(a => a.User.username).join(', '), 
-      inline: false 
-    });
-  }
-  
-  embed.setFooter({ text: `Event ID: ${event.id}` });
-  
-  return embed;
 }
 
 async function verifyEventChannelConfigurations() {
@@ -4193,7 +4200,7 @@ app.post('/webhook/update-event-signup', async (req, res) => {
       
       // Get updated participant counts to refresh the embed
       const participantsResult = await pool.query(
-        `SELECT ep.role, u.username, u.discord_id 
+        `SELECT ep.role, ep.user_id, u.username, u.discord_id, u.builds
          FROM event_participants ep
          JOIN users u ON ep.user_id = u.id
          WHERE ep.event_id = $1
