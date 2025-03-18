@@ -14,117 +14,98 @@ module.exports = {
         ? new Date(event.event_time) 
         : event.event_time;
       
-      // Format date and time
+      // Format the time for display
       const dateFormatted = eventTime.toLocaleDateString('en-US', { 
-        month: 'long', 
-        day: 'numeric', 
-        year: 'numeric' 
+        month: 'long', day: 'numeric', year: 'numeric' 
       });
       const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit', 
-        hour12: true 
+        hour: 'numeric', minute: '2-digit', hour12: true 
       });
+  
+      // Get participants - handle possible formats
+      let participants = event.participants || [];
       
-      // Handle case where participants might be undefined
-      const participants = event.participants || [];
-      
-      // Group participants by role
-      const tanks = Array.isArray(participants) 
-        ? participants.filter(p => p.role === 'TANK')
-        : [];
-      
-      const healers = Array.isArray(participants) 
-        ? participants.filter(p => p.role === 'HEALER')
-        : [];
-      
-      const dps = Array.isArray(participants) 
-        ? participants.filter(p => p.role === 'DPS')
-        : [];
-      
-      const absentees = Array.isArray(participants) 
-        ? participants.filter(p => p.role === 'ABSENT')
-        : [];
-      
-      // Helper function to format participant lists
-      const formatParticipants = (roleParticipants) => {
-        if (!roleParticipants || roleParticipants.length === 0) return '—';
-        
-        return roleParticipants.map((p, idx) => {
-          // Get username - handle different data structures
-          const username = p.User?.username || p.username || 'Unknown';
-          
-          // Get weapon information if available
-          let weaponText = '';
-          
-          // Handle builds that might be in User object or directly on participant
-          let builds = p.User?.builds || p.builds || [];
-          
-          // Parse builds if it's a string
-          if (typeof builds === 'string') {
-            try {
-              builds = JSON.parse(builds);
-            } catch (error) {
-              console.error(`Error parsing builds for user ${username}:`, error);
-              builds = [];
-            }
-          }
-          
-          // Ensure builds is an array
-          builds = Array.isArray(builds) ? builds : [];
-          
-          if (builds.length > 0) {
-            const build = builds[0];
-            if (build && (build.primary || build.secondary)) {
-              if (build.primary) weaponText += ` ${build.primary}`;
-              if (build.primary && build.secondary) weaponText += '/';
-              if (build.secondary) weaponText += `${build.secondary}`;
-            }
-          }
-          
-          return `${idx + 1} ${username}${weaponText}`;
-        }).join('\n');
+      // Process participants by role
+      const getTankPlayers = () => {
+        return participants.filter(p => p.role === 'TANK')
+          .map((p, idx) => formatPlayer(p, idx));
       };
       
-      // Total participants count
-      const totalParticipants = tanks.length + healers.length + dps.length;
+      const getHealerPlayers = () => {
+        return participants.filter(p => p.role === 'HEALER')
+          .map((p, idx) => formatPlayer(p, idx));
+      };
       
+      const getDpsPlayers = () => {
+        return participants.filter(p => p.role === 'DPS')
+          .map((p, idx) => formatPlayer(p, idx));
+      };
+      
+      const formatPlayer = (player, idx) => {
+        if (!player) return '';
+        
+        // Get player name
+        const name = player.User?.username || player.username || 'Unknown';
+        
+        // Get weapons from builds
+        let weaponsText = '';
+        try {
+          let builds = player.User?.builds || player.builds || [];
+          if (typeof builds === 'string') {
+            builds = JSON.parse(builds);
+          }
+          
+          if (Array.isArray(builds) && builds.length > 0) {
+            const build = builds[0];
+            if (build) {
+              if (build.primary || build.secondary) {
+                weaponsText = ' ';
+                if (build.primary) weaponsText += build.primary;
+                if (build.primary && build.secondary) weaponsText += '/';
+                if (build.secondary) weaponsText += build.secondary;
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error formatting weapons for player:', e);
+        }
+        
+        return `${idx + 1} ${name}${weaponsText}`;
+      };
+      
+      // Count players by role
+      const tanks = participants.filter(p => p.role === 'TANK');
+      const healers = participants.filter(p => p.role === 'HEALER');
+      const dps = participants.filter(p => p.role === 'DPS');
+      
+      // Create embed
       const embed = new EmbedBuilder()
-        .setTitle(event.title || 'Event')
-        .setDescription(event.description || 'No description provided')
+        .setTitle(`${event.title || 'Event'}`)
         .setColor('#1a64f3')
+        .setDescription(event.description || 'No description provided')
         .addFields(
           { 
-            name: `${totalParticipants} (${absentees.length})`, 
+            name: `${tanks.length + healers.length + dps.length} (${0})`, 
             value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
             inline: false 
           },
           { 
             name: `🛡️ Tank (${tanks.length}/${event.tanks || 0})`, 
-            value: formatParticipants(tanks), 
-            inline: true 
-          },
-          { 
-            name: `⚔️ Dps (${dps.length}/${event.dps || 0})`, 
-            value: formatParticipants(dps), 
+            value: getTankPlayers().join('\n') || '—', 
             inline: true 
           },
           { 
             name: `💚 Healer (${healers.length}/${event.healers || 0})`, 
-            value: formatParticipants(healers), 
+            value: getHealerPlayers().join('\n') || '—', 
+            inline: true 
+          },
+          { 
+            name: `⚔️ DPS (${dps.length}/${event.dps || 0})`, 
+            value: getDpsPlayers().join('\n') || '—', 
             inline: true 
           }
         )
         .setFooter({ text: `Event ID: ${event.id}` });
-      
-      // Add absentees if there are any
-      if (absentees.length > 0) {
-        embed.addFields({
-          name: `⛔ Absence (${absentees.length})`,
-          value: absentees.map(p => p.User?.username || p.username).join(', '),
-          inline: false
-        });
-      }
       
       return embed;
     } catch (error) {
