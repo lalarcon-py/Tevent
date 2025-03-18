@@ -19,7 +19,7 @@ import SendIcon from '@mui/icons-material/Send';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { useParams } from 'react-router-dom';
-import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import for role simulation
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
