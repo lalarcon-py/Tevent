@@ -725,24 +725,6 @@ app.post('/webhook/new-event', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    try {
-      // Create table to track Discord messages for events
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS discord_event_messages (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          guild_id UUID NOT NULL,
-          event_id UUID NOT NULL,
-          channel_id VARCHAR(255) NOT NULL,
-          message_id VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(event_id)
-        )
-      `);
-    } catch (tableError) {
-      console.error(`[ERROR] Error creating discord_event_messages table: ${tableError.message}`);
-      // Continue even if table creation fails
-    }
-    
     // Get Discord guild ID
     const mappingResult = await pool.query(
       'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
@@ -755,7 +737,6 @@ app.post('/webhook/new-event', async (req, res) => {
     }
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
-    console.log(`[INFO] Found Discord guild mapping: ${discordGuildId}`);
     
     // Get the channel configuration
     const channelConfigResult = await pool.query(
@@ -770,20 +751,6 @@ app.post('/webhook/new-event', async (req, res) => {
     }
     
     const channelId = channelConfigResult.rows[0].channel_id;
-    console.log(`[INFO] Using events channel: ${channelId}`);
-    
-    // Create absentees table if it doesn't exist
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS event_absentees (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        guild_id UUID NOT NULL,
-        event_id UUID NOT NULL,
-        user_id UUID NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(event_id, user_id)
-      )
-    `);
     
     // Fetch the newly created event
     const eventResult = await pool.query(
@@ -797,7 +764,6 @@ app.post('/webhook/new-event', async (req, res) => {
     }
     
     const eventData = eventResult.rows[0];
-    console.log(`[INFO] Successfully fetched event: ${eventData.title}`);
     
     // Get current participants
     const participantsResult = await pool.query(
@@ -819,84 +785,83 @@ app.post('/webhook/new-event', async (req, res) => {
       [eventId]
     );
     
-    console.log(`[DEBUG] Absences query returned ${absenteesResult.rows.length} rows`);
+    const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
+    const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
+    const dps = participantsResult.rows.filter(p => p.role === 'DPS');
+    const absentees = absenteesResult.rows;
     
-    // DIRECT EMBED CREATION - NO EXTERNAL DEPENDENCIES
-    const embed = new EmbedBuilder()
-      .setTitle(eventData.title || 'Event')
-      .setColor('#0099ff');
-      
-    // Only set description if it's not empty (to avoid validation error)
-    if (eventData.description && eventData.description.trim() !== "") {
-      embed.setDescription(eventData.description);
-    }
+    const formatDate = (date) => {
+      if (!date) return "Date not set";
+      date = new Date(date);
+      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    };
     
-    embed.addFields(
-      { 
-        name: '⏰ Time', 
-        value: `📅 ${new Date(eventData.event_time).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} ⌚ ${new Date(eventData.event_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`, 
-        inline: false 
-      },
-      { 
-        name: '📍 Location', 
-        value: eventData.location || 'Not specified', 
-        inline: false 
-      },
-      { 
-        name: `🛡️ Tanks (${participantsResult.rows.filter(p => p.role === 'TANK').length}/${eventData.tanks || 0})`, 
-        value: participantsResult.rows.filter(p => p.role === 'TANK').length > 0 ? 
-          participantsResult.rows.filter(p => p.role === 'TANK').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-          '—', 
-        inline: true 
-      },
-      { 
-        name: `💚 Healers (${participantsResult.rows.filter(p => p.role === 'HEALER').length}/${eventData.healers || 0})`, 
-        value: participantsResult.rows.filter(p => p.role === 'HEALER').length > 0 ? 
-          participantsResult.rows.filter(p => p.role === 'HEALER').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-          '—', 
-        inline: true 
-      },
-      { 
-        name: `⚔️ DPS (${participantsResult.rows.filter(p => p.role === 'DPS').length}/${eventData.dps || 0})`, 
-        value: participantsResult.rows.filter(p => p.role === 'DPS').length > 0 ? 
-          participantsResult.rows.filter(p => p.role === 'DPS').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-          '—', 
-        inline: true 
+    const formatTime = (date) => {
+      if (!date) return "Time not set";
+      date = new Date(date);
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    };
+    
+    // Create a simple embed object directly
+    const embed = {
+      title: eventData.title || 'Event',
+      color: 0x0099ff,
+      fields: [
+        {
+          name: '⏰ Time',
+          value: `📅 ${formatDate(eventData.event_time)} ⌚ ${formatTime(eventData.event_time)}`,
+          inline: false
+        },
+        {
+          name: '📍 Location',
+          value: eventData.location || 'Not specified',
+          inline: false
+        },
+        {
+          name: `🛡️ Tanks (${tanks.length}/${eventData.tanks || 0})`,
+          value: tanks.length > 0 ? 
+            tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—',
+          inline: true
+        },
+        {
+          name: `💚 Healers (${healers.length}/${eventData.healers || 0})`,
+          value: healers.length > 0 ? 
+            healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—',
+          inline: true
+        },
+        {
+          name: `⚔️ DPS (${dps.length}/${eventData.dps || 0})`,
+          value: dps.length > 0 ? 
+            dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—',
+          inline: true
+        },
+        {
+          name: `❌ Absent (${absentees.length})`,
+          value: absentees.length > 0 ? 
+            absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+            '—',
+          inline: true
+        },
+        {
+          name: '⏳ Tentative (0)',
+          value: '—',
+          inline: true
+        }
+      ],
+      footer: {
+        text: `Event ID: ${eventId}`
       }
-    )
-    .setFooter({ text: `Event ID: ${eventId}` });
-    
-    // Add absentee field if there are any
-    if (absenteesResult.rows.length > 0) {
-      embed.addFields({
-        name: `❌ Absent (${absenteesResult.rows.length})`,
-        value: absenteesResult.rows.map((a, i) => `${i+1}. ${a.username}`).join('\n') || '—',
-        inline: true
-      });
-    } else {
-      embed.addFields({
-        name: `❌ Absent (0)`,
-        value: '—',
-        inline: true
-      });
-    }
-    
-    // Add a tentative field to match the expected layout
-    embed.addFields({
-      name: `⏳ Tentative (0)`,
-      value: '—',
-      inline: true
-    });
+    };
     
     try {
       const channel = await client.channels.fetch(channelId);
       
       if (!channel) {
-        console.error(`[ERROR] Channel not found: ${channelId}`);
         return res.status(404).json({ error: 'Channel not found' });
       }
-      
-      console.log(`[INFO] Sending event to channel: ${channel.name}`);
       
       // Create signup buttons
       const row = new ActionRowBuilder()
@@ -940,12 +905,9 @@ app.post('/webhook/new-event', async (req, res) => {
              message_id = $4`,
           [guildId, eventId, channelId, message.id]
         );
-        console.log(`[INFO] Stored Discord message ID ${message.id} for event ${eventId}`);
       } catch (storeError) {
         console.error(`[ERROR] Failed to store Discord message ID: ${storeError.message}`);
       }
-      
-      console.log(`[INFO] Event message sent successfully with button components`);
       
     } catch (channelError) {
       console.error(`[ERROR] Error sending to channel:`, channelError);
