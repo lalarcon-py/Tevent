@@ -8,25 +8,133 @@ module.exports = {
    * Create an embed for an event
    */
   createEventEmbed: (event) => {
-    const tankCount = event.participants?.filter(p => p.role === 'TANK').length || 0;
-    const healerCount = event.participants?.filter(p => p.role === 'HEALER').length || 0;
-    const dpsCount = event.participants?.filter(p => p.role === 'DPS').length || 0;
-    
-    const embed = new EmbedBuilder()
-      .setTitle(`📅 ${event.title}`)
-      .setDescription(event.description || 'No description provided')
-      .setColor('#3498db')
-      .addFields(
-        { name: '⏰ Time', value: new Date(event.event_time).toLocaleString(), inline: false },
-        { name: '📍 Location', value: event.location || 'Not specified', inline: false },
-        { name: '🛡️ Tanks', value: `${tankCount}/${event.tanks}`, inline: true },
-        { name: '💚 Healers', value: `${healerCount}/${event.healers}`, inline: true },
-        { name: '⚔️ DPS', value: `${dpsCount}/${event.dps}`, inline: true }
-      )
-      .setFooter({ text: `ID: ${event.id}` })
-      .setTimestamp();
-    
-    return embed;
+    try {
+      // Convert event_time to Date if it's a string
+      const eventTime = typeof event.event_time === 'string' 
+        ? new Date(event.event_time) 
+        : event.event_time;
+      
+      // Format date and time
+      const dateFormatted = eventTime.toLocaleDateString('en-US', { 
+        month: 'long', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit', 
+        hour12: true 
+      });
+      
+      // Handle case where participants might be undefined
+      const participants = event.participants || [];
+      
+      // Group participants by role
+      const tanks = Array.isArray(participants) 
+        ? participants.filter(p => p.role === 'TANK')
+        : [];
+      
+      const healers = Array.isArray(participants) 
+        ? participants.filter(p => p.role === 'HEALER')
+        : [];
+      
+      const dps = Array.isArray(participants) 
+        ? participants.filter(p => p.role === 'DPS')
+        : [];
+      
+      const absentees = Array.isArray(participants) 
+        ? participants.filter(p => p.role === 'ABSENT')
+        : [];
+      
+      // Helper function to format participant lists
+      const formatParticipants = (roleParticipants) => {
+        if (!roleParticipants || roleParticipants.length === 0) return '—';
+        
+        return roleParticipants.map((p, idx) => {
+          // Get username - handle different data structures
+          const username = p.User?.username || p.username || 'Unknown';
+          
+          // Get weapon information if available
+          let weaponText = '';
+          
+          // Handle builds that might be in User object or directly on participant
+          let builds = p.User?.builds || p.builds || [];
+          
+          // Parse builds if it's a string
+          if (typeof builds === 'string') {
+            try {
+              builds = JSON.parse(builds);
+            } catch (error) {
+              console.error(`Error parsing builds for user ${username}:`, error);
+              builds = [];
+            }
+          }
+          
+          // Ensure builds is an array
+          builds = Array.isArray(builds) ? builds : [];
+          
+          if (builds.length > 0) {
+            const build = builds[0];
+            if (build && (build.primary || build.secondary)) {
+              if (build.primary) weaponText += ` ${build.primary}`;
+              if (build.primary && build.secondary) weaponText += '/';
+              if (build.secondary) weaponText += `${build.secondary}`;
+            }
+          }
+          
+          return `${idx + 1} ${username}${weaponText}`;
+        }).join('\n');
+      };
+      
+      // Total participants count
+      const totalParticipants = tanks.length + healers.length + dps.length;
+      
+      const embed = new EmbedBuilder()
+        .setTitle(event.title || 'Event')
+        .setDescription(event.description || 'No description provided')
+        .setColor('#1a64f3')
+        .addFields(
+          { 
+            name: `${totalParticipants} (${absentees.length})`, 
+            value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
+            inline: false 
+          },
+          { 
+            name: `🛡️ Tank (${tanks.length}/${event.tanks || 0})`, 
+            value: formatParticipants(tanks), 
+            inline: true 
+          },
+          { 
+            name: `⚔️ Dps (${dps.length}/${event.dps || 0})`, 
+            value: formatParticipants(dps), 
+            inline: true 
+          },
+          { 
+            name: `💚 Healer (${healers.length}/${event.healers || 0})`, 
+            value: formatParticipants(healers), 
+            inline: true 
+          }
+        )
+        .setFooter({ text: `Event ID: ${event.id}` });
+      
+      // Add absentees if there are any
+      if (absentees.length > 0) {
+        embed.addFields({
+          name: `⛔ Absence (${absentees.length})`,
+          value: absentees.map(p => p.User?.username || p.username).join(', '),
+          inline: false
+        });
+      }
+      
+      return embed;
+    } catch (error) {
+      console.error('Error creating event embed:', error);
+      // Return a simple fallback embed if there's an error
+      return new EmbedBuilder()
+        .setTitle('Event Details')
+        .setDescription('Error creating detailed event information')
+        .setColor('#ff0000');
+    }
   },
   
   /**
