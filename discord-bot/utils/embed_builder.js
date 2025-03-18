@@ -28,27 +28,21 @@ module.exports = {
       const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
         hour: 'numeric', minute: '2-digit', hour12: true 
       });
-
+  
       // Get participants - handle possible formats
       let participants = event.participants || [];
       
       // Process participants by role
-      const getTankPlayers = () => {
-        return participants.filter(p => p.role === 'TANK')
-          .map((p, idx) => formatPlayer(p, idx));
-      };
+      const tankPlayers = participants.filter(p => p.role === 'TANK')
+        .map((p, idx) => formatPlayer(p, idx));
       
-      const getHealerPlayers = () => {
-        return participants.filter(p => p.role === 'HEALER')
-          .map((p, idx) => formatPlayer(p, idx));
-      };
+      const healerPlayers = participants.filter(p => p.role === 'HEALER')
+        .map((p, idx) => formatPlayer(p, idx));
       
-      const getDpsPlayers = () => {
-        return participants.filter(p => p.role === 'DPS')
-          .map((p, idx) => formatPlayer(p, idx));
-      };
+      const dpsPlayers = participants.filter(p => p.role === 'DPS')
+        .map((p, idx) => formatPlayer(p, idx));
       
-      const formatPlayer = (player, idx) => {
+      function formatPlayer(player, idx) {
         if (!player) return '';
         
         // Get player name
@@ -78,14 +72,14 @@ module.exports = {
         }
         
         return `${idx + 1}. ${name}${weaponsText}`;
-      };
+      }
       
       // Count players by role
       const tanks = participants.filter(p => p.role === 'TANK');
       const healers = participants.filter(p => p.role === 'HEALER');
       const dps = participants.filter(p => p.role === 'DPS');
       
-      // Get absentees (check various possible formats)
+      // Get absentees
       let absentees = [];
       if (Array.isArray(event.absentees)) {
         absentees = event.absentees;
@@ -94,57 +88,50 @@ module.exports = {
       }
       
       // Format absentees
-      const formatAbsentees = () => {
-        if (!absentees.length) return '—';
-        
-        return absentees.map((a, idx) => {
-          // Try to handle different data structures
-          const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
-          return `${idx + 1}. ${username}`;
-        }).join('\n');
-      };
-      
-      // Format tentative (for future expansion)
-      const formatTentative = () => {
-        return '—';
-      };
+      const absenteeNames = absentees.map((a, idx) => {
+        const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
+        return `${idx + 1}. ${username}`;
+      }).join('\n') || '—';
       
       // Create embed
       const embed = new EmbedBuilder()
-        .setTitle(`${event.title || 'Event'}`)
+        .setTitle(event.title || 'Event')
         .setColor(eventHasPassed ? '#808080' : '#1a64f3') // Gray if passed, blue if active
-        .setDescription(`📅 ${dateFormatted} ⏱️ ${timeFormatted}`);
+        .setDescription(
+          `Time: ${timeFormatted}\n` +
+          `Date: ${dateFormatted}\n` +
+          `Location: ${event.location || 'Not specified'}`
+        );
       
-      // Add event description if it exists
-      if (event.description && event.description.trim() !== '') {
-        embed.setDescription(`📅 ${dateFormatted} ⏱️ ${timeFormatted}\n\n${event.description}`);
-      }
-      
-      // Add all role fields as separate columns that will expand dynamically
+      // Add role fields as columns
       embed.addFields(
         { 
           name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`, 
-          value: getTankPlayers().join('\n') || '—', 
-          inline: true 
-        },
-        { 
-          name: `⚔️ DPS (${dps.length}/${event.dps || 0})`, 
-          value: getDpsPlayers().join('\n') || '—', 
+          value: tankPlayers.join('\n') || '—', 
           inline: true 
         },
         { 
           name: `💚 Healers (${healers.length}/${event.healers || 0})`, 
-          value: getHealerPlayers().join('\n') || '—', 
+          value: healerPlayers.join('\n') || '—', 
           inline: true 
         },
         { 
+          name: `⚔️ DPS (${dps.length}/${event.dps || 0})`, 
+          value: dpsPlayers.join('\n') || '—', 
+          inline: true 
+        }
+      );
+      
+      // Add absentees and tentative
+      embed.addFields(
+        { 
           name: `❌ Absent (${absentees.length || 0})`, 
-          value: formatAbsentees(), 
+          value: absenteeNames, 
           inline: true 
         },
         { 
           name: `⏳ Tentative (0)`, 
-          value: formatTentative(), 
+          value: '—', 
           inline: true 
         }
       );
