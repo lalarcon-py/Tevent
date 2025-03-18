@@ -785,22 +785,22 @@ app.post('/webhook/new-event', async (req, res) => {
     `);
     
     // Fetch the newly created event
-    const event = await pool.query(
+    const eventResult = await pool.query(
       `SELECT * FROM events WHERE id = $1`,
       [eventId]
     );
     
-    if (!event.rows.length) {
+    if (!eventResult.rows.length) {
       console.error(`[ERROR] Event not found: ${eventId}`);
       return res.status(404).json({ error: 'Event not found' });
     }
     
-    const eventData = event.rows[0];
+    const eventData = eventResult.rows[0];
     console.log(`[INFO] Successfully fetched event: ${eventData.title}`);
     
     // Get current participants
     const participantsResult = await pool.query(
-      `SELECT ep.role, u.username, u.discord_id, u.builds
+      `SELECT ep.role, u.username, u.discord_id, u.builds, ep.user_id
        FROM event_participants ep
        JOIN users u ON ep.user_id = u.id
        WHERE ep.event_id = $1
@@ -818,100 +818,40 @@ app.post('/webhook/new-event', async (req, res) => {
       [eventId]
     );
     
-    console.log(`[DEBUG] Absences query returned ${absenteesResult.rows.length} rows`);
+    console.log(`[DEBUG] Found ${participantsResult.rows.length} participants and ${absenteesResult.rows.length} absentees`);
     
-    // Group participants by role
-    const participants = {
-      TANK: [],
-      HEALER: [],
-      DPS: []
-    };
-    
-    participantsResult.rows.forEach(p => {
-      if (participants[p.role]) {
-        // Add weapon information to participant data
-        let weaponInfo = '';
-        if (p.builds) {
-          try {
-            const builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
-            if (Array.isArray(builds) && builds.length > 0) {
-              const build = builds[0];
-              if (build.primary || build.secondary) {
-                weaponInfo = ' [';
-                if (build.primary) weaponInfo += `[${build.primary}]`;
-                if (build.primary && build.secondary) weaponInfo += ' ';
-                if (build.secondary) weaponInfo += `[${build.secondary}]`;
-                weaponInfo += ']';
-              }
-            }
-          } catch (error) {
-            console.error(`[ERROR] Error parsing builds for user ${p.username}:`, error);
-          }
-        }
-        participants[p.role].push(p.username + weaponInfo);
+    // Format participants for embedBuilder
+    const formattedParticipants = participantsResult.rows.map(p => ({
+      role: p.role,
+      User: {
+        username: p.username,
+        discord_id: p.discord_id,
+        id: p.user_id
       }
+    }));
+    
+    // Format absentees for embedBuilder
+    const formattedAbsentees = absenteesResult.rows.map(a => ({
+      username: a.username,
+      User: {
+        username: a.username,
+        id: a.user_id
+      }
+    }));
+    
+    // USE THE EMBED BUILDER INSTEAD OF MANUAL CONSTRUCTION
+    const embed = embedBuilder.createEventEmbed({
+      id: eventId,
+      title: eventData.title,
+      event_time: eventData.event_time,
+      location: eventData.location || 'Not specified',
+      description: eventData.description,
+      tanks: eventData.tanks || 0,
+      healers: eventData.healers || 0,
+      dps: eventData.dps || 0,
+      participants: formattedParticipants,
+      absentees: formattedAbsentees
     });
-    
-    const absentees = absenteesResult.rows.map(a => a.username);
-    
-    // Format date
-    const eventDate = new Date(eventData.event_time);
-    const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
-    
-    // Format time
-    const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
-    
-    // Calculate total signup count
-    const totalSignups = participantsResult.rows.length;
-    
-    // Build event description
-    const description = [eventData.description || eventData.title || 'Event'].join('\n\n');
-    
-    // Create embed
-    const embed = new EmbedBuilder()
-      .setTitle(`${eventData.title || 'Event'}`)
-      .setColor('#1a64f3') // Raid-Helper blue color
-      .setDescription(description)
-      .addFields(
-        { 
-          name: `${totalSignups} (${absentees.length})`, 
-          value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
-          inline: false 
-        },
-        { 
-          name: `🛡️ Tank (${participants.TANK.length})`, 
-          value: participants.TANK.length > 0 ? 
-            participants.TANK.map((name, i) => `${i+1} ${name}`).join('\n') : 
-            '—', 
-          inline: true 
-        },
-        { 
-          name: `⚔️ Dps (${participants.DPS.length})`, 
-          value: participants.DPS.length > 0 ? 
-            participants.DPS.map((name, i) => `${i+1} ${name}`).join('\n') : 
-            '—', 
-          inline: true 
-        },
-        { 
-          name: `💚 Healer (${participants.HEALER.length})`, 
-          value: participants.HEALER.length > 0 ? 
-            participants.HEALER.map((name, i) => `${i+1} ${name}`).join('\n') : 
-            '—', 
-          inline: true 
-        }
-      );
-    
-    // Add absence section if there are any
-    if (absentees.length > 0) {
-      embed.addFields({ 
-        name: `⛔ Absence (${absentees.length})`, 
-        value: absentees.join(', '), 
-        inline: false 
-      });
-    }
-    
-    // Add footer
-    embed.setFooter({ text: `Event ID: ${eventId}` });
     
     try {
       const channel = await client.channels.fetch(channelId);
