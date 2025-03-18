@@ -18,6 +18,7 @@ import SendIcon from '@mui/icons-material/Send';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { useParams } from 'react-router-dom';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import for role simulation
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -145,13 +146,14 @@ const DraggableMember = ({ member, onRemove }) => {
   );
 };
 
-const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
+const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit, canEdit }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [teamName, setTeamName] = useState(team.name);
   const [isDropTarget, setIsDropTarget] = useState(false);
 
   const handleDragOver = (e) => {
     e.preventDefault();
+    if (!canEdit) return; // Prevent drag over if not authorized
     e.dataTransfer.dropEffect = 'move';
     setIsDropTarget(true);
   };
@@ -162,6 +164,7 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
 
   const handleDrop = (e) => {
     e.preventDefault();
+    if (!canEdit) return; // Prevent drop if not authorized
     setIsDropTarget(false);
 
     let memberId;
@@ -192,6 +195,7 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
   };
 
   const handleNameSave = () => {
+    if (!canEdit) return; // Prevent name save if not authorized
     onEdit({ ...team, name: teamName });
     setIsEditingName(false);
   };
@@ -210,7 +214,7 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        {isEditingName ? (
+        {isEditingName && canEdit ? (
           <TextField
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
@@ -230,32 +234,34 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit }) => {
             variant="h6" 
             sx={{ 
               color: 'white',
-              cursor: 'pointer',
-              '&:hover': { color: '#90caf9' }
+              cursor: canEdit ? 'pointer' : 'default',
+              '&:hover': canEdit ? { color: '#90caf9' } : {}
             }}
-            onClick={() => setIsEditingName(true)}
+            onClick={() => canEdit && setIsEditingName(true)}
           >
             {team.name}
           </Typography>
         )}
-        <Button
-          size="small"
-          variant="contained"
-          onClick={() => onRemove(team.id)}
-          sx={{
-            bgcolor: '#f44336',
-            '&:hover': { bgcolor: '#d32f2f' }
-          }}
-        >
-          Remove Team
-        </Button>
+        {canEdit && (
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => onRemove(team.id)}
+            sx={{
+              bgcolor: '#f44336',
+              '&:hover': { bgcolor: '#d32f2f' }
+            }}
+          >
+            Remove Team
+          </Button>
+        )}
       </Box>
       <Box sx={{ minHeight: 100 }}>
         {team.members?.map(member => (
           <DraggableMember 
             key={member.id || member.user_id || (member.User && member.User.id)} 
             member={member} 
-            onRemove={() => onRemoveMember(team.id, member)} 
+            onRemove={canEdit ? () => onRemoveMember(team.id, member) : null} 
           />
         ))}
       </Box>
@@ -296,30 +302,34 @@ const ParticipantPool = ({ participants }) => {
   );
 };
 
-const TeamManagement = ({ onCreateTeam, onRemoveTeam, teamCount }) => {
+const TeamManagement = ({ onCreateTeam, onRemoveTeam, teamCount, canEdit }) => {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <Button
-        variant="contained"
-        onClick={onCreateTeam}
-        sx={{
-          bgcolor: '#4CAF50',
-          '&:hover': { bgcolor: '#45a049' }
-        }}
-      >
-        + Add Team
-      </Button>
-      {teamCount > 0 && (
-        <Button
-          variant="contained"
-          onClick={onRemoveTeam}
-          sx={{
-            bgcolor: '#f44336',
-            '&:hover': { bgcolor: '#d32f2f' }
-          }}
-        >
-          - Remove Team
-        </Button>
+      {canEdit && (
+        <>
+          <Button
+            variant="contained"
+            onClick={onCreateTeam}
+            sx={{
+              bgcolor: '#4CAF50',
+              '&:hover': { bgcolor: '#45a049' }
+            }}
+          >
+            + Add Team
+          </Button>
+          {teamCount > 0 && (
+            <Button
+              variant="contained"
+              onClick={onRemoveTeam}
+              sx={{
+                bgcolor: '#f44336',
+                '&:hover': { bgcolor: '#d32f2f' }
+              }}
+            >
+              - Remove Team
+            </Button>
+          )}
+        </>
       )}
     </Box>
   );
@@ -327,6 +337,7 @@ const TeamManagement = ({ onCreateTeam, onRemoveTeam, teamCount }) => {
 
 const TeamPlanner = () => {
   const { eventId } = useParams();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
   const [teams, setTeams] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [error, setError] = useState(null);
@@ -337,6 +348,16 @@ const TeamPlanner = () => {
   const [absentees, setAbsentees] = useState([]);
   const [isAnnouncingTeams, setIsAnnouncingTeams] = useState(false);
   const [announceSuccess, setAnnounceSuccess] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+
+  // Check if user has permission to edit teams based on role
+  const hasEditPermission = () => {
+    // Get effective role (simulated or actual)
+    const effectiveRole = simulatedRole || userRole;
+    
+    // Only Guild Master, Guild Advisor, and Guild Guardian can edit teams
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
+  };
 
   // First useEffect for fetching initial data
   useEffect(() => {
@@ -351,6 +372,20 @@ const TeamPlanner = () => {
         }
         
         console.log(`Fetching data with guild ID: ${guildId}`);
+        
+        // Fetch user role
+        try {
+          const roleResponse = await fetch(`${API_URL}/api/auth/status`, {
+            credentials: 'include'
+          });
+          if (roleResponse.ok) {
+            const roleData = await roleResponse.json();
+            setUserRole(roleData.role);
+            console.log('User role:', roleData.role);
+          }
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+        }
         
         // Fetch all events first
         const [eventsResponse, teamsResponse] = await Promise.all([
@@ -421,7 +456,7 @@ const TeamPlanner = () => {
     };
   
     fetchData();
-  }, [eventId, guildId]);
+  }, [eventId, guildId, simulatedRole]);
 
   useEffect(() => {
     const fetchGuildId = async () => {
@@ -503,6 +538,11 @@ const TeamPlanner = () => {
   };
 
   const handleSignUpAbsentee = async (memberId, role) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to add members');
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/events/${eventId}/signup`, {
         method: 'POST',
@@ -536,6 +576,11 @@ const TeamPlanner = () => {
   };
 
   const handleEditTeam = async (updatedTeam) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to edit teams');
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/teams/${updatedTeam.id}`, {
         method: 'PUT',
@@ -557,6 +602,11 @@ const TeamPlanner = () => {
   };
 
   const handleCreateTeam = async () => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to create teams');
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/teams`, {
         method: 'POST',
@@ -578,6 +628,11 @@ const TeamPlanner = () => {
   };
 
   const handleRemoveMember = async (teamId, member) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to remove team members');
+      return;
+    }
+    
     try {
       if (!member.user_id) {
         throw new Error('Invalid member data');
@@ -620,6 +675,11 @@ const TeamPlanner = () => {
   };
 
   const handleRemoveTeam = async (teamId) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to remove teams');
+      return;
+    }
+    
     try {
       const teamToRemove = teams.find(t => t.id === teamId);
       if (!teamToRemove) return;
@@ -644,6 +704,11 @@ const TeamPlanner = () => {
   };
 
   const handleDrop = async (memberId, teamId) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to modify teams');
+      return;
+    }
+    
     try {
       let member = participants.find(p => 
         p.id === memberId || p.user_id === memberId || 
@@ -751,6 +816,11 @@ const TeamPlanner = () => {
   };
 
   const handleSavePreset = async () => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to save presets');
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/team-presets`, {
         method: 'POST',
@@ -786,6 +856,11 @@ const TeamPlanner = () => {
   };
 
   const cleanupExistingTeams = async () => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to modify teams');
+      return;
+    }
+    
     try {
       await Promise.all(
         teams.map(team => 
@@ -802,6 +877,11 @@ const TeamPlanner = () => {
 
 
   const loadPreset = async (presetId) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to load presets');
+      return;
+    }
+    
     try {
       await cleanupExistingTeams();
   
@@ -932,6 +1012,11 @@ const TeamPlanner = () => {
   const [presetToDelete, setPresetToDelete] = useState(null);
 
   const handleDeletePreset = async (preset) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to delete presets');
+      return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/team-presets/${preset.id}?guildId=${guildId}`, {
         method: 'DELETE',
@@ -950,6 +1035,16 @@ const TeamPlanner = () => {
     }
   };
 
+  // Check if user has edit permissions
+  const canEdit = hasEditPermission();
+  // For debugging permissions
+  console.log('Permission check:', {
+    canEdit,
+    simulatedRole,
+    userRole,
+    effectiveRole: simulatedRole || userRole
+  });
+
   if (error) {
     return (
       <Box sx={{ p: 3, color: 'error.main' }}>
@@ -965,36 +1060,41 @@ const TeamPlanner = () => {
           Team Planner
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="contained"
-            onClick={() => setOpenPresetDialog(true)}
-            sx={{
-              bgcolor: '#4CAF50',
-              '&:hover': { bgcolor: '#45a049' }
-            }}
-          >
-            Save as Preset
-          </Button>
-          <Button
-            variant="contained"
-            onClick={loadPresets}
-            sx={{
-              bgcolor: '#2196F3',
-              '&:hover': { bgcolor: '#1976D2' }
-            }}
-          >
-            Load Preset
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleCreateTeam}
-            sx={{
-              bgcolor: '#4CAF50',
-              '&:hover': { bgcolor: '#45a049' }
-            }}
-          >
-            Create Team
-          </Button>
+          {canEdit && (
+            <>
+              <Button
+                variant="contained"
+                onClick={() => setOpenPresetDialog(true)}
+                sx={{
+                  bgcolor: '#4CAF50',
+                  '&:hover': { bgcolor: '#45a049' }
+                }}
+              >
+                Save as Preset
+              </Button>
+              <Button
+                variant="contained"
+                onClick={loadPresets}
+                sx={{
+                  bgcolor: '#2196F3',
+                  '&:hover': { bgcolor: '#1976D2' }
+                }}
+              >
+                Load Preset
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleCreateTeam}
+                sx={{
+                  bgcolor: '#4CAF50',
+                  '&:hover': { bgcolor: '#45a049' }
+                }}
+              >
+                Create Team
+              </Button>
+            </>
+          )}
+          {/* Announce button is visible to all but only active if teams exist */}
           <Button
             variant="contained"
             onClick={handleAnnounceTeams}
@@ -1052,20 +1152,22 @@ const TeamPlanner = () => {
                     >
                       {member.User?.username || member.username}
                     </Typography>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      sx={{
-                        minWidth: '60px',
-                        fontSize: '0.7rem',
-                        ml: 1,
-                        color: '#90caf9',
-                        borderColor: '#90caf9'
-                      }}
-                      onClick={() => handleSignUpAbsentee(member.id || member.user_id, 'DPS')}
-                    >
-                      Add
-                    </Button>
+                    {canEdit && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          minWidth: '60px',
+                          fontSize: '0.7rem',
+                          ml: 1,
+                          color: '#90caf9',
+                          borderColor: '#90caf9'
+                        }}
+                        onClick={() => handleSignUpAbsentee(member.id || member.user_id, 'DPS')}
+                      >
+                        Add
+                      </Button>
+                    )}
                   </Box>
                 ))}
               </Box>
@@ -1087,6 +1189,7 @@ const TeamPlanner = () => {
                   onRemove={handleRemoveTeam}
                   onRemoveMember={handleRemoveMember}
                   onEdit={handleEditTeam}
+                  canEdit={canEdit}
                 />
               </Grid>
             ))}

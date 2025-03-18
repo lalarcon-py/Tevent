@@ -1,4 +1,4 @@
-// Updated DiscordSettingsPage.jsx component with enhanced channel reading
+// Updated DiscordSettingsPage.jsx component with enhanced channel reading and role simulation
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
@@ -12,6 +12,7 @@ import ConnectedTvIcon from '@mui/icons-material/ConnectedTv';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import TuneIcon from '@mui/icons-material/Tune';
 import { useGuild } from '../contexts/GuildContext';
+import { useSimulatedRole } from '../contexts/SimulatedRoleContext'; // Added import
 import axiosInstance from '../config/axios';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -33,6 +34,7 @@ const DiscordSettingsPage = () => {
   
   const { guildRole } = useGuild();
   const { isAuthenticated } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
   
   // Add this new state variable for permission check
   const [isGuildMaster, setIsGuildMaster] = useState(false);
@@ -63,7 +65,7 @@ const DiscordSettingsPage = () => {
       try {
         setLoading(true);
         
-        // First, fetch guild details to verify permissions (this is the key change)
+        // First, fetch guild details to verify permissions
         const guildResponse = await axiosInstance.get(`/api/guilds/${currentGuildId}`);
         console.log("Guild API response:", guildResponse.data);
         
@@ -71,11 +73,12 @@ const DiscordSettingsPage = () => {
         const userRoleFromAPI = guildResponse.data.userRole;
         console.log("Server-reported user role:", userRoleFromAPI);
         
-        // Only trust the server response for permission checks
-        setIsGuildMaster(userRoleFromAPI === 'Guild Master');
+        // Use simulated role if available, otherwise use actual role
+        const effectiveRole = simulatedRole || userRoleFromAPI;
+        setIsGuildMaster(effectiveRole === 'Guild Master');
         
         // If not a Guild Master, stop loading additional data
-        if (userRoleFromAPI !== 'Guild Master') {
+        if (effectiveRole !== 'Guild Master') {
           setLoading(false);
           return;
         }
@@ -134,7 +137,7 @@ const DiscordSettingsPage = () => {
     };
     
     fetchData();
-  }, [currentGuildId]);
+  }, [currentGuildId, simulatedRole]); // Added simulatedRole to dependency array
   
   // New function to fetch Discord channels
   const fetchDiscordChannels = async (guildId, discordGuildId) => {
@@ -292,6 +295,12 @@ const DiscordSettingsPage = () => {
       <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
         <Alert severity="error" sx={{ mt: 2 }}>
           Access Denied: Only Guild Masters can configure Discord integration settings.
+          {simulatedRole && (
+            <Typography sx={{ mt: 1 }}>
+              Currently simulating role: <strong>{simulatedRole}</strong> 
+              (this role doesn't have access to Discord settings)
+            </Typography>
+          )}
         </Alert>
       </Container>
     );
@@ -312,6 +321,11 @@ const DiscordSettingsPage = () => {
       <Typography variant="h4" component="h1" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <ConnectedTvIcon sx={{ mr: 1, fontSize: 35, color: '#5865F2' }} />
         Discord Integration Settings
+        {simulatedRole && (
+          <Typography variant="caption" sx={{ display: 'block', color: '#ff9800', ml: 2 }}>
+            Simulating role: {simulatedRole}
+          </Typography>
+        )}
       </Typography>
       
       {!botConnected && (

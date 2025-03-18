@@ -12,6 +12,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import PercentIcon from '@mui/icons-material/Percent';
 import axiosInstance from '../../config/axios';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 import GeneralSettings from './GeneralSettings';
 import DkpSettings from './DkpSettings';
 import RoleLimits from './RoleLimits';
@@ -27,6 +28,7 @@ const GuildSettings = () => {
   const [guildData, setGuildData] = useState(null);
   const { guildId } = useParams();
   const { isAuthenticated, user } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
   const [isGuildMaster, setIsGuildMaster] = useState(false);
   const [actualGuildId, setActualGuildId] = useState(null);
   const navigate = useNavigate();
@@ -75,7 +77,7 @@ const GuildSettings = () => {
     if (isAuthenticated && actualGuildId) {
       fetchGuildData();
     }
-  }, [isAuthenticated, actualGuildId]);
+  }, [isAuthenticated, actualGuildId, simulatedRole]); // Added simulatedRole to dependency array
   
   const fetchGuildData = async () => {
     try {
@@ -94,8 +96,9 @@ const GuildSettings = () => {
       const userRoleFromAPI = guildResponse.data.userRole;
       console.log("Server-reported user role:", userRoleFromAPI);
       
-      // Only trust the server response for permission checks
-      setIsGuildMaster(userRoleFromAPI === 'Guild Master');
+      // Use simulated role if available, otherwise use actual role
+      const effectiveRole = simulatedRole || userRoleFromAPI;
+      setIsGuildMaster(effectiveRole === 'Guild Master');
       
       // Fetch guild settings
       const settingsResponse = await axiosInstance.get(`/api/guilds/${actualGuildId}/settings`);
@@ -204,7 +207,16 @@ const GuildSettings = () => {
       <Box sx={{ p: 5 }}>
         <Alert severity="warning">
           Only Guild Masters can access guild settings.
-          Your current role is: {guildData?.userRole || user?.role || 'Unknown'}
+          {simulatedRole ? (
+            <Typography sx={{ mt: 1 }}>
+              Currently simulating role: <strong>{simulatedRole}</strong> 
+              (this role doesn't have access to guild settings)
+            </Typography>
+          ) : (
+            <Typography>
+              Your current role is: {guildData?.userRole || user?.role || 'Unknown'}
+            </Typography>
+          )}
         </Alert>
         <Button 
           variant="contained" 
@@ -243,6 +255,11 @@ const GuildSettings = () => {
           }}
         >
           Guild Settings
+          {simulatedRole && (
+            <Typography variant="caption" sx={{ display: 'block', color: '#ff9800', mt: 1 }}>
+              Simulating role: {simulatedRole}
+            </Typography>
+          )}
         </Typography>
         
         <Box sx={{ display: 'flex' }}>
