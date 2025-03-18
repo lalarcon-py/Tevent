@@ -17,6 +17,7 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const embedBuilder = require('./utils/embed_builder');
 
 
 console.log('Environment Check:', {
