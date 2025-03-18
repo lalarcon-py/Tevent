@@ -2551,7 +2551,7 @@ client.on('interactionCreate', async (interaction) => {
             });
           }
       
-          // Get user ID from discord ID - NOW INCLUDES BUILDS
+          // Get user ID from discord ID - Include builds
           const userResult = await pool.query(
             'SELECT id, username, builds FROM users WHERE discord_id = $1',
             [interaction.user.id]
@@ -2661,38 +2661,104 @@ client.on('interactionCreate', async (interaction) => {
             }
           }
           
-          // Update the message to reflect new counts
+          // Update the message to reflect new participants - FIXED VERSION
           try {
-            // Get updated counts
-            const updatedCounts = await pool.query(
-              `SELECT 
-                COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-                COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-                COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-              FROM event_participants
-              WHERE event_id = $1`,
+            // Get all participants with their builds
+            const participantsResult = await pool.query(
+              `SELECT ep.role, u.username, u.discord_id, u.builds
+               FROM event_participants ep
+               JOIN users u ON ep.user_id = u.id
+               WHERE ep.event_id = $1
+               ORDER BY ep.created_at ASC`,
               [eventId]
             );
             
-            const absentees = await pool.query(
-              `SELECT COUNT(*) as absent_count
-              FROM event_absentees
-              WHERE event_id = $1`,
+            // Get absentees
+            const absenteesResult = await pool.query(
+              `SELECT ea.user_id, u.username
+               FROM event_absentees ea
+               JOIN users u ON ea.user_id = u.id
+               WHERE ea.event_id = $1
+               ORDER BY ea.created_at ASC`,
               [eventId]
             );
+            
+            // Group participants by role
+            const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
+            const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
+            const dps = participantsResult.rows.filter(p => p.role === 'DPS');
+            const absentees = absenteesResult.rows;
             
             // Only update original message if it's from the current interaction
             const message = interaction.message;
             if (message && message.embeds && message.embeds.length > 0) {
               const originalEmbed = message.embeds[0];
-              const updatedEmbed = EmbedBuilder.from(originalEmbed)
-                .setFields(
-                  { name: '⏰ Time', value: originalEmbed.fields[0].value, inline: false },
-                  { name: '📍 Location', value: originalEmbed.fields[1].value, inline: false },
-                  { name: '🛡️ Tanks', value: `${updatedCounts.rows[0].tank_count}/${eventDetails.tanks || 0}`, inline: true },
-                  { name: '💚 Healers', value: `${updatedCounts.rows[0].healer_count}/${eventDetails.healers || 0}`, inline: true },
-                  { name: '⚔️ DPS', value: `${updatedCounts.rows[0].dps_count}/${eventDetails.dps || 0}`, inline: true }
-                );
+              
+              // Format date/time from the original embed fields if present
+              const formatDate = (date) => {
+                if (!date) return "Date not set";
+                date = new Date(date);
+                return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+              };
+              
+              const formatTime = (date) => {
+                if (!date) return "Time not set";
+                date = new Date(date);
+                return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+              };
+              
+              const eventDate = new Date(eventDetails.event_time);
+              
+              const updatedEmbed = new EmbedBuilder()
+                .setTitle(originalEmbed.title || eventDetails.title || 'Event')
+                .setColor(originalEmbed.color || 0x0099ff)
+                .setDescription(originalEmbed.description || eventDetails.description || 'No description provided')
+                .addFields(
+                  {
+                    name: '⏰ Time',
+                    value: `📅 ${formatDate(eventDate)} ⌚ ${formatTime(eventDate)}`,
+                    inline: false
+                  },
+                  {
+                    name: '📍 Location',
+                    value: eventDetails.location || 'Not specified',
+                    inline: false
+                  },
+                  {
+                    name: `🛡️ Tanks (${tanks.length}/${eventDetails.tanks || 0})`,
+                    value: tanks.length > 0 ? 
+                      tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+                      '—',
+                    inline: true
+                  },
+                  {
+                    name: `💚 Healers (${healers.length}/${eventDetails.healers || 0})`,
+                    value: healers.length > 0 ? 
+                      healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+                      '—',
+                    inline: true
+                  },
+                  {
+                    name: `⚔️ DPS (${dps.length}/${eventDetails.dps || 0})`,
+                    value: dps.length > 0 ? 
+                      dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+                      '—',
+                    inline: true
+                  },
+                  {
+                    name: `❌ Absent (${absentees.length})`,
+                    value: absentees.length > 0 ? 
+                      absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+                      '—',
+                    inline: true
+                  },
+                  {
+                    name: '⏳ Tentative (0)',
+                    value: '—',
+                    inline: true
+                  }
+                )
+                .setFooter({ text: `Event ID: ${eventId}` });
               
               await message.edit({ embeds: [updatedEmbed] });
             }
@@ -4194,9 +4260,9 @@ app.post('/webhook/update-event-signup', async (req, res) => {
         return res.status(404).json({ error: 'Message not found' });
       }
       
-      // Get updated participant counts to refresh the embed - NOW INCLUDES BUILDS
+      // Get updated participant data with names
       const participantsResult = await pool.query(
-        `SELECT ep.role, ep.user_id, u.username, u.discord_id, u.builds
+        `SELECT ep.role, u.username, u.discord_id, u.builds
          FROM event_participants ep
          JOIN users u ON ep.user_id = u.id
          WHERE ep.event_id = $1
@@ -4214,20 +4280,11 @@ app.post('/webhook/update-event-signup', async (req, res) => {
         [eventId]
       );
       
-      // Group participants by role
-      const participants = {
-        TANK: [],
-        HEALER: [],
-        DPS: []
-      };
-      
-      participantsResult.rows.forEach(p => {
-        if (participants[p.role]) {
-          participants[p.role].push(p.username);
-        }
-      });
-      
-      const absentees = absenteesResult.rows.map(a => a.username);
+      // Group participants by role with FULL USER DATA
+      const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
+      const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
+      const dps = participantsResult.rows.filter(p => p.role === 'DPS');
+      const absentees = absenteesResult.rows;
       
       // Get the event details
       const eventResult = await pool.query(
@@ -4247,54 +4304,57 @@ app.post('/webhook/update-event-signup', async (req, res) => {
       const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
       const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
       
-      // Calculate total signup count
-      const totalSignups = Object.values(participants).reduce((sum, list) => sum + list.length, 0);
-      
-      // Create updated embed
+      // Create updated embed WITH PARTICIPANT NAMES
       const updatedEmbed = new EmbedBuilder()
         .setTitle(`${event.title || 'Event'}`)
         .setColor('#1a64f3')
         .setDescription(event.description || 'No description provided')
         .addFields(
-          { 
-            name: `${totalSignups} (${absentees.length})`, 
-            value: `📅 ${dateFormatted} ⏱️ ${timeFormatted}`, 
-            inline: false 
+          {
+            name: '⏰ Time',
+            value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+            inline: false
           },
-          { 
-            name: `🛡️ Tank (${participants.TANK.length})`, 
-            value: participants.TANK.length > 0 ? 
-              participants.TANK.map((name, i) => `${i+1} ${name}`).join('\n') : 
-              '—', 
-            inline: true 
+          {
+            name: '📍 Location',
+            value: event.location || 'Not specified',
+            inline: false
           },
-          { 
-            name: `⚔️ Dps (${participants.DPS.length})`, 
-            value: participants.DPS.length > 0 ? 
-              participants.DPS.map((name, i) => `${i+1} ${name}`).join('\n') : 
-              '—', 
-            inline: true 
+          {
+            name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`,
+            value: tanks.length > 0 ? 
+              tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+              '—',
+            inline: true
           },
-          { 
-            name: `💚 Healer (${participants.HEALER.length})`, 
-            value: participants.HEALER.length > 0 ? 
-              participants.HEALER.map((name, i) => `${i+1} ${name}`).join('\n') : 
-              '—', 
-            inline: true 
+          {
+            name: `💚 Healers (${healers.length}/${event.healers || 0})`,
+            value: healers.length > 0 ? 
+              healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: `⚔️ DPS (${dps.length}/${event.dps || 0})`,
+            value: dps.length > 0 ? 
+              dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: `❌ Absent (${absentees.length})`,
+            value: absentees.length > 0 ? 
+              absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: '⏳ Tentative (0)',
+            value: '—',
+            inline: true
           }
-        );
-      
-      // Add absence section if there are any
-      if (absentees.length > 0) {
-        updatedEmbed.addFields({ 
-          name: `⛔ Absence (${absentees.length})`, 
-          value: absentees.join(', '), 
-          inline: false 
-        });
-      }
-      
-      // Add footer
-      updatedEmbed.setFooter({ text: `Event ID: ${eventId}` });
+        )
+        .setFooter({ text: `Event ID: ${eventId}` });
       
       // Update the embed
       await message.edit({ embeds: [updatedEmbed] });
