@@ -44,6 +44,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
       allowNull: true
+    },
+    timer_duration: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1440,
+      allowNull: true
     }
   }, {
     sequelize,

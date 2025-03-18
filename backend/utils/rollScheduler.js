@@ -175,26 +175,38 @@ const processRollForItem = async (storageItemId, guildId) => {
 
 // Main function to check and process all expired requests
 const checkForExpiredRequests = async () => {
-  try {
-    // Find all expired but unrolled pending requests
-    const expiredRequests = await db.LootRequest.findAll({
-      where: {
-        status: 'Pending',
-        expiration_time: { [Op.lt]: new Date() },
-        roll_value: null
-      },
-      attributes: ['guild_id', 'storage_item_id'],
-      group: ['guild_id', 'storage_item_id']
-    });
-
-    // Process each unique guild/item combination
-    for (const request of expiredRequests) {
-      await processRollForItem(request.storage_item_id, request.guild_id);
+    try {
+      console.log('Checking for expired requests...');
+      
+      // Find all expired but unrolled pending requests
+      const expiredRequests = await db.LootRequest.findAll({
+        where: {
+          status: 'Pending',
+          expiration_time: { [Op.lt]: new Date() },
+          roll_value: null
+        },
+        attributes: ['guild_id', 'storage_item_id'],
+        group: ['guild_id', 'storage_item_id']
+      });
+  
+      console.log(`Found ${expiredRequests.length} expired request groups to process`);
+      
+      // Keep track of processed items
+      const processedItems = [];
+      
+      // Process each unique guild/item combination
+      for (const request of expiredRequests) {
+        console.log(`Processing expired requests for guild ${request.guild_id}, item ${request.storage_item_id}`);
+        await processRollForItem(request.storage_item_id, request.guild_id);
+        processedItems.push(`${request.guild_id}:${request.storage_item_id}`);
+      }
+      
+      return processedItems.length > 0 ? processedItems : null;
+    } catch (error) {
+      console.error('Error checking for expired requests:', error);
+      throw error;
     }
-  } catch (error) {
-    console.error('Error checking for expired requests:', error);
-  }
-};
+  };
 
 module.exports = {
   checkForExpiredRequests,

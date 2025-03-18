@@ -3,7 +3,9 @@ import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, Typography, Button, TextField, Checkbox, IconButton, Chip,
   Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText,
-  Grid, Divider, Alert, FormControl, InputLabel, Select, MenuItem
+  Grid, Divider, Alert, FormControl, InputLabel, Select, MenuItem,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  FormLabel, RadioGroup, FormControlLabel, Radio
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -31,6 +33,12 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     selectedTrait: null,   // Track selected trait
     timerDuration: 1440    // Default to 24 hours (in minutes)
   });
+
+  // State for request modal
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [selectedRequestItem, setSelectedRequestItem] = useState(null);
+  const [needOrGreed, setNeedOrGreed] = useState(null); 
+  const [needType, setNeedType] = useState(null);
 
   // Timer duration options
   const timerOptions = [
@@ -109,14 +117,21 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         return;
       }
       
+      console.log(`Updating item ${id}, field: ${field}, value: ${value}`);
+      
       const response = await axiosInstance.put(`/api/guild-storage/${id}?guildId=${guildId}`, { 
         [field]: value,
         guildId
       });
       
+      console.log('Update response:', response.data);
+      
       if (response.status === 200) fetchAddedItems();
     } catch (error) {
       console.error('Update error:', error);
+      if (error.response) {
+        console.error('Error details:', error.response.data);
+      }
     }
   };
 
@@ -219,33 +234,80 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     }
   };
 
-  const handleRequestItem = async (storageItem) => {
+  const handleRequestItem = (storageItem) => {
+    // Just open the modal and store the selected item
+    setSelectedRequestItem(storageItem);
+    setRequestModalOpen(true);
+    // Reset selection values
+    setNeedOrGreed(null);
+    setNeedType(null);
+  };
+
+  const submitItemRequest = async () => {
     try {
       const guildId = localStorage.getItem('guildId');
-      if (!guildId) {
-        console.error('No guild ID found');
+      if (!guildId || !selectedRequestItem) {
+        console.error('No guild ID or item found');
         return;
       }
-      
-      if (!storageItem || !storageItem.id) {
-        console.error('Invalid storage item:', storageItem);
-        return;
+  
+      // First check if the user already has a request for this item
+      try {
+        const existingRequests = await axiosInstance.get(`/api/waitlist?guildId=${guildId}`);
+        const alreadyRequested = existingRequests.data.some(request => 
+          request.storageItem?.id === selectedRequestItem.id && 
+          request.status === 'Pending'
+        );
+        
+        if (alreadyRequested) {
+          alert("You already have a pending request for this item. Please check your requests tab.");
+          setRequestModalOpen(false);
+          return;
+        }
+      } catch (checkError) {
+        console.error('Error checking existing requests:', checkError);
+        // Continue anyway to attempt the request
       }
-      
-      console.log('Requesting item with ID:', storageItem.id);
-      
-      // IMPORTANT: The API expects storageItemId, not storageItem_id
+  
+      // Determine the actual needOrGreed value to send
+      let finalNeedOrGreed;
+      if (needOrGreed === 'NEED') {
+        finalNeedOrGreed = needType; // NEED_ITEM or NEED_TRAIT
+      } else {
+        finalNeedOrGreed = 'GREED';
+      }
+  
+      console.log(`Submitting request: ${selectedRequestItem.id}, type: ${finalNeedOrGreed}`);
+  
+      // Make the API request
       const response = await axiosInstance.post(`/api/waitlist`, {
-        storageItemId: storageItem.id,
-        guildId: guildId
+        storageItemId: selectedRequestItem.id,
+        guildId: guildId,
+        needOrGreed: finalNeedOrGreed
       });
       
       console.log('Item requested successfully:', response.data);
+      
+      // Show success message
+      alert("Item request submitted successfully!");
+      
+      // Close the modal and refresh data
+      setRequestModalOpen(false);
+      fetchAddedItems();
       
     } catch (error) {
       console.error('Failed to request item:', error);
       if (error.response) {
         console.error('Error details:', error.response.data);
+        
+        // Show user-friendly error message
+        if (error.response.data?.error === "Request already exists") {
+          alert("You already have a pending request for this item. Please check your requests tab.");
+        } else {
+          alert(`Error: ${error.response.data?.error || "Failed to submit request"}`);
+        }
+      } else {
+        alert("Failed to submit request. Please try again.");
       }
     }
   };
@@ -644,6 +706,212 @@ const AdminLootPanel = ({ dkpEnabled }) => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Request Modal */}
+      <Dialog 
+        open={requestModalOpen} 
+        onClose={() => setRequestModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Request Item</DialogTitle>
+        <DialogContent>
+          {selectedRequestItem && (
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 2, 
+                mb: 2,
+                p: 2,
+                bgcolor: 'rgba(0,255,0,0.05)',
+                borderRadius: 1
+              }}>
+                <Avatar
+                  src={selectedRequestItem.Item?.icon}
+                  sx={{ width: 50, height: 50 }}
+                >
+                  {!selectedRequestItem.Item?.icon && selectedRequestItem.Item?.name?.[0]}
+                </Avatar>
+                <Box>
+                  <Typography variant="h6">{selectedRequestItem.Item?.name}</Typography>
+                  <Typography variant="body2">
+                    {selectedRequestItem.Item?.type || 'Unknown Type'}
+                    {selectedRequestItem.trait && (
+                      <Chip
+                        label={selectedRequestItem.trait}
+                        size="small"
+                        sx={{ ml: 1 }}
+                      />
+                    )}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Need or Greed Selection */}
+              <FormControl component="fieldset" sx={{ mt: 3, width: '100%' }}>
+                <FormLabel>Need or Greed?</FormLabel>
+                <RadioGroup
+                  value={needOrGreed || ''}
+                  onChange={(e) => setNeedOrGreed(e.target.value)}
+                >
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                    <Paper 
+                      elevation={3} 
+                      sx={{ 
+                        p: 2, 
+                        cursor: 'pointer',
+                        bgcolor: needOrGreed === 'NEED' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(30, 30, 30, 0.6)',
+                        borderRadius: 2,
+                        border: needOrGreed === 'NEED' ? '1px solid #4caf50' : '1px solid rgba(255, 255, 255, 0.12)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onClick={() => setNeedOrGreed('NEED')}
+                    >
+                      <FormControlLabel
+                        value="NEED"
+                        control={<Radio sx={{ color: '#4caf50', '&.Mui-checked': { color: '#4caf50' } }} />}
+                        label={
+                          <Box>
+                            <Typography variant="subtitle1" sx={{ color: '#4caf50', fontWeight: 'bold' }}>
+                              Need
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                              I need this item for my main character
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ m: 0, width: '100%' }}
+                      />
+                    </Paper>
+                    
+                    <Paper 
+                      elevation={3} 
+                      sx={{ 
+                        p: 2, 
+                        cursor: 'pointer',
+                        bgcolor: needOrGreed === 'GREED' ? 'rgba(255, 152, 0, 0.2)' : 'rgba(30, 30, 30, 0.6)',
+                        borderRadius: 2,
+                        border: needOrGreed === 'GREED' ? '1px solid #ff9800' : '1px solid rgba(255, 255, 255, 0.12)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onClick={() => setNeedOrGreed('GREED')}
+                    >
+                      <FormControlLabel
+                        value="GREED"
+                        control={<Radio sx={{ color: '#ff9800', '&.Mui-checked': { color: '#ff9800' } }} />}
+                        label={
+                          <Box>
+                            <Typography variant="subtitle1" sx={{ color: '#ff9800', fontWeight: 'bold' }}>
+                              Greed
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                              I want this item for an alt or to sell
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ m: 0, width: '100%' }}
+                      />
+                    </Paper>
+                  </Box>
+                </RadioGroup>
+              </FormControl>
+
+              {/* Need Type Selection - Only show if NEED is selected */}
+              {needOrGreed === 'NEED' && (
+                <FormControl component="fieldset" sx={{ mt: 3, width: '100%' }}>
+                  <FormLabel>What aspect of the item do you need?</FormLabel>
+                  <RadioGroup
+                    value={needType || ''}
+                    onChange={(e) => setNeedType(e.target.value)}
+                  >
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                      <Paper 
+                        elevation={3} 
+                        sx={{ 
+                          p: 2, 
+                          cursor: 'pointer',
+                          bgcolor: needType === 'NEED_ITEM' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(30, 30, 30, 0.6)',
+                          borderRadius: 2,
+                          border: needType === 'NEED_ITEM' ? '1px solid #4caf50' : '1px solid rgba(255, 255, 255, 0.12)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={() => setNeedType('NEED_ITEM')}
+                      >
+                        <FormControlLabel
+                          value="NEED_ITEM"
+                          control={<Radio sx={{ color: '#4caf50', '&.Mui-checked': { color: '#4caf50' } }} />}
+                          label={
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ color: '#4caf50', fontWeight: 'bold' }}>
+                                Need Item
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                                I need the base item, regardless of trait
+                              </Typography>
+                            </Box>
+                          }
+                          sx={{ m: 0, width: '100%' }}
+                        />
+                      </Paper>
+                      
+                      <Paper 
+                        elevation={3} 
+                        sx={{ 
+                          p: 2, 
+                          cursor: 'pointer',
+                          bgcolor: needType === 'NEED_TRAIT' ? 'rgba(33, 150, 243, 0.2)' : 'rgba(30, 30, 30, 0.6)',
+                          borderRadius: 2,
+                          border: needType === 'NEED_TRAIT' ? '1px solid #2196f3' : '1px solid rgba(255, 255, 255, 0.12)',
+                          transition: 'all 0.2s ease',
+                          opacity: selectedRequestItem.trait ? 1 : 0.5,
+                          pointerEvents: selectedRequestItem.trait ? 'auto' : 'none'
+                        }}
+                        onClick={() => selectedRequestItem.trait && setNeedType('NEED_TRAIT')}
+                      >
+                        <FormControlLabel
+                          value="NEED_TRAIT"
+                          control={<Radio 
+                            sx={{ color: '#2196f3', '&.Mui-checked': { color: '#2196f3' } }}
+                            disabled={!selectedRequestItem.trait}
+                          />}
+                          label={
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ color: '#2196f3', fontWeight: 'bold' }}>
+                                Need Trait
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                                I specifically need this item with its trait: {selectedRequestItem.trait || 'None'}
+                              </Typography>
+                              {!selectedRequestItem.trait && (
+                                <Typography variant="caption" sx={{ color: '#f44336', display: 'block', mt: 1 }}>
+                                  Selected item has no trait
+                                </Typography>
+                              )}
+                            </Box>
+                          }
+                          sx={{ m: 0, width: '100%' }}
+                          disabled={!selectedRequestItem.trait}
+                        />
+                      </Paper>
+                    </Box>
+                  </RadioGroup>
+                </FormControl>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRequestModalOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            onClick={submitItemRequest}
+            disabled={!needOrGreed || (needOrGreed === 'NEED' && !needType)}
+          >
+            Submit Request
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -39,7 +39,6 @@ const guildSettingsRoutes = require('./routes/guildSettings');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
-const rollScheduler = require('./utils/rollScheduler');
 
 
 const frontendURL = process.env.NODE_ENV === 'production' 
@@ -990,12 +989,24 @@ app.post('/api/direct-member-delete', async (req, res) => {
   }
 });
 
+const rollScheduler = require('./utils/rollScheduler');
+
+// Run immediately at startup
+rollScheduler.checkForExpiredRequests()
+  .then(() => console.log('Initial roll check completed'))
+  .catch(err => console.error('Error in initial roll check:', err));
+
+// Then set up the regular interval
 const rollInterval = setInterval(() => {
-  rollScheduler.checkForExpiredRequests();
-}, 60000); // every minute
+  console.log('Running scheduled roll check...');
+  rollScheduler.checkForExpiredRequests()
+    .then(result => console.log('Roll check completed:', result || 'No expired requests'))
+    .catch(err => console.error('Error in roll check:', err));
+}, 60000); // Check every minute
 
 // Clean up interval on shutdown
 process.on('SIGTERM', () => {
+  console.log('Shutting down roll scheduler...');
   clearInterval(rollInterval);
 });
 

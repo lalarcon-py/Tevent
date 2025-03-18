@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../models');
 
 // Get all items in guild storage
+// Get all items in guild storage
 router.get('/items', async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
@@ -17,16 +18,44 @@ router.get('/items', async (req, res) => {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
     
-    // Include guild_id in the query
-    const storageItems = await db.GuildStorageItem.findAll({
-      where: { guild_id: guildId },
-      include: [{
-        model: db.Item,
-        attributes: ['name', 'type', 'icon']
-      }]
-    });
+    // Use direct SQL query to get everything including timer_duration
+    const storageItems = await db.sequelize.query(
+      `SELECT 
+         gsi.id, gsi.guild_id, gsi.item_id, gsi.quantity, 
+         gsi.trait, gsi.dkp_cost, 
+         COALESCE(gsi.timer_duration, 1440) as timer_duration,
+         gsi.created_at as "createdAt", gsi.updated_at as "updatedAt",
+         i.name, i.type, i.icon, i.id as item_id
+       FROM guild_storage_items gsi
+       LEFT JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.guild_id = :guildId`,
+      {
+        replacements: { guildId },
+        type: db.sequelize.QueryTypes.SELECT
+      }
+    );
     
-    res.json(storageItems);
+    // Format to expected structure
+    const formattedItems = storageItems.map(item => ({
+      id: item.id,
+      guild_id: item.guild_id,
+      item_id: item.item_id,
+      quantity: item.quantity,
+      trait: item.trait,
+      dkp_cost: item.dkp_cost,
+      timer_duration: parseInt(item.timer_duration) || 1440,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      Item: {
+        id: item.item_id,
+        name: item.name,
+        type: item.type,
+        icon: item.icon
+      }
+    }));
+    
+    console.log('Sending formatted items:', formattedItems);
+    res.json(formattedItems);
   } catch (error) {
     console.error('Error fetching storage items:', error);
     res.status(500).json({ error: 'Failed to fetch storage items', details: error.message });
@@ -112,6 +141,13 @@ async function checkWishlistAndCreateRequests(guildId, itemId, storageItemId) {
   try {
     console.log(`Checking wishlist matches for item ${itemId} in guild ${guildId}`);
     
+    // Get the storage item to access its timer_duration
+    const storageItem = await db.GuildStorageItem.findByPk(storageItemId);
+    if (!storageItem) {
+      console.error(`Storage item ${storageItemId} not found`);
+      return;
+    }
+    
     // Find all wishlist entries that match this item
     const wishlistMatches = await db.WishList.findAll({
       where: {
@@ -127,13 +163,17 @@ async function checkWishlistAndCreateRequests(guildId, itemId, storageItemId) {
     console.log(`Found ${wishlistMatches.length} wishlist matches for item ${itemId}`);
     
     // Get item details for notifications
-    const itemDetails = await db.Item.findByPk(itemId, {
-      attributes: ['name', 'type', 'icon']
-    });
+    const itemDetails = await db.Item.findByPk(itemId);
     
     // Create requests for each matching wishlist entry
     for (const wishlistItem of wishlistMatches) {
       try {
+        // Skip if user doesn't exist
+        if (!wishlistItem.User) {
+          console.warn(`User not found for wishlist item ${wishlistItem.id}`);
+          continue;
+        }
+        
         // Check if user already has a pending request for this item
         const existingRequest = await db.LootRequest.findOne({
           where: {
@@ -145,50 +185,135 @@ async function checkWishlistAndCreateRequests(guildId, itemId, storageItemId) {
         });
         
         if (!existingRequest) {
-          // Create request with the wishlist priority
+          // Calculate expiration time based on timer_duration
+          const timerDuration = storageItem.timer_duration || 1440;
+          const expirationTime = new Date(Date.now() + (timerDuration * 60000));
+          
+          // Create request with NEED_ITEM by default
           const newRequest = await db.LootRequest.create({
             guild_id: guildId,
             storage_item_id: storageItemId,
             user_id: wishlistItem.user_id,
             status: 'Pending',
-            priority: wishlistItem.priority || 0
+            priority: wishlistItem.priority || 0,
+            need_or_greed: 'NEED_ITEM',
+            request_time: new Date(),
+            expiration_time: expirationTime
           });
           
           console.log(`Created automatic request for user ${wishlistItem.User.username} based on wishlist`);
+          console.log(`Request will expire at: ${expirationTime.toISOString()}`);
           
-          // Notify Discord
+          // Notify Discord (if configured)
           try {
             const discordBotUrl = process.env.DISCORD_BOT_URL || "http://heartfelt-sparkle.railway.internal:3300";
-            
             const axios = require('axios');
+            
             await axios.post(`${discordBotUrl}/webhook/item-request`, {
               guildId: guildId,
               itemId: storageItemId,
               userId: wishlistItem.User.id,
               username: wishlistItem.User.username,
               itemName: itemDetails?.name || 'Unknown Item',
-              isAutomatic: true, // Flag to indicate this is an automatic request
+              isAutomatic: true,
+              needOrGreed: 'NEED_ITEM',
+              expirationTime: expirationTime.toISOString(),
               secret: process.env.BOT_WEBHOOK_SECRET
             });
-            
-            console.log(`Discord notification sent for automatic request by ${wishlistItem.User.username}`);
           } catch (discordError) {
-            console.warn('Failed to send Discord notification for automatic request:', discordError.message);
-            // Continue anyway
+            console.warn('Failed to notify Discord:', discordError.message);
           }
         } else {
           console.log(`User ${wishlistItem.User.username} already has a pending request for this item`);
         }
       } catch (userError) {
-        console.error(`Error processing wishlist for user ${wishlistItem.user_id}:`, userError);
-        // Continue with other users
+        console.error(`Error creating auto-request for user ${wishlistItem.user_id}:`, userError);
       }
     }
   } catch (error) {
-    console.error('Error processing wishlist automatic requests:', error);
-    // Don't throw - this is an enhancement and shouldn't break the main flow
+    console.error('Error processing wishlist auto-requests:', error);
   }
 }
+
+router.post('/debug/check-rolls', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const guildId = req.guildId || req.body.guildId;
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Verify user has permission
+    const guildMember = await db.GuildMember.findOne({
+      where: { guild_id: guildId, user_id: req.user.id }
+    });
+    
+    if (!guildMember || !['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Run the roll checker
+    const rollScheduler = require('../utils/rollScheduler');
+    const result = await rollScheduler.checkForExpiredRequests();
+    
+    res.json({ 
+      success: true, 
+      message: 'Roll check triggered successfully',
+      processed: result 
+    });
+  } catch (error) {
+    console.error('Debug roll check error:', error);
+    res.status(500).json({ error: 'Failed to check rolls', details: error.message });
+  }
+});
+
+// Debug route to manually trigger auto-requests for an item
+router.post('/debug/check-wishlists/:itemId', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { itemId } = req.params;
+    const guildId = req.guildId || req.body.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Verify user has permission
+    const guildMember = await db.GuildMember.findOne({
+      where: { guild_id: guildId, user_id: req.user.id }
+    });
+    
+    if (!guildMember || !['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Get the storage item
+    const storageItem = await db.GuildStorageItem.findOne({
+      where: { item_id: itemId, guild_id: guildId }
+    });
+    
+    if (!storageItem) {
+      return res.status(404).json({ error: 'Item not found in storage' });
+    }
+    
+    // Run the wishlist checker
+    await checkWishlistAndCreateRequests(guildId, itemId, storageItem.id);
+    
+    res.json({ 
+      success: true, 
+      message: 'Wishlist check triggered successfully for item ' + itemId
+    });
+  } catch (error) {
+    console.error('Debug wishlist check error:', error);
+    res.status(500).json({ error: 'Failed to check wishlists', details: error.message });
+  }
+});
 
 // Update guild storage item
 router.put('/:id', async (req, res) => {
@@ -198,7 +323,10 @@ router.put('/:id', async (req, res) => {
     }
     
     const { id } = req.params;
-    const { quantity, dkp_cost, trait, guildId } = req.body;
+    // Log what we received
+    console.log('Update request body:', req.body);
+    
+    const { quantity, dkp_cost, trait, guildId, timer_duration } = req.body;
     
     // Require guild ID
     if (!guildId && !req.query.guildId) {
@@ -218,27 +346,81 @@ router.put('/:id', async (req, res) => {
     }
     
     const storageItem = await db.GuildStorageItem.findByPk(id);
+    console.log('Current storage item:', storageItem && storageItem.dataValues);
+    
     if (!storageItem) {
       return res.status(404).json({ error: 'Storage item not found' });
     }
     
+    // Create an updates object to track changes
+    const updates = {};
+    
     // Update fields if provided with validation
     if (quantity !== undefined) {
       // Ensure quantity is not negative
-      storageItem.quantity = Math.max(0, parseInt(quantity, 10));
+      updates.quantity = Math.max(0, parseInt(quantity, 10));
     }
     
-    if (dkp_cost !== undefined) storageItem.dkp_cost = dkp_cost;
-    if (trait !== undefined) storageItem.trait = trait;
+    if (dkp_cost !== undefined) updates.dkp_cost = dkp_cost;
+    if (trait !== undefined) updates.trait = trait;
     
-    await storageItem.save();
+    // Handle timer_duration update - using direct SQL to ensure it works
+    if (timer_duration !== undefined) {
+      const validDurations = [5, 60, 1440, 2880, 4320]; // minutes (5min, 1hr, 24hr, 48hr, 72hr)
+      const validatedDuration = validDurations.includes(Number(timer_duration)) 
+        ? Number(timer_duration) 
+        : 1440; // Default to 24 hours if invalid
+      
+      console.log(`Updating timer_duration to: ${validatedDuration}`);
+      
+      // Use direct SQL to ensure the update works regardless of Sequelize model
+      await db.sequelize.query(
+        `UPDATE guild_storage_items 
+         SET timer_duration = :duration,
+             updated_at = NOW()
+         WHERE id = :id`,
+        {
+          replacements: {
+            duration: validatedDuration,
+            id: id
+          },
+          type: db.sequelize.QueryTypes.UPDATE
+        }
+      );
+    }
     
-    // Get the full item with its associations
-    const fullItem = await db.GuildStorageItem.findByPk(id, {
-      include: [db.Item]
-    });
+    // Apply other updates using Sequelize
+    if (Object.keys(updates).length > 0) {
+      await storageItem.update(updates);
+    }
     
-    res.json(fullItem);
+    // Get the updated item with its associations
+    // Use raw query to make sure we see all fields
+    const [updatedItem] = await db.sequelize.query(
+      `SELECT gsi.*, i.name, i.type, i.icon
+       FROM guild_storage_items gsi
+       LEFT JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.id = :id`,
+      {
+        replacements: { id },
+        type: db.sequelize.QueryTypes.SELECT
+      }
+    );
+    
+    console.log('Updated item:', updatedItem);
+    
+    // Create a response that includes all needed properties
+    const response = {
+      ...storageItem.dataValues,
+      timer_duration: updatedItem.timer_duration || 1440,
+      Item: {
+        name: updatedItem.name,
+        type: updatedItem.type,
+        icon: updatedItem.icon
+      }
+    };
+    
+    res.json(response);
   } catch (error) {
     console.error('Error updating storage item:', error);
     res.status(500).json({ error: 'Failed to update storage item', details: error.message });

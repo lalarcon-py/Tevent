@@ -103,40 +103,74 @@ const addItemToStorage = async (req, res) => {
     if (existingStorageItem) {
       // Update existing item quantity
       const newQuantity = existingStorageItem.quantity + (quantity || 1);
-      await existingStorageItem.update({
-        quantity: newQuantity,
-        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost,
-        timer_duration: timerDuration !== undefined ? validatedTimerDuration : existingStorageItem.timer_duration
-      });
-      storageItem = existingStorageItem;
+      
+      // Use direct SQL to update existing item including timer_duration
+      await db.sequelize.query(
+        `UPDATE guild_storage_items 
+         SET quantity = :quantity, 
+             dkp_cost = :dkpCost, 
+             timer_duration = :timerDuration,
+             updated_at = NOW()
+         WHERE id = :id`,
+        {
+          replacements: {
+            quantity: newQuantity,
+            dkpCost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost,
+            timerDuration: validatedTimerDuration,
+            id: existingStorageItem.id
+          },
+          type: db.sequelize.QueryTypes.UPDATE
+        }
+      );
+      
+      // Refresh the storage item from the database
+      storageItem = await db.GuildStorageItem.findByPk(existingStorageItem.id);
     } else {
-      // Create new storage item
-      storageItem = await db.GuildStorageItem.create({
-        guild_id: guildId,
-        item_id: item_id,
-        quantity: quantity || 1,
-        trait: trait || null,
-        dkp_cost: dkp_cost || 0,
-        timer_duration: validatedTimerDuration
-      });
+      // Create new storage item using direct SQL
+      const [result] = await db.sequelize.query(
+        `INSERT INTO guild_storage_items
+         (id, guild_id, item_id, quantity, trait, dkp_cost, timer_duration, created_at, updated_at)
+         VALUES
+         (uuid_generate_v4(), :guildId, :itemId, :quantity, :trait, :dkpCost, :timerDuration, NOW(), NOW())
+         RETURNING *`,
+        {
+          replacements: {
+            guildId: guildId,
+            itemId: item_id,
+            quantity: quantity || 1,
+            trait: trait || null,
+            dkpCost: dkp_cost || 0,
+            timerDuration: validatedTimerDuration
+          },
+          type: db.sequelize.QueryTypes.INSERT
+        }
+      );
+      
+      // Get the inserted ID from the result
+      const newItemId = result[0].id;
+      
+      // Fetch the newly created item
+      storageItem = await db.GuildStorageItem.findByPk(newItemId);
     }
     
-    // Return with item details
+    // Return with item details - force include timer_duration in the response
     const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
       include: [{
         model: db.Item,
-        where: { guild_id: guildId },
         required: false
       }]
     });
     
-    // Notify Discord bot about the new item
-    // Same Discord notification code as before...
+    // Add timer_duration directly to the response
+    const response = {
+      ...fullItem.toJSON(),
+      timer_duration: validatedTimerDuration
+    };
     
-    res.status(201).json(fullItem);
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error adding item to storage:', error);
-    res.status(500).json({ error: 'Failed to add item to storage' });
+    res.status(500).json({ error: 'Failed to add item to storage', details: error.message });
   }
 };
 
