@@ -1,19 +1,19 @@
-// components/LootManagement/AdminLootPanel.jsx
-import { useState, useEffect } from 'react';
-import { 
+import React, { useState, useEffect } from 'react';
+import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, Typography, Button, TextField, Checkbox, IconButton, Chip,
   Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText,
-  Grid, Divider, Alert
+  Grid, Divider, Alert, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
-import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 
 const AdminLootPanel = ({ dkpEnabled }) => {
   const { user } = useAuth();
-  const { simulatedRole } = useSimulatedRole(); // Get simulated role
+  const { simulatedRole } = useSimulatedRole();
   
   console.log('AdminLootPanel rendering with dkpEnabled =', dkpEnabled);
   const [addedItems, setAddedItems] = useState([]);
@@ -28,8 +28,18 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     quantity: 1,
     icon: '',
     availableTraits: [], // Store available traits for the item
-    selectedTrait: null   // Track selected trait
+    selectedTrait: null,   // Track selected trait
+    timerDuration: 1440    // Default to 24 hours (in minutes)
   });
+
+  // Timer duration options
+  const timerOptions = [
+    { value: 5, label: '5 Minutes' },
+    { value: 60, label: '1 Hour' },
+    { value: 1440, label: '24 Hours' },
+    { value: 2880, label: '48 Hours' },
+    { value: 4320, label: '72 Hours' }
+  ];
 
   // Add permission check helper function - updated to use effective role
   const hasStoragePermission = () => {
@@ -171,6 +181,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         quantity: newItem.quantity,
         dkp_cost: newItem.dkpCost,
         trait: newItem.selectedTrait, // Include selected trait
+        timerDuration: newItem.timerDuration, // Include timer duration
         guildId
       });
       
@@ -179,6 +190,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         quantity: newItem.quantity,
         dkp_cost: newItem.dkpCost,
         trait: newItem.selectedTrait, // Include selected trait
+        timerDuration: newItem.timerDuration, // Include timer duration
         guildId
       });
       
@@ -194,7 +206,8 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         quantity: 1,
         icon: '',
         availableTraits: [],
-        selectedTrait: null
+        selectedTrait: null,
+        timerDuration: 1440
       });
     } catch (error) {
       console.error('Failed to add item:', error);
@@ -235,6 +248,16 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         console.error('Error details:', error.response.data);
       }
     }
+  };
+
+  // Format the timer duration for display
+  const formatTimerDuration = (minutes) => {
+    if (minutes === 5) return '5 Minutes';
+    if (minutes === 60) return '1 Hour';
+    if (minutes === 1440) return '24 Hours';
+    if (minutes === 2880) return '48 Hours';
+    if (minutes === 4320) return '72 Hours';
+    return `${minutes} Minutes`;
   };
 
   // Now do the permission check
@@ -300,7 +323,8 @@ const AdminLootPanel = ({ dkpEnabled }) => {
                     dkpCost: newValue.dkpCost || 0,
                     quantity: 1,
                     availableTraits: newValue.traits || [], // Store all available traits
-                    selectedTrait: null // Reset selected trait
+                    selectedTrait: null, // Reset selected trait
+                    timerDuration: 1440 // Default to 24 hours
                   });
                 }
               }}
@@ -359,7 +383,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
             
             <Grid container spacing={2} sx={{ mt: 1 }}>
               {/* Trait selection */}
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={3}>
                 {hasAvailableTraits() ? (
                   <Autocomplete
                     options={newItem.availableTraits}
@@ -387,9 +411,36 @@ const AdminLootPanel = ({ dkpEnabled }) => {
                 )}
               </Grid>
               
+              {/* Timer Duration Selection - NEW */}
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth>
+                  <InputLabel id="timer-duration-label" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                    Roll Timer
+                  </InputLabel>
+                  <Select
+                    labelId="timer-duration-label"
+                    value={newItem.timerDuration}
+                    label="Roll Timer"
+                    onChange={(e) => setNewItem({ ...newItem, timerDuration: e.target.value })}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        background: 'rgba(30, 30, 30, 0.4)',
+                        backdropFilter: 'blur(12px)'
+                      }
+                    }}
+                  >
+                    {timerOptions.map(option => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
               {/* DKP Cost - only if enabled */}
               {dkpEnabled && (
-                <Grid item xs={6} md={3}>
+                <Grid item xs={6} md={2}>
                   <TextField
                     label="DKP Cost"
                     type="number"
@@ -407,7 +458,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
               )}
               
               {/* Quantity field */}
-              <Grid item xs={6} md={dkpEnabled ? 3 : 4}>
+              <Grid item xs={6} md={dkpEnabled ? 2 : 3}>
                 <TextField
                   label="Quantity"
                   type="number"
@@ -425,7 +476,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
               </Grid>
               
               {/* Add button */}
-              <Grid item xs={12} md={dkpEnabled ? 2 : 4}>
+              <Grid item xs={12} md={dkpEnabled ? 2 : 3}>
                 <Button 
                   variant="contained" 
                   fullWidth
@@ -459,7 +510,8 @@ const AdminLootPanel = ({ dkpEnabled }) => {
             <TableRow>
               <TableCell>Item</TableCell>
               <TableCell>Type</TableCell>
-              <TableCell>Trait</TableCell> {/* Add trait column */}
+              <TableCell>Trait</TableCell>
+              <TableCell>Roll Timer</TableCell> {/* New column for roll timer */}
               {/* Only show DKP Cost column if DKP is enabled */}
               {dkpEnabled && <TableCell>DKP Cost</TableCell>}
               <TableCell>In Storage</TableCell>
@@ -501,6 +553,30 @@ const AdminLootPanel = ({ dkpEnabled }) => {
                       No trait
                     </Typography>
                   )}
+                </TableCell>
+                
+                {/* Roll timer cell - NEW */}
+                <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AccessTimeIcon sx={{ color: 'rgba(144, 202, 249, 0.8)' }} />
+                    <FormControl sx={{ minWidth: 120 }}>
+                      <Select
+                        value={item.timer_duration || 1440}
+                        onChange={(e) => handleUpdate(item.id, 'timer_duration', e.target.value)}
+                        size="small"
+                        sx={{ 
+                          '.MuiSelect-select': { py: 0.5 },
+                          bgcolor: 'rgba(30, 30, 30, 0.4)'
+                        }}
+                      >
+                        {timerOptions.map(option => (
+                          <MenuItem key={option.value} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
                 </TableCell>
                 
                 {/* Only show DKP Cost cell if DKP is enabled */}

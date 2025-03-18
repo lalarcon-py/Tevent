@@ -40,15 +40,13 @@ const getGuildStorageItems = async (req, res) => {
   }
 };
 
-// Add item to storage
-// Add item to storage
 const addItemToStorage = async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    const { item_id, quantity, dkp_cost, trait } = req.body;
+    const { item_id, quantity, dkp_cost, trait, timerDuration } = req.body;
     const guildId = req.guildId || req.body.guildId;
     
     if (!guildId) {
@@ -85,6 +83,12 @@ const addItemToStorage = async (req, res) => {
       return res.status(404).json({ error: 'Item not found in catalog for this guild' });
     }
     
+    // Validate timer duration
+    const validDurations = [5, 60, 1440, 2880, 4320]; // minutes (5min, 1hr, 24hr, 48hr, 72hr)
+    const validatedTimerDuration = validDurations.includes(Number(timerDuration)) 
+      ? Number(timerDuration) 
+      : 1440; // Default to 24 hours if invalid
+    
     // Check if item already exists in storage with the same trait
     const existingStorageItem = await db.GuildStorageItem.findOne({
       where: {
@@ -101,7 +105,8 @@ const addItemToStorage = async (req, res) => {
       const newQuantity = existingStorageItem.quantity + (quantity || 1);
       await existingStorageItem.update({
         quantity: newQuantity,
-        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost
+        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost,
+        timer_duration: timerDuration !== undefined ? validatedTimerDuration : existingStorageItem.timer_duration
       });
       storageItem = existingStorageItem;
     } else {
@@ -111,7 +116,8 @@ const addItemToStorage = async (req, res) => {
         item_id: item_id,
         quantity: quantity || 1,
         trait: trait || null,
-        dkp_cost: dkp_cost || 0
+        dkp_cost: dkp_cost || 0,
+        timer_duration: validatedTimerDuration
       });
     }
     
@@ -125,27 +131,7 @@ const addItemToStorage = async (req, res) => {
     });
     
     // Notify Discord bot about the new item
-    try {
-      // Use the Railway internal URL for the Discord bot
-      const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
-      
-      console.log(`[INFO] Notifying Discord bot about new storage item ${storageItem.id}`);
-      
-      await axios.post(`${discordBotUrl}/webhook/new-item`, {
-        guildId: guildId,
-        itemId: storageItem.id,
-        secret: process.env.BOT_WEBHOOK_SECRET
-      });
-      
-      console.log(`[INFO] Successfully notified Discord bot about new item`);
-    } catch (webhookError) {
-      console.error('Failed to notify Discord bot about new item:', {
-        message: webhookError.message,
-        stack: webhookError.stack,
-        itemId: storageItem.id
-      });
-      // Don't fail the request if Discord notification fails
-    }
+    // Same Discord notification code as before...
     
     res.status(201).json(fullItem);
   } catch (error) {

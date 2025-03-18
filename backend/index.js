@@ -39,6 +39,7 @@ const guildSettingsRoutes = require('./routes/guildSettings');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
+const rollScheduler = require('./utils/rollScheduler');
 
 
 const frontendURL = process.env.NODE_ENV === 'production' 
@@ -987,6 +988,15 @@ app.post('/api/direct-member-delete', async (req, res) => {
     console.error('Direct member deletion error:', error);
     res.status(500).json({ error: 'Failed to remove member' });
   }
+});
+
+const rollInterval = setInterval(() => {
+  rollScheduler.checkForExpiredRequests();
+}, 60000); // every minute
+
+// Clean up interval on shutdown
+process.on('SIGTERM', () => {
+  clearInterval(rollInterval);
 });
 
 

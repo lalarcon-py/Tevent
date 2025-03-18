@@ -48,6 +48,33 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
       allowNull: true
+    },
+    need_or_greed: {
+      type: DataTypes.ENUM('NEED_ITEM', 'NEED_TRAIT', 'GREED'),
+      defaultValue: 'NEED_ITEM',
+      allowNull: false
+    },
+    request_time: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+      allowNull: false
+    },
+    expiration_time: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    roll_value: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    roll_time: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    won_roll: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
     }
   }, {
     sequelize,

@@ -15,11 +15,24 @@ router.get('/', async (req, res) => {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
 
+    // Check for expired requests first and update their status
+    const now = new Date();
+    await db.LootRequest.update(
+      { status: 'Expired' },
+      {
+        where: {
+          guild_id: guildId,
+          status: 'Pending',
+          expiration_time: { [db.Sequelize.Op.lt]: now }
+        }
+      }
+    );
+
     const isAdmin = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(req.user.role);
     
     const whereClause = isAdmin 
-      ? { guild_id: guildId, status: 'Pending' } 
-      : { guild_id: guildId, user_id: req.user.id, status: 'Pending' };
+      ? { guild_id: guildId, status: { [db.Sequelize.Op.ne]: 'Deleted' } } 
+      : { guild_id: guildId, user_id: req.user.id };
     
     const requests = await db.LootRequest.findAll({
       where: whereClause,
@@ -40,7 +53,16 @@ router.get('/', async (req, res) => {
           attributes: ['username', 'discord_id', 'avatar_url']
         }
       ],
-      order: [['created_at', 'DESC']]
+      order: [
+        ['status', 'ASC'], // Pending first
+        [db.Sequelize.literal(`CASE 
+          WHEN need_or_greed = 'NEED_TRAIT' THEN 1
+          WHEN need_or_greed = 'NEED_ITEM' THEN 2
+          WHEN need_or_greed = 'GREED' THEN 3
+          ELSE 4
+        END`), 'ASC'], // Sort by priority: NEED_TRAIT > NEED_ITEM > GREED
+        ['created_at', 'ASC'] // First come, first served
+      ]
     });
     
     res.json(requests);
@@ -156,7 +178,7 @@ router.put('/:id', async (req, res) => {
       }
     }
     
-    // If approved, also check and remove from wishlist (keep this part unchanged)
+    // If approved, also check and remove from wishlist
     if (status === 'Approved' && request.user_id) {
       try {
         // Check if item is in wishlist
@@ -243,8 +265,8 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { storageItemId } = req.body;
-    const guildId = req.guildId || req.body.guildId; // Accept guildId from body as fallback
+    const { storageItemId, needOrGreed } = req.body;
+    const guildId = req.guildId || req.body.guildId;
     
     if (!guildId) {
       return res.status(400).json({ error: 'Guild ID is required' });
@@ -254,10 +276,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Storage item ID is required' });
     }
 
-    // Check if item exists
-    const storageItem = await db.GuildStorageItem.findByPk(storageItemId);
+    // Check if needOrGreed is valid
+    if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(needOrGreed)) {
+      return res.status(400).json({ error: 'Need/Greed selection must be NEED_ITEM, NEED_TRAIT, or GREED' });
+    }
+
+    // Get the storage item to check if it has a trait when NEED_TRAIT is selected
+    const storageItem = await db.GuildStorageItem.findByPk(storageItemId, {
+      include: [{
+        model: db.Item,
+        attributes: ['name']
+      }]
+    });
+    
     if (!storageItem) {
       return res.status(404).json({ error: 'Item not found in storage' });
+    }
+
+    // If NEED_TRAIT is selected but item has no trait, return an error
+    if (needOrGreed === 'NEED_TRAIT' && !storageItem.trait) {
+      return res.status(400).json({ error: 'Cannot select NEED_TRAIT for an item without a trait' });
     }
 
     // Check for existing request
@@ -274,13 +312,23 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Request already exists' });
     }
 
+    // Get the timer duration from the storage item, not from the request
+    const timerDuration = storageItem.timer_duration || 1440; // Default to 24 hours if not set
+
+    // Calculate expiration time
+    const requestTime = new Date();
+    const expirationTime = new Date(requestTime.getTime() + timerDuration * 60000);
+
     // Create the request
     const newRequest = await db.LootRequest.create({
       guild_id: guildId,
       storage_item_id: storageItemId,
       user_id: req.user.id,
       status: 'Pending',
-      priority: 0 // You might want to calculate this based on user DKP
+      priority: 0,
+      need_or_greed: needOrGreed,
+      request_time: requestTime,
+      expiration_time: expirationTime
     });
 
     // Return the full request with associations
@@ -320,6 +368,9 @@ router.post('/', async (req, res) => {
         itemId: storageItemId,
         userId: req.user.id,
         username: req.user.username,
+        needOrGreed: needOrGreed,
+        expirationTime: expirationTime.toISOString(),
+        timerDuration: timerDuration,
         secret: process.env.BOT_WEBHOOK_SECRET
       });
       

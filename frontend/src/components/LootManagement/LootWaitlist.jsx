@@ -10,9 +10,14 @@ import {
   Box,
   CircularProgress,
   Avatar,
-  Chip
+  Chip,
+  Tooltip,
+  Badge
 } from '@mui/material';
 import { useState, useEffect } from 'react';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Trophy icon
+import CasinoIcon from '@mui/icons-material/Casino'; // Dice icon
 import { useAuth } from '../../contexts/AuthContext';
 import axiosInstance from '../../config/axios';
 
@@ -21,6 +26,16 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [now, setNow] = useState(new Date());
+
+  // Update current time every minute to refresh timers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -62,14 +77,65 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
     }
   }, [refreshData, isAuthenticated]);
 
-  const getRarityColor = (rarity) => {
-    switch(rarity?.toLowerCase()) {
-      case 'legendary': return '#ff8c00';
-      case 'epic': return '#9932cc';
-      case 'rare': return '#4169e1';
-      case 'uncommon': return '#32cd32';
-      case 'common': return '#808080';
-      default: return 'white';
+  // Format remaining time
+  const formatRemainingTime = (expirationTime) => {
+    if (!expirationTime) return "No expiration";
+    
+    const expiration = new Date(expirationTime);
+    const diffMs = expiration - now;
+    
+    if (diffMs <= 0) return "Expired";
+    
+    const diffMins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    } else {
+      return `${mins}m`;
+    }
+  };
+
+  // Get color for timer based on remaining time
+  const getTimerColor = (expirationTime) => {
+    if (!expirationTime) return "text.secondary";
+    
+    const expiration = new Date(expirationTime);
+    const diffMs = expiration - now;
+    
+    if (diffMs <= 0) return "#f44336"; // Expired - red
+    if (diffMs < 3600000) return "#ff9800"; // Less than 1 hour - orange
+    return "#4caf50"; // More than 1 hour - green
+  };
+
+  // Format the need/greed type for display
+  const formatNeedOrGreed = (type) => {
+    switch (type) {
+      case 'NEED_ITEM': return "Need Item";
+      case 'NEED_TRAIT': return "Need Trait";
+      case 'GREED': return "Greed";
+      default: return "Need Item";
+    }
+  };
+
+  // Get color for need/greed type
+  const getNeedOrGreedColor = (type) => {
+    switch (type) {
+      case 'NEED_ITEM': return "#4caf50"; // Green
+      case 'NEED_TRAIT': return "#2196f3"; // Blue
+      case 'GREED': return "#ff9800"; // Orange
+      default: return "#4caf50";
+    }
+  };
+
+  // Get background color for need/greed type
+  const getNeedOrGreedBgColor = (type) => {
+    switch (type) {
+      case 'NEED_ITEM': return "rgba(76, 175, 80, 0.2)";
+      case 'NEED_TRAIT': return "rgba(33, 150, 243, 0.2)";
+      case 'GREED': return "rgba(255, 152, 0, 0.2)";
+      default: return "rgba(76, 175, 80, 0.2)";
     }
   };
 
@@ -108,7 +174,9 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
             <TableRow>
               <TableCell sx={{ color: '#90caf9' }}>Item</TableCell>
               <TableCell sx={{ color: '#90caf9' }}>Type</TableCell>
-              <TableCell sx={{ color: '#90caf9' }}>Position</TableCell>
+              <TableCell sx={{ color: '#90caf9' }}>Need/Greed</TableCell>
+              <TableCell sx={{ color: '#90caf9' }}>Expires In</TableCell>
+              <TableCell sx={{ color: '#90caf9' }}>Roll</TableCell>
               {/* Only show DKP Priority column if DKP is enabled */}
               {dkpEnabled && (
                 <TableCell sx={{ color: '#90caf9' }}>DKP Priority</TableCell>
@@ -118,7 +186,7 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
           </TableHead>
           <TableBody>
             {requests.length > 0 ? (
-              requests.map((request, index) => (
+              requests.map((request) => (
                 <TableRow key={request.id}>
                   <TableCell sx={{ color: 'white' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -154,7 +222,70 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
                   <TableCell sx={{ color: 'white' }}>
                     {request.storageItem?.Item?.type || 'Unknown Type'}
                   </TableCell>
-                  <TableCell sx={{ color: 'white' }}>#{index + 1}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={formatNeedOrGreed(request.need_or_greed)}
+                      sx={{ 
+                        bgcolor: getNeedOrGreedBgColor(request.need_or_greed),
+                        color: getNeedOrGreedColor(request.need_or_greed),
+                        fontWeight: 'medium'
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip title={request.expiration_time ? new Date(request.expiration_time).toLocaleString() : 'No expiration'}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <AccessTimeIcon sx={{ color: getTimerColor(request.expiration_time) }} />
+                        <Typography sx={{ color: getTimerColor(request.expiration_time) }}>
+                          {formatRemainingTime(request.expiration_time)}
+                        </Typography>
+                      </Box>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>
+                    {request.roll_value ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {request.won_roll ? (
+                          <Tooltip title="You won this roll!">
+                            <Badge 
+                              badgeContent={<EmojiEventsIcon sx={{ fontSize: 16, color: '#ffd700' }} />}
+                              sx={{ 
+                                '& .MuiBadge-badge': { 
+                                  bgcolor: 'transparent', 
+                                  right: -2, 
+                                  top: -2 
+                                }
+                              }}
+                            >
+                              <Chip
+                                icon={<CasinoIcon />}
+                                label={request.roll_value}
+                                sx={{
+                                  bgcolor: 'rgba(255, 215, 0, 0.2)',
+                                  color: '#ffd700',
+                                  fontWeight: 'bold',
+                                  border: '1px solid #ffd700'
+                                }}
+                              />
+                            </Badge>
+                          </Tooltip>
+                        ) : (
+                          <Chip
+                            icon={<CasinoIcon />}
+                            label={request.roll_value}
+                            sx={{
+                              bgcolor: 'rgba(255, 255, 255, 0.1)',
+                              color: 'white'
+                            }}
+                          />
+                        )}
+                      </Box>
+                    ) : (
+                      <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                        Waiting...
+                      </Typography>
+                    )}
+                  </TableCell>
                   {/* Only show DKP Priority cell if DKP is enabled */}
                   {dkpEnabled && (
                     <TableCell sx={{ color: 'white' }}>{request.priority || 0} DKP</TableCell>
@@ -165,9 +296,14 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
                       sx={{ 
                         bgcolor: request.status === 'Approved' ? 'rgba(76, 175, 80, 0.2)' : 
                                 request.status === 'Denied' ? 'rgba(244, 67, 54, 0.2)' : 
+                                request.status === 'Denied - Lost Roll' ? 'rgba(156, 39, 176, 0.2)' :
+                                request.status === 'Expired' ? 'rgba(158, 158, 158, 0.2)' :
                                 'rgba(255, 183, 77, 0.2)',
                         color: request.status === 'Approved' ? '#4caf50' : 
-                               request.status === 'Denied' ? '#f44336' : '#ffb74d',
+                               request.status === 'Denied' ? '#f44336' : 
+                               request.status === 'Denied - Lost Roll' ? '#9c27b0' :
+                               request.status === 'Expired' ? '#9e9e9e' :
+                               '#ffb74d',
                         fontWeight: 'medium'
                       }}
                     />
@@ -176,7 +312,7 @@ const LootWaitlist = ({ dkpEnabled, refreshData }) => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={dkpEnabled ? 5 : 4} sx={{ color: 'white', textAlign: 'center', p: 3 }}>
+                <TableCell colSpan={dkpEnabled ? 7 : 6} sx={{ color: 'white', textAlign: 'center', p: 3 }}>
                   No items in your waitlist
                 </TableCell>
               </TableRow>
