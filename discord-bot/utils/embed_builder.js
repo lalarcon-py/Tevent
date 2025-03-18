@@ -21,63 +21,30 @@ module.exports = {
       const now = new Date();
       const eventHasPassed = eventTime < now;
       
-      // Format the time for display
-      const dateFormatted = eventTime.toLocaleDateString('en-US', { 
+      // Format the time for display (keeping the existing format)
+      const dateFormatted = `${eventTime.toLocaleDateString('en-US', { 
         month: 'long', day: 'numeric', year: 'numeric' 
-      });
-      const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
+      })}`;
+      const timeFormatted = `${eventTime.toLocaleTimeString('en-US', { 
         hour: 'numeric', minute: '2-digit', hour12: true 
-      });
+      })}`;
   
-      // Get participants - handle possible formats
+      // Get participants
       let participants = event.participants || [];
-      
-      // Process participants by role
-      const tankPlayers = participants.filter(p => p.role === 'TANK')
-        .map((p, idx) => formatPlayer(p, idx));
-      
-      const healerPlayers = participants.filter(p => p.role === 'HEALER')
-        .map((p, idx) => formatPlayer(p, idx));
-      
-      const dpsPlayers = participants.filter(p => p.role === 'DPS')
-        .map((p, idx) => formatPlayer(p, idx));
-      
-      function formatPlayer(player, idx) {
-        if (!player) return '';
-        
-        // Get player name
-        const name = player.User?.username || player.username || 'Unknown';
-        
-        // Get weapons from builds
-        let weaponsText = '';
-        try {
-          let builds = player.User?.builds || player.builds || [];
-          if (typeof builds === 'string') {
-            builds = JSON.parse(builds);
-          }
-          
-          if (Array.isArray(builds) && builds.length > 0) {
-            const build = builds[0];
-            if (build) {
-              if (build.primary || build.secondary) {
-                weaponsText = ' ';
-                if (build.primary) weaponsText += build.primary;
-                if (build.primary && build.secondary) weaponsText += '/';
-                if (build.secondary) weaponsText += build.secondary;
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Error formatting weapons for player:', e);
-        }
-        
-        return `${idx + 1}. ${name}${weaponsText}`;
-      }
       
       // Count players by role
       const tanks = participants.filter(p => p.role === 'TANK');
       const healers = participants.filter(p => p.role === 'HEALER');
       const dps = participants.filter(p => p.role === 'DPS');
+      
+      // Format players for each role
+      const formatPlayers = (players) => {
+        if (players.length === 0) return '—';
+        return players.map((p, idx) => {
+          const name = p.User?.username || p.username || 'Unknown';
+          return `${idx + 1}. ${name}`;
+        }).join('\n');
+      };
       
       // Get absentees
       let absentees = [];
@@ -88,36 +55,43 @@ module.exports = {
       }
       
       // Format absentees
-      const absenteeNames = absentees.map((a, idx) => {
-        const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
-        return `${idx + 1}. ${username}`;
-      }).join('\n') || '—';
+      const formatAbsentees = () => {
+        if (absentees.length === 0) return '—';
+        return absentees.map((a, idx) => {
+          const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
+          return `${idx + 1}. ${username}`;
+        }).join('\n');
+      };
+      
+      // Create embed description
+      const description = [
+        `⏰ Time`,
+        `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+        `📍 Location`,
+        `${event.location || '—'}`
+      ].join('\n');
       
       // Create embed
       const embed = new EmbedBuilder()
         .setTitle(event.title || 'Event')
-        .setColor(eventHasPassed ? '#808080' : '#1a64f3') // Gray if passed, blue if active
-        .setDescription(
-          `Time: ${timeFormatted}\n` +
-          `Date: ${dateFormatted}\n` +
-          `Location: ${event.location || 'Not specified'}`
-        );
+        .setColor(eventHasPassed ? '#808080' : '#0099ff')
+        .setDescription(description);
       
-      // Add role fields as columns
+      // Add role fields as separate columns
       embed.addFields(
         { 
           name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`, 
-          value: tankPlayers.join('\n') || '—', 
+          value: formatPlayers(tanks), 
           inline: true 
         },
         { 
           name: `💚 Healers (${healers.length}/${event.healers || 0})`, 
-          value: healerPlayers.join('\n') || '—', 
+          value: formatPlayers(healers), 
           inline: true 
         },
         { 
           name: `⚔️ DPS (${dps.length}/${event.dps || 0})`, 
-          value: dpsPlayers.join('\n') || '—', 
+          value: formatPlayers(dps), 
           inline: true 
         }
       );
@@ -126,7 +100,7 @@ module.exports = {
       embed.addFields(
         { 
           name: `❌ Absent (${absentees.length || 0})`, 
-          value: absenteeNames, 
+          value: formatAbsentees(), 
           inline: true 
         },
         { 
@@ -150,7 +124,6 @@ module.exports = {
       return embed;
     } catch (error) {
       console.error('Error creating event embed:', error);
-      // Return a simple fallback embed if there's an error
       return new EmbedBuilder()
         .setTitle('Event Details')
         .setDescription('Error creating detailed event information')
