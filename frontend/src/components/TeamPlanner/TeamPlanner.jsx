@@ -12,7 +12,8 @@ import {
   DialogActions,
   List,
   ListItem,
-  ListItemText
+  ListItemText,
+  Tooltip
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import Alert from '@mui/material/Alert';
@@ -77,6 +78,17 @@ const DraggableMember = ({ member, onRemove }) => {
     }
   };
 
+  // Get weapon icon function
+  const getWeaponIcon = (weaponName) => {
+    if (!weaponName) return null;
+    const formattedName = weaponName.replace(/\s+/g, ' ').trim();
+    return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
+  };
+
+  // Check if user has builds data
+  const hasWeapons = member.User?.builds?.length > 0 || member.builds?.length > 0;
+  const builds = member.User?.builds || member.builds || [];
+
   return (
     <Box 
       ref={dragRef} 
@@ -86,7 +98,8 @@ const DraggableMember = ({ member, onRemove }) => {
         borderRadius: 1,
         p: 0.5,
         mb: 0.5,
-        bgcolor: getRoleColor(member.role),
+        bgcolor: 'rgba(0,0,0,0.3)',
+        color: getRoleColor(member.role),
         cursor: 'grab',
         transition: 'transform 0.15s',
         '&:hover': {
@@ -96,32 +109,64 @@ const DraggableMember = ({ member, onRemove }) => {
           opacity: 0.5
         },
         minWidth: 120,
-        maxWidth: 200
+        maxWidth: 200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
       }}
     >
-      {/* Character name */}
-      <Typography 
-        variant="body2"
-        sx={{
-          fontSize: '0.85rem',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
-        }}
-      >
-        {member.User?.username || member.username}
-      </Typography>
+      <Box sx={{ flexGrow: 1 }}>
+        {/* Character name */}
+        <Typography 
+          variant="body2"
+          sx={{
+            fontSize: '0.85rem',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontWeight: 'medium'
+          }}
+        >
+          {member.User?.username || member.username}
+        </Typography>
+        
+        {/* Role text */}
+        <Typography 
+          variant="caption"
+          sx={{
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: '0.75rem'
+          }}
+        >
+          {member.role}
+        </Typography>
+      </Box>
       
-      {/* Role text */}
-      <Typography 
-        variant="caption"
-        sx={{
-          color: 'rgba(255,255,255,0.7)',
-          fontSize: '0.75rem'
-        }}
-      >
-        {member.role}
-      </Typography>
+      {/* Weapon icons */}
+      {hasWeapons && (
+        <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+          {builds[0]?.primary && (
+            <Tooltip title={builds[0].primary}>
+              <img 
+                src={getWeaponIcon(builds[0].primary)}
+                alt={builds[0].primary}
+                style={{ width: 24, height: 24, objectFit: 'contain' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </Tooltip>
+          )}
+          {builds[0]?.secondary && (
+            <Tooltip title={builds[0].secondary}>
+              <img 
+                src={getWeaponIcon(builds[0].secondary)}
+                alt={builds[0].secondary}
+                style={{ width: 24, height: 24, objectFit: 'contain' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </Tooltip>
+          )}
+        </Box>
+      )}
       
       {/* Remove button */}
       {onRemove && (
@@ -135,8 +180,7 @@ const DraggableMember = ({ member, onRemove }) => {
             cursor: 'pointer',
             fontSize: '1rem',
             padding: '0 4px',
-            float: 'right',
-            mt: -2.5
+            ml: 1
           }}
         >
           ×

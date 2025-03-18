@@ -301,9 +301,45 @@ module.exports = {
       // Handle case where participants might be undefined
       const participants = event.participants || [];
       
-      const tankCount = participants.filter(p => p.role === 'TANK').length || 0;
-      const healerCount = participants.filter(p => p.role === 'HEALER').length || 0;
-      const dpsCount = participants.filter(p => p.role === 'DPS').length || 0;
+      // Group participants by role
+      const tanks = participants.filter(p => p.role === 'TANK');
+      const healers = participants.filter(p => p.role === 'HEALER');
+      const dps = participants.filter(p => p.role === 'DPS');
+      
+      // Count participants by role
+      const tankCount = tanks.length;
+      const healerCount = healers.length;
+      const dpsCount = dps.length;
+      
+      // Function to get weapon icon URLs
+      const getWeaponIcon = (weaponName) => {
+        if (!weaponName) return null;
+        return `weapons/${weaponName} Art.png`;
+      };
+      
+      // Function to format participant lines with weapons
+      const formatParticipantsList = (rolePlayers) => {
+        if (rolePlayers.length === 0) return "—";
+        
+        return rolePlayers.map((player, i) => {
+          const username = player.User?.username || 'Unknown';
+          
+          // Get weapon information from builds if available
+          let weaponIcons = '';
+          if (player.User && player.User.builds && player.User.builds.length > 0) {
+            const build = player.User.builds[0];
+            if (build && (build.primary || build.secondary)) {
+              weaponIcons = ' [';
+              if (build.primary) weaponIcons += `[${build.primary}]`;
+              if (build.primary && build.secondary) weaponIcons += ' ';
+              if (build.secondary) weaponIcons += `[${build.secondary}]`;
+              weaponIcons += ']';
+            }
+          }
+          
+          return `${i+1}. ${username}${weaponIcons}`;
+        }).join('\n');
+      };
       
       const embed = new EmbedBuilder()
         .setTitle(`📅 ${event.title || 'Unnamed Event'}`)
@@ -312,9 +348,21 @@ module.exports = {
         .addFields(
           { name: '⏰ Time', value: eventTime.toLocaleString(), inline: false },
           { name: '📍 Location', value: event.location || 'Not specified', inline: false },
-          { name: '🛡️ Tanks', value: `${tankCount}/${event.tanks || 0}`, inline: true },
-          { name: '💚 Healers', value: `${healerCount}/${event.healers || 0}`, inline: true },
-          { name: '⚔️ DPS', value: `${dpsCount}/${event.dps || 0}`, inline: true }
+          { 
+            name: `🛡️ Tanks (${tankCount}/${event.tanks || 0})`, 
+            value: formatParticipantsList(tanks), 
+            inline: true 
+          },
+          { 
+            name: `💚 Healers (${healerCount}/${event.healers || 0})`, 
+            value: formatParticipantsList(healers), 
+            inline: true 
+          },
+          { 
+            name: `⚔️ DPS (${dpsCount}/${event.dps || 0})`, 
+            value: formatParticipantsList(dps), 
+            inline: true 
+          }
         )
         .setFooter({ text: `ID: ${event.id}` })
         .setTimestamp();
