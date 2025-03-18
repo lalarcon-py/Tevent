@@ -13,9 +13,11 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import axiosInstance from '../../config/axios';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 
 const GearCheckAdmin = () => {
   const { user } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Added hook
   const [statusFilter, setStatusFilter] = useState('all');
   const [gearChecks, setGearChecks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,8 +30,9 @@ const GearCheckAdmin = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [actionSuccess, setActionSuccess] = useState(null);
   
-  // Check if user has permission
-  const hasPermission = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+  // Check if user has permission - updated to use effective role
+  const effectiveRole = simulatedRole || (user ? user.role : null);
+  const hasPermission = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
   
   useEffect(() => {
     if (!hasPermission) return;

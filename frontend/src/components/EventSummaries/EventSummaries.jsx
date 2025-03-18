@@ -20,6 +20,7 @@ import GroupIcon from '@mui/icons-material/Group';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { format, parseISO, isPast } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 
@@ -32,6 +33,10 @@ const EventSummaries = () => {
   const navigate = useNavigate();
   const [successMessage, setSuccessMessage] = useState(null);
   const { user: currentUser } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Added hook
+  
+  // Get effective role
+  const effectiveRole = simulatedRole || (currentUser ? currentUser.role : null);
 
   useEffect(() => {
     fetchEvents();
@@ -354,13 +359,16 @@ const EventSummaries = () => {
           <Typography variant="h6" color="text.secondary">
             No upcoming events
           </Typography>
-          <Button 
-            variant="contained" 
-            onClick={() => navigate('/event-planner')}
-            sx={{ mt: 2 }}
-          >
-            Create an Event
-          </Button>
+          {/* Only show Create Event button if user has permission */}
+          {['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole) && (
+            <Button 
+              variant="contained" 
+              onClick={() => navigate('/event-planner')}
+              sx={{ mt: 2 }}
+            >
+              Create an Event
+            </Button>
+          )}
         </Box>
       ) : (
         <Grid container spacing={3}>

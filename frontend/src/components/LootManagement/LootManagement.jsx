@@ -7,6 +7,7 @@ import LootRequestForm from './LootRequestForm';
 import LootWaitlist from './LootWaitlist';
 import WishlistTab from './WishlistTab';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 import axiosInstance from '../../config/axios';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 
@@ -14,12 +15,17 @@ const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const { settings } = useGuildSettings();
   const { isAuthenticated, user } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
   const [directDkpCheck, setDirectDkpCheck] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   
+  // Get effective role (simulated or actual)
+  const effectiveRole = simulatedRole || (user ? user.role : null);
+  
   // Create a new isItemAdmin function to separate item storage admins from other admins
-  const isItemAdmin = user && ['Guild Master', 'Guild Advisor'].includes(user.role);
-  const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+  // Updated to use effective role
+  const isItemAdmin = effectiveRole && ['Guild Master', 'Guild Advisor'].includes(effectiveRole);
+  const isAdmin = effectiveRole && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
 
   // Create a refresh function that updates the trigger state
   const refreshData = () => {

@@ -9,9 +9,12 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 
 const AdminLootPanel = ({ dkpEnabled }) => {
   const { user } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
+  
   console.log('AdminLootPanel rendering with dkpEnabled =', dkpEnabled);
   const [addedItems, setAddedItems] = useState([]);
   const [templateItems, setTemplateItems] = useState([]);
@@ -28,10 +31,13 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     selectedTrait: null   // Track selected trait
   });
 
-  // Add permission check helper function
+  // Add permission check helper function - updated to use effective role
   const hasStoragePermission = () => {
     if (!user) return false;
-    return ['Guild Master', 'Guild Advisor'].includes(user.role);
+    
+    // Use simulated role if available, otherwise use actual role
+    const effectiveRole = simulatedRole || user.role;
+    return ['Guild Master', 'Guild Advisor'].includes(effectiveRole);
   };
 
   // Move all useEffect hooks here, before any conditional returns

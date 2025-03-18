@@ -5,6 +5,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CalendarView from './CalendarView';
 import EventForm from './EventForm';
 import EventDetails from './EventDetails';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -17,6 +18,7 @@ const EventPlanner = () => {
   const [user, setUser] = useState(null);
   const [guildId, setGuildId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { simulatedRole } = useSimulatedRole(); // Added hook
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -61,10 +63,13 @@ const EventPlanner = () => {
     }
   }, [user]);
 
-  // Add permission check helper function
+  // Add permission check helper function - updated to use simulated role
   const hasEventCreationPermission = () => {
     if (!user) return false;
-    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+    
+    // Use simulated role if available, otherwise use actual role
+    const effectiveRole = simulatedRole || user.role;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
   };
 
   const fetchEvents = async () => {

@@ -25,9 +25,12 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 
 const WaitListTab = ({ dkpEnabled, refreshData }) => {
   const { isAuthenticated, user } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Get simulated role
+  
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState({
@@ -38,10 +41,13 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
   });
   const [error, setError] = useState(null);
 
-  // Add permission check helper function
+  // Add permission check helper function - updated to use effective role
   const hasApprovalPermission = () => {
     if (!user) return false;
-    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+    
+    // Use simulated role if available, otherwise use actual role
+    const effectiveRole = simulatedRole || user.role;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
   };
 
   // Move all hooks to the top, before any conditional returns

@@ -28,6 +28,7 @@ import EventForm from './EventForm';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 
 const PARTICIPANTS_PER_PAGE = 10;
 const API_URL = process.env.REACT_APP_API_URL;
@@ -44,6 +45,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [absentees, setAbsentees] = useState([]);
+  const { simulatedRole } = useSimulatedRole(); // Added hook
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -63,10 +65,13 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     fetchCurrentUser();
   }, []);
 
-  // Add permission check helper function
+  // Add permission check helper function - updated to use simulated role
   const hasEventManagementPermission = () => {
     if (!currentUser) return false;
-    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(currentUser.role);
+    
+    // Use simulated role if available, otherwise use actual role
+    const effectiveRole = simulatedRole || currentUser.role;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
   };
 
   useEffect(() => {

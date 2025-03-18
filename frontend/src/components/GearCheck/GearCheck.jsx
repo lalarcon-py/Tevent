@@ -9,11 +9,13 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
 import axiosInstance from '../../config/axios';
 import GearCheckAdmin from './GearCheckAdmin';
 
 const GearCheck = () => {
   const { user } = useAuth();
+  const { simulatedRole } = useSimulatedRole(); // Added hook
   const [tab, setTab] = useState(0);
   const [status, setStatus] = useState('none'); // none, requested, pending, approved, denied
   const [imageUrl, setImageUrl] = useState(null);
@@ -23,8 +25,9 @@ const GearCheck = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   
-  // Check if user has admin role
-  const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(user.role);
+  // Check if user has admin role - updated to use effective role
+  const effectiveRole = simulatedRole || (user ? user.role : null);
+  const isAdmin = user && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
   
   // Fetch current gear check status on load
   useEffect(() => {
