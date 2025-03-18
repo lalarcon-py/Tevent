@@ -824,42 +824,47 @@ app.post('/webhook/new-event', async (req, res) => {
     // DIRECT EMBED CREATION - NO EXTERNAL DEPENDENCIES
     const embed = new EmbedBuilder()
       .setTitle(eventData.title || 'Event')
-      .setColor('#0099ff')
-      .setDescription(eventData.description || '')
-      .addFields(
-        { 
-          name: '⏰ Time', 
-          value: `📅 ${new Date(eventData.event_time).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} ⌚ ${new Date(eventData.event_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`, 
-          inline: false 
-        },
-        { 
-          name: '📍 Location', 
-          value: eventData.location || 'Not specified', 
-          inline: false 
-        },
-        { 
-          name: `🛡️ Tanks (${participantsResult.rows.filter(p => p.role === 'TANK').length}/${eventData.tanks || 0})`, 
-          value: participantsResult.rows.filter(p => p.role === 'TANK').length > 0 ? 
-            participantsResult.rows.filter(p => p.role === 'TANK').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-            '—', 
-          inline: true 
-        },
-        { 
-          name: `💚 Healers (${participantsResult.rows.filter(p => p.role === 'HEALER').length}/${eventData.healers || 0})`, 
-          value: participantsResult.rows.filter(p => p.role === 'HEALER').length > 0 ? 
-            participantsResult.rows.filter(p => p.role === 'HEALER').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-            '—', 
-          inline: true 
-        },
-        { 
-          name: `⚔️ DPS (${participantsResult.rows.filter(p => p.role === 'DPS').length}/${eventData.dps || 0})`, 
-          value: participantsResult.rows.filter(p => p.role === 'DPS').length > 0 ? 
-            participantsResult.rows.filter(p => p.role === 'DPS').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-            '—', 
-          inline: true 
-        }
-      )
-      .setFooter({ text: `Event ID: ${eventId}` });
+      .setColor('#0099ff');
+      
+    // Only set description if it's not empty (to avoid validation error)
+    if (eventData.description && eventData.description.trim() !== "") {
+      embed.setDescription(eventData.description);
+    }
+    
+    embed.addFields(
+      { 
+        name: '⏰ Time', 
+        value: `📅 ${new Date(eventData.event_time).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} ⌚ ${new Date(eventData.event_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`, 
+        inline: false 
+      },
+      { 
+        name: '📍 Location', 
+        value: eventData.location || 'Not specified', 
+        inline: false 
+      },
+      { 
+        name: `🛡️ Tanks (${participantsResult.rows.filter(p => p.role === 'TANK').length}/${eventData.tanks || 0})`, 
+        value: participantsResult.rows.filter(p => p.role === 'TANK').length > 0 ? 
+          participantsResult.rows.filter(p => p.role === 'TANK').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+          '—', 
+        inline: true 
+      },
+      { 
+        name: `💚 Healers (${participantsResult.rows.filter(p => p.role === 'HEALER').length}/${eventData.healers || 0})`, 
+        value: participantsResult.rows.filter(p => p.role === 'HEALER').length > 0 ? 
+          participantsResult.rows.filter(p => p.role === 'HEALER').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+          '—', 
+        inline: true 
+      },
+      { 
+        name: `⚔️ DPS (${participantsResult.rows.filter(p => p.role === 'DPS').length}/${eventData.dps || 0})`, 
+        value: participantsResult.rows.filter(p => p.role === 'DPS').length > 0 ? 
+          participantsResult.rows.filter(p => p.role === 'DPS').map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+          '—', 
+        inline: true 
+      }
+    )
+    .setFooter({ text: `Event ID: ${eventId}` });
     
     // Add absentee field if there are any
     if (absenteesResult.rows.length > 0) {
