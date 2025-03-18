@@ -2864,9 +2864,9 @@ client.on('interactionCreate', async (interaction) => {
 
 app.post('/webhook/item-request', async (req, res) => {
   try {
-    const { guildId, itemId, userId, username, quantity, secret } = req.body;
+    const { guildId, itemId, userId, username, itemName, isAutomatic, secret } = req.body;
     
-    console.log(`[INFO] Received item request webhook - Item: ${itemId}, User: ${username}`);
+    console.log(`[INFO] Received item request webhook - Item: ${itemId}, User: ${username}, Automatic: ${isAutomatic}`);
     
     if (secret !== process.env.BOT_WEBHOOK_SECRET) {
       console.error(`[ERROR] Invalid webhook secret provided`);
@@ -2900,11 +2900,13 @@ app.post('/webhook/item-request', async (req, res) => {
     
     const item = itemResult.rows[0];
     
-    // Create notification embed
+    // Create notification embed with automatic flag indication if needed
     const requestEmbed = new EmbedBuilder()
-      .setTitle('New Loot Request')
-      .setDescription(`**${username}** has requested **${item.name}**`)
-      .setColor('#9c27b0')
+      .setTitle(isAutomatic ? 'Automatic Loot Request' : 'New Loot Request')
+      .setDescription(isAutomatic ? 
+        `**${username}** has automatically requested **${item.name}** (from wishlist)` : 
+        `**${username}** has requested **${item.name}**`)
+      .setColor(isAutomatic ? '#9370db' : '#9c27b0') // Different color for automatic requests
       .setTimestamp()
       .setFooter({ text: `Item ID: ${itemId}` });
     

@@ -91,8 +91,17 @@ const LootRequestForm = ({ dkpEnabled, refreshData, onRequestSubmitted }) => {
   const handleSubmit = async () => {
     if (selectedItem) {
       try {
+        // Get the guild ID from localStorage
+        const guildId = localStorage.getItem('guildId');
+        if (!guildId) {
+          console.error('No guild ID found');
+          showNotification('Error: Guild ID not found', 'error');
+          return;
+        }
+  
         const response = await axiosInstance.post('/api/waitlist', {
-          storageItemId: selectedItem.id
+          storageItemId: selectedItem.id,
+          guildId // Include the guild ID in the request body
         });
         
         console.log('Request submitted successfully:', response.data);

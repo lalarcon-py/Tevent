@@ -90,6 +90,9 @@ router.post('/', async (req, res) => {
         dkp_cost: dkp_cost || 0,
         trait: trait || null
       });
+      
+      // New feature: Check wishlist and create automatic requests for new items
+      await checkWishlistAndCreateRequests(guildId, item_id, storageItem.id);
     }
 
     // Get the full item with its associations
@@ -103,6 +106,89 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to add item to storage', details: error.message });
   }
 });
+
+// Helper function to check wishlists and create automatic requests
+async function checkWishlistAndCreateRequests(guildId, itemId, storageItemId) {
+  try {
+    console.log(`Checking wishlist matches for item ${itemId} in guild ${guildId}`);
+    
+    // Find all wishlist entries that match this item
+    const wishlistMatches = await db.WishList.findAll({
+      where: {
+        guild_id: guildId,
+        item_id: itemId
+      },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username', 'discord_id']
+      }]
+    });
+    
+    console.log(`Found ${wishlistMatches.length} wishlist matches for item ${itemId}`);
+    
+    // Get item details for notifications
+    const itemDetails = await db.Item.findByPk(itemId, {
+      attributes: ['name', 'type', 'icon']
+    });
+    
+    // Create requests for each matching wishlist entry
+    for (const wishlistItem of wishlistMatches) {
+      try {
+        // Check if user already has a pending request for this item
+        const existingRequest = await db.LootRequest.findOne({
+          where: {
+            guild_id: guildId,
+            storage_item_id: storageItemId,
+            user_id: wishlistItem.user_id,
+            status: 'Pending'
+          }
+        });
+        
+        if (!existingRequest) {
+          // Create request with the wishlist priority
+          const newRequest = await db.LootRequest.create({
+            guild_id: guildId,
+            storage_item_id: storageItemId,
+            user_id: wishlistItem.user_id,
+            status: 'Pending',
+            priority: wishlistItem.priority || 0
+          });
+          
+          console.log(`Created automatic request for user ${wishlistItem.User.username} based on wishlist`);
+          
+          // Notify Discord
+          try {
+            const discordBotUrl = process.env.DISCORD_BOT_URL || "http://heartfelt-sparkle.railway.internal:3300";
+            
+            const axios = require('axios');
+            await axios.post(`${discordBotUrl}/webhook/item-request`, {
+              guildId: guildId,
+              itemId: storageItemId,
+              userId: wishlistItem.User.id,
+              username: wishlistItem.User.username,
+              itemName: itemDetails?.name || 'Unknown Item',
+              isAutomatic: true, // Flag to indicate this is an automatic request
+              secret: process.env.BOT_WEBHOOK_SECRET
+            });
+            
+            console.log(`Discord notification sent for automatic request by ${wishlistItem.User.username}`);
+          } catch (discordError) {
+            console.warn('Failed to send Discord notification for automatic request:', discordError.message);
+            // Continue anyway
+          }
+        } else {
+          console.log(`User ${wishlistItem.User.username} already has a pending request for this item`);
+        }
+      } catch (userError) {
+        console.error(`Error processing wishlist for user ${wishlistItem.user_id}:`, userError);
+        // Continue with other users
+      }
+    }
+  } catch (error) {
+    console.error('Error processing wishlist automatic requests:', error);
+    // Don't throw - this is an enhancement and shouldn't break the main flow
+  }
+}
 
 // Update guild storage item
 router.put('/:id', async (req, res) => {

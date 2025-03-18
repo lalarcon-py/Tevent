@@ -244,7 +244,7 @@ router.post('/', async (req, res) => {
     }
 
     const { storageItemId } = req.body;
-    const guildId = req.guildId;
+    const guildId = req.guildId || req.body.guildId; // Accept guildId from body as fallback
     
     if (!guildId) {
       return res.status(400).json({ error: 'Guild ID is required' });
@@ -253,7 +253,7 @@ router.post('/', async (req, res) => {
     if (!storageItemId) {
       return res.status(400).json({ error: 'Storage item ID is required' });
     }
-    
+
     // Check if item exists
     const storageItem = await db.GuildStorageItem.findByPk(storageItemId);
     if (!storageItem) {
@@ -304,6 +304,30 @@ router.post('/', async (req, res) => {
         }
       ]
     });
+
+    // Send Discord notification
+    try {
+      // Get the item name
+      const itemName = fullRequest.storageItem?.Item?.name || 'Unknown Item';
+      
+      // Get Discord bot URL - using fallback as needed
+      const discordBotUrl = process.env.DISCORD_BOT_URL || "http://heartfelt-sparkle.railway.internal:3300";
+      
+      // Notify Discord via webhook
+      const axios = require('axios');
+      await axios.post(`${discordBotUrl}/webhook/item-request`, {
+        guildId: guildId,
+        itemId: storageItemId,
+        userId: req.user.id,
+        username: req.user.username,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`Discord notification sent for item request: ${itemName}`);
+    } catch (discordError) {
+      console.warn('Failed to send Discord notification:', discordError.message);
+      // Continue even if Discord notification fails
+    }
 
     res.status(201).json(fullRequest);
   } catch (error) {
