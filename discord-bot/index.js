@@ -4663,6 +4663,20 @@ function startItemPolling() {
         try {
           console.log(`Processing new item: ${item.name} (ID: ${item.id})`);
           
+          // Format time remaining for timer display
+          let timerDisplay = formatTimerDuration(item.timer_duration || 1440);
+          try {
+            if (item.timer_duration && (item.created_at || item.updated_at)) {
+              const timeRemaining = calculateTimeRemaining(item.created_at || item.updated_at, item.timer_duration);
+              if (timeRemaining) {
+                timerDisplay = timeRemaining;
+              }
+            }
+          } catch (timeError) {
+            console.error(`Error calculating time remaining:`, timeError);
+            // Continue with default timer display
+          }
+          
           const embed = new EmbedBuilder()
             .setTitle('🆕 New Item Added to Storage')
             .setDescription(`Request this item using the buttons below:`)
@@ -4670,7 +4684,12 @@ function startItemPolling() {
               { name: '📦 Item', value: `**${item.name}**`, inline: false },
               { name: 'Type', value: item.type || 'Unknown', inline: true },
               { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
-              { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true }
+              { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
+              { 
+                name: '⏰ Roll Timer', 
+                value: timerDisplay,
+                inline: true 
+              }
             )
             .setColor('#4CAF50')
             .setTimestamp()
@@ -4685,7 +4704,7 @@ function startItemPolling() {
           }
           
           // Create request buttons
-          const row = new ActionRowBuilder()
+          const buttonsRow = new ActionRowBuilder()  // Renamed from 'row' to 'buttonsRow' for clarity
           .addComponents(
             new ButtonBuilder()
               .setCustomId(`need_item_${item.id}`)
@@ -4710,7 +4729,7 @@ function startItemPolling() {
             'storage', 
             embed,
             null,
-            [requestRow]
+            [buttonsRow]  // Changed from 'requestRow' to 'buttonsRow'
           );
           
           if (message) {
