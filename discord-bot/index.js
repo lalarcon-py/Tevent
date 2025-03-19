@@ -1509,11 +1509,13 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle item request buttons (Need/Greed)
-      else if (customId.startsWith('need_item_') || customId.startsWith('greed_item_')) {
-        const itemId = customId.replace(/^(need_item_|greed_item_)/, '');
-        const isNeed = customId.startsWith('need_item_');
-        const priority = isNeed ? 'Need' : 'Greed';
-        const priorityField = isNeed ? 'need_count' : 'greed_count';
+      else if (customId.startsWith('need_item_') || customId.startsWith('need_trait_') || customId.startsWith('greed_item_')) {
+        const itemId = customId.replace(/^(need_item_|need_trait_|greed_item_)/, '');
+        const requestType = customId.startsWith('need_item_') ? 'NEED_ITEM' : 
+                            customId.startsWith('need_trait_') ? 'NEED_TRAIT' : 'GREED';
+        
+        // For tracking counters, we'll still use need_count for both NEED types
+        const priorityField = requestType === 'GREED' ? 'greed_count' : 'need_count';
         
         await interaction.deferReply({ ephemeral: true });
         
@@ -1560,35 +1562,36 @@ client.on('interactionCreate', async (interaction) => {
           
           const item = itemResult.rows[0];
           
-          // Check for existing request
+          // Check if user already has a pending request for this item
           const existingRequestResult = await pool.query(
-            `SELECT id, priority FROM loot_requests 
+            `SELECT id, need_or_greed FROM loot_requests 
              WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
             [itemId, userId]
           );
           
           if (existingRequestResult.rows.length) {
-            const existingPriority = existingRequestResult.rows[0].priority === 1 ? 'Need' : 'Greed';
+            const existingType = existingRequestResult.rows[0].need_or_greed;
             
-            if (existingPriority === priority) {
-              return await interaction.editReply(`You already have a ${priority} request for "${item.name}".`);
+            if (existingType === requestType) {
+              return await interaction.editReply(`You already have a ${requestType} request for "${item.name}".`);
             }
             
-            // User is changing priority, update the existing request
+            // User is changing request type, update the existing request
             await pool.query(
               `UPDATE loot_requests 
-               SET priority = $1, updated_at = NOW()
+               SET need_or_greed = $1, updated_at = NOW()
                WHERE id = $2`,
-              [isNeed ? 1 : 0, existingRequestResult.rows[0].id]
+              [requestType, existingRequestResult.rows[0].id]
             );
             
-            // Update the counter in the tracking table
+            // Update the counter in the tracking table - handle both need types appropriately
             const dbClient = await pool.connect();
             try {
               await dbClient.query('BEGIN');
               
-              // Decrement old priority counter
-              const oldPriorityField = existingPriority === 'Need' ? 'need_count' : 'greed_count';
+              // First determine the previous counter field to decrement
+              const oldPriorityField = existingType === 'GREED' ? 'greed_count' : 'need_count';
+              
               await dbClient.query(
                 `UPDATE item_message_tracking 
                  SET ${oldPriorityField} = GREATEST(${oldPriorityField} - 1, 0),
@@ -1609,17 +1612,17 @@ client.on('interactionCreate', async (interaction) => {
             // Update the embed
             await updateItemEmbed(itemId);
             
-            return await interaction.editReply(`Your request for "${item.name}" has been updated from ${existingPriority} to ${priority}.`);
+            return await interaction.editReply(`Your request for "${item.name}" has been updated to ${requestType}.`);
           }
           
-          // Create new loot request
+          // Create new loot request with need_or_greed field
           const requestResult = await pool.query(
             `INSERT INTO loot_requests
-             (id, guild_id, storage_item_id, user_id, status, priority, created_at, updated_at)
+             (id, guild_id, storage_item_id, user_id, status, need_or_greed, created_at, updated_at)
              VALUES
              (gen_random_uuid(), $1, $2, $3, 'Pending', $4, NOW(), NOW())
              RETURNING id`,
-            [appGuildId, itemId, userId, isNeed ? 1 : 0]
+            [appGuildId, itemId, userId, requestType]
           );
           
           const requestId = requestResult.rows[0].id;
@@ -1639,7 +1642,7 @@ client.on('interactionCreate', async (interaction) => {
           // Send notification to loot channel with approve/deny buttons
           const requestEmbed = new EmbedBuilder()
             .setTitle('New Loot Request')
-            .setDescription(`**${interaction.user.username}** has requested **${item.name}** (${priority})`)
+            .setDescription(`**${interaction.user.username}** has requested **${item.name}** (${requestType})`)
             .setColor('#9c27b0')
             .setTimestamp()
             .setFooter({ text: `Request ID: ${requestId}` });
@@ -1665,7 +1668,7 @@ client.on('interactionCreate', async (interaction) => {
             [row]
           );
           
-          await interaction.editReply(`Your ${priority} request for **${item.name}** has been submitted!`);
+          await interaction.editReply(`Your ${requestType} request for **${item.name}** has been submitted!`);
         } catch (error) {
           console.error(`[ERROR] Error processing item request:`, error);
           await interaction.editReply('An error occurred while processing your request.');
@@ -4536,19 +4539,24 @@ function startItemPolling() {
           }
           
           // Create request buttons
-          const requestRow = new ActionRowBuilder()
-            .addComponents(
-              new ButtonBuilder()
-                .setCustomId(`need_item_${item.id}`)
-                .setLabel('Need (High Priority)')
-                .setEmoji('🔴')
-                .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder()
-                .setCustomId(`greed_item_${item.id}`)
-                .setLabel('Greed (Low Priority)')
-                .setEmoji('💰')
-                .setStyle(ButtonStyle.Secondary)
-            );
+          const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`need_item_${item.id}`)
+              .setLabel('Need Item')
+              .setEmoji('🛡️')
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId(`need_trait_${item.id}`)
+              .setLabel('Need Trait')
+              .setEmoji('✨')
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId(`greed_item_${item.id}`)
+              .setLabel('Greed')
+              .setEmoji('💰')
+              .setStyle(ButtonStyle.Secondary)
+          );
           
           const message = await sendNotificationToConfiguredChannel(
             item.guild_id, 

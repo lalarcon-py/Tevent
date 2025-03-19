@@ -517,11 +517,28 @@ module.exports = {
           continue;
         }
         
-        console.log(`[DEBUG] Adding field for request #${i+1}: ${item.name} by ${user.username}`);
+        // Format need/greed type for display
+        let requestType;
+        switch(request.need_or_greed) {
+          case 'NEED_ITEM':
+            requestType = 'Need Item';
+            break;
+          case 'NEED_TRAIT':
+            requestType = 'Need Trait';
+            break;
+          case 'GREED':
+            requestType = 'Greed';
+            break;
+          default:
+            requestType = request.need_or_greed || 'Need';
+        }
+        
+        console.log(`[DEBUG] Adding field for request #${i+1}: ${item.name} by ${user.username} (${requestType})`);
         embed.addFields({
           name: `Request #${i + 1} (ID: ${request.id})`,
           value: `**Item:** ${item.name || 'Unknown Item'}\n` +
             `**Requester:** ${user.username || 'Unknown User'}\n` +
+            `**Type:** ${requestType}\n` +
             `**Requested:** ${new Date(request.created_at).toLocaleString()}`,
           inline: false
         });
