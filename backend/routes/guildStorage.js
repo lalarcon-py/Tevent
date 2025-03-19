@@ -565,6 +565,7 @@ router.post('/setup-discord-channel', async (req, res) => {
   }
 });
 
+// Complete force-roll endpoint
 router.post('/debug/force-roll/:storageItemId', async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
@@ -592,7 +593,7 @@ router.post('/debug/force-roll/:storageItemId', async (req, res) => {
       where: { id: storageItemId, guild_id: guildId },
       include: [{
         model: db.Item,
-        attributes: ['name', 'icon']
+        attributes: ['name', 'icon', 'type']
       }]
     });
     
@@ -684,9 +685,122 @@ router.post('/debug/force-roll/:storageItemId', async (req, res) => {
     // If there's a winner, reduce item quantity
     if (winner) {
       if (storageItem.quantity > 0) {
-        await storageItem.update({
-          quantity: Math.max(0, storageItem.quantity - 1)
+        const newQuantity = Math.max(0, storageItem.quantity - 1);
+        await storageItem.update({ quantity: newQuantity });
+        
+        // If quantity is now 0, handle deletion properly
+        if (newQuantity === 0) {
+          try {
+            // Begin transaction for data consistency
+            const t = await db.sequelize.transaction();
+            
+            try {
+              // First, update ALL related loot requests to remove references to this storage item
+              await db.LootRequest.update(
+                { 
+                  status: 'Denied - Out of Stock',
+                  storage_item_id: null  // Nullify the foreign key reference
+                },
+                { 
+                  where: { storage_item_id: storageItemId },
+                  transaction: t
+                }
+              );
+              
+              console.log(`Updated loot requests to remove references to item ${storageItemId}`);
+              
+              // Then delete the storage item
+              await storageItem.destroy({ transaction: t });
+              console.log(`Successfully deleted storage item ${storageItemId}`);
+              
+              // Commit the transaction
+              await t.commit();
+            } catch (deleteError) {
+              // If anything goes wrong, roll back
+              await t.rollback();
+              console.error('Transaction failed:', deleteError);
+              // Continue despite error
+            }
+          } catch (error) {
+            console.error('Failed to delete storage item:', error);
+            // Continue despite error - don't prevent the response
+          }
+        }
+      }
+      
+      // Try to create roll history record with better error handling
+      try {
+        // Check if roll_history table exists
+        const [tableCheck] = await db.sequelize.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'roll_history'
+          );
+        `);
+        
+        const tableExists = tableCheck[0].exists;
+        
+        if (!tableExists) {
+          // Create the table if it doesn't exist
+          await db.sequelize.query(`
+            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+            
+            CREATE TABLE IF NOT EXISTS roll_history (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              guild_id UUID NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+              item_name VARCHAR(255) NOT NULL,
+              item_type VARCHAR(255),
+              item_icon VARCHAR(255),
+              item_trait VARCHAR(255),
+              winner_id UUID REFERENCES users(id) ON DELETE SET NULL,
+              winner_name VARCHAR(255),
+              winner_roll INTEGER,
+              winner_need_type VARCHAR(50),
+              roll_results JSONB DEFAULT '[]',
+              roll_time TIMESTAMP DEFAULT NOW(),
+              created_at TIMESTAMP DEFAULT NOW(),
+              updated_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            CREATE INDEX IF NOT EXISTS roll_history_guild_id_idx ON roll_history(guild_id);
+            CREATE INDEX IF NOT EXISTS roll_history_winner_id_idx ON roll_history(winner_id);
+          `);
+          
+          console.log('Created roll_history table on the fly');
+        }
+        
+        // Insert record using raw SQL to avoid model issues
+        await db.sequelize.query(`
+          INSERT INTO roll_history (
+            id, guild_id, item_name, item_type, item_icon, item_trait,
+            winner_id, winner_name, winner_roll, winner_need_type,
+            roll_results, roll_time, created_at, updated_at
+          ) VALUES (
+            uuid_generate_v4(), :guildId, :itemName, :itemType, :itemIcon, :itemTrait,
+            :winnerId, :winnerName, :winnerRoll, :winnerNeedType,
+            :rollResults::jsonb, NOW(), NOW(), NOW()
+          )
+        `, {
+          replacements: {
+            guildId: guildId,
+            itemName: storageItem.Item ? storageItem.Item.name : 'Unknown Item',
+            itemType: storageItem.Item ? storageItem.Item.type : null,
+            itemIcon: storageItem.Item ? storageItem.Item.icon : null,
+            itemTrait: storageItem.trait,
+            winnerId: winner.user_id,
+            winnerName: winner.username,
+            winnerRoll: winner.roll_value,
+            winnerNeedType: winner.need_or_greed,
+            rollResults: JSON.stringify(rollResults)
+          },
+          type: db.sequelize.QueryTypes.INSERT
         });
+        
+        console.log('Created roll history record using raw SQL');
+      } catch (historyError) {
+        console.error('Failed to create roll history:', historyError);
+        // Don't let history errors break the whole process
       }
       
       // Attempt to notify Discord
@@ -735,6 +849,60 @@ router.post('/debug/force-roll/:storageItemId', async (req, res) => {
   } catch (error) {
     console.error('Force roll error:', error);
     res.status(500).json({ error: 'Failed to force roll', details: error.message });
+  }
+});
+
+
+// Roll history endpoint - complete implementation
+router.get('/roll-history', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const guildId = req.guildId || req.query.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Check if table exists
+    const [tableCheck] = await db.sequelize.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'roll_history'
+      );
+    `);
+    
+    const tableExists = tableCheck[0].exists;
+    
+    if (!tableExists) {
+      // Return empty array if table doesn't exist yet
+      return res.json([]);
+    }
+    
+    // Use raw SQL query to get roll history
+    const history = await db.sequelize.query(`
+      SELECT 
+        rh.*, 
+        u.username as "winner.username", 
+        u.avatar_url as "winner.avatar_url", 
+        u.discord_id as "winner.discord_id"
+      FROM roll_history rh
+      LEFT JOIN users u ON rh.winner_id = u.id
+      WHERE rh.guild_id = :guildId
+      ORDER BY rh.roll_time DESC
+    `, {
+      replacements: { guildId },
+      type: db.sequelize.QueryTypes.SELECT
+    });
+    
+    res.json(history || []);
+  } catch (error) {
+    console.error('Error fetching roll history:', error);
+    // Return empty array on error instead of error response
+    res.json([]);
   }
 });
 

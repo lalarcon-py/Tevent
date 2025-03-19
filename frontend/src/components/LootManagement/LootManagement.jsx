@@ -1,4 +1,4 @@
-// components/LootManagement/LootManagement.jsx - Fixed version
+// src/components/LootManagement/LootManagement.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
 import AdminLootPanel from './AdminLootPanel';
@@ -6,8 +6,9 @@ import WaitListTab from './WaitListTab';
 import LootRequestForm from './LootRequestForm';
 import LootWaitlist from './LootWaitlist';
 import WishlistTab from './WishlistTab';
+import RollHistoryTab from './RollHistoryTab'; // Import the new component
 import { useAuth } from '../../contexts/AuthContext';
-import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import axiosInstance from '../../config/axios';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 
@@ -15,7 +16,7 @@ const LootManagement = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const { settings } = useGuildSettings();
   const { isAuthenticated, user } = useAuth();
-  const { simulatedRole } = useSimulatedRole(); // Get simulated role
+  const { simulatedRole } = useSimulatedRole();
   const [directDkpCheck, setDirectDkpCheck] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   
@@ -98,6 +99,7 @@ const LootManagement = () => {
         <Tab label="Item Storage" />
         <Tab label="Requests" />
         <Tab label="Wishlist" />
+        <Tab label="Roll History" /> {/* New tab */}
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
@@ -137,6 +139,14 @@ const LootManagement = () => {
         <WishlistTab 
           key={`wishlist-tab-${String(dkpEnabled)}-${refreshKey}`} 
           dkpEnabled={dkpEnabled}
+          refreshData={refreshData}
+        />
+      </Box>
+
+      {/* New Roll History Tab */}
+      <Box sx={{ display: currentTab !== 3 ? 'none' : 'block' }}>
+        <RollHistoryTab 
+          key={`roll-history-tab-${String(dkpEnabled)}-${refreshKey}`} 
           refreshData={refreshData}
         />
       </Box>
