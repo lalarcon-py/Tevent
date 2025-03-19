@@ -19,7 +19,8 @@ import {
   Paper,
   Pagination,
   DialogActions,
-  Avatar
+  Avatar,
+  Tooltip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
@@ -28,7 +29,8 @@ import EventForm from './EventForm';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
-import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
+import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const PARTICIPANTS_PER_PAGE = 10;
 const API_URL = process.env.REACT_APP_API_URL;
@@ -159,7 +161,17 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         return;
       }
   
-      // Get current user data to determine primary build
+      // First, check if the user is already signed up for this event
+      const isAlreadySignedUp = event.participants?.some(p => p.User?.id === currentUser.id);
+      
+      if (isAlreadySignedUp) {
+        setSuccessMessage("You're already signed up for this event");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
+        return;
+      }
+    
+      // Get user data from public users table
       const userResponse = await fetch(`${API_URL}/api/auth/status`, {
         credentials: 'include'
       });
@@ -517,59 +529,95 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       }}
     >
       <List dense>
-        {paginatedParticipants?.map((participant) => (
-          <ListItem 
-            key={participant.id}
-            sx={{
-              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-              '&:last-child': {
-                borderBottom: 'none'
-              }
-            }}
-          >
-            <ListItemText
-              primary={
-                <Typography variant="body2" color="white">
-                  {participant.User.username}
-                </Typography>
-              }
-              secondary={
-                <Box sx={{ mt: 0.5 }}>
-                  <Chip
-                    label="Tank"
-                    size="small"
-                    onClick={() => handleRoleChange(participant.User.id, 'TANK')}
-                    color={participant.role === 'TANK' ? 'primary' : 'default'}
-                    sx={{ mr: 0.5 }}
-                  />
-                  <Chip
-                    label="Healer"
-                    size="small"
-                    onClick={() => handleRoleChange(participant.User.id, 'HEALER')}
-                    color={participant.role === 'HEALER' ? 'success' : 'default'}
-                    sx={{ mr: 0.5 }}
-                  />
-                  <Chip
-                    label="DPS"
-                    size="small"
-                    onClick={() => handleRoleChange(participant.User.id, 'DPS')}
-                    color={participant.role === 'DPS' ? 'error' : 'default'}
-                  />
+        {paginatedParticipants?.map((participant) => {
+          // Get the builds data from the User object
+          const builds = participant.User?.builds || [];
+          // Get the primary and secondary weapons
+          const primary = builds[0]?.primary || '';
+          const secondary = builds[0]?.secondary || '';
+          
+          return (
+            <ListItem 
+              key={participant.id}
+              sx={{
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                '&:last-child': {
+                  borderBottom: 'none'
+                }
+              }}
+            >
+              {/* Show weapons if available */}
+              {(primary || secondary) && (
+                <Box sx={{ display: 'flex', minWidth: 60, mr: 1 }}>
+                  {primary && (
+                    <Tooltip title={primary}>
+                      <Box 
+                        component="img"
+                        src={`${process.env.PUBLIC_URL}/weapons/${primary} Art.png`}
+                        alt={primary}
+                        sx={{ width: 24, height: 24, mr: 0.5 }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    </Tooltip>
+                  )}
+                  {secondary && (
+                    <Tooltip title={secondary}>
+                      <Box 
+                        component="img"
+                        src={`${process.env.PUBLIC_URL}/weapons/${secondary} Art.png`}
+                        alt={secondary}
+                        sx={{ width: 24, height: 24 }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    </Tooltip>
+                  )}
                 </Box>
-              }
-            />
-            <ListItemSecondaryAction>
-              <IconButton 
-                edge="end" 
-                onClick={() => handleRemoveParticipant(participant.User.id)}
-                size="small"
-                sx={{ color: '#ff4444' }}
-              >
-                <PersonRemoveIcon fontSize="small" />
-              </IconButton>
-            </ListItemSecondaryAction>
-          </ListItem>
-        ))}
+              )}
+              
+              <ListItemText
+                primary={
+                  <Typography variant="body2" color="white">
+                    {participant.User.username}
+                  </Typography>
+                }
+                secondary={
+                  <Box sx={{ mt: 0.5 }}>
+                    <Chip
+                      label="Tank"
+                      size="small"
+                      onClick={() => handleRoleChange(participant.User.id, 'TANK')}
+                      color={participant.role === 'TANK' ? 'primary' : 'default'}
+                      sx={{ mr: 0.5 }}
+                    />
+                    <Chip
+                      label="Healer"
+                      size="small"
+                      onClick={() => handleRoleChange(participant.User.id, 'HEALER')}
+                      color={participant.role === 'HEALER' ? 'success' : 'default'}
+                      sx={{ mr: 0.5 }}
+                    />
+                    <Chip
+                      label="DPS"
+                      size="small"
+                      onClick={() => handleRoleChange(participant.User.id, 'DPS')}
+                      color={participant.role === 'DPS' ? 'error' : 'default'}
+                    />
+                  </Box>
+                }
+              />
+              <ListItemSecondaryAction>
+                <IconButton 
+                  edge="end" 
+                  onClick={() => handleRemoveParticipant(participant.User.id)}
+                  size="small"
+                  sx={{ color: '#ff4444' }}
+                >
+                  <PersonRemoveIcon fontSize="small" />
+                </IconButton>
+              </ListItemSecondaryAction>
+            </ListItem>
+          );
+        })}
       </List>
     </Paper>
   );

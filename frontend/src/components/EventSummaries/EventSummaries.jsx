@@ -20,9 +20,10 @@ import GroupIcon from '@mui/icons-material/Group';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { format, parseISO, isPast } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
-import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
+import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -106,6 +107,12 @@ const EventSummaries = () => {
     try {
       setLoading(true);
       
+      // Get the event from the events array
+      const event = events.find(e => e.id === eventId);
+      if (!event) {
+        throw new Error("Event not found");
+      }
+      
       // Get current user data to determine primary build
       const userResponse = await fetch(`${API_URL}/api/auth/status`, {
         credentials: 'include'
@@ -116,6 +123,16 @@ const EventSummaries = () => {
       }
       
       const userData = await userResponse.json();
+      
+      // Check if user is already signed up for this event
+      const isAlreadySignedUp = event.participants && 
+                              event.participants.some(p => p.User?.id === userData.id);
+      
+      if (isAlreadySignedUp) {
+        setSuccessMessage("You're already signed up for this event");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        return;
+      }
       
       // Check if user has builds
       if (!userData.builds || userData.builds.length === 0) {

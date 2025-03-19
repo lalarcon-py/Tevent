@@ -20,6 +20,7 @@ import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { useParams } from 'react-router-dom';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
+import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -78,12 +79,9 @@ const DraggableMember = ({ member, onRemove }) => {
     }
   };
 
-  // Get weapon icon function
-  const getWeaponIcon = (weaponName) => {
-    if (!weaponName) return null;
-    const formattedName = weaponName.replace(/\s+/g, ' ').trim();
-    return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
-  };
+  // Get weapon components from utils
+  const { primaryWeapon, secondaryWeapon, primaryWeaponImageUrl, secondaryWeaponImageUrl } = 
+    getWeaponComponents(member.User?.builds || member.builds || []);
 
   // Check if user has builds data
   const hasWeapons = member.User?.builds?.length > 0 || member.builds?.length > 0;
@@ -145,21 +143,21 @@ const DraggableMember = ({ member, onRemove }) => {
       {/* Weapon icons */}
       {hasWeapons && (
         <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
-          {builds[0]?.primary && (
-            <Tooltip title={builds[0].primary}>
+          {primaryWeaponImageUrl && (
+            <Tooltip title={primaryWeapon}>
               <img 
-                src={getWeaponIcon(builds[0].primary)}
-                alt={builds[0].primary}
+                src={primaryWeaponImageUrl}
+                alt={primaryWeapon}
                 style={{ width: 24, height: 24, objectFit: 'contain' }}
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             </Tooltip>
           )}
-          {builds[0]?.secondary && (
-            <Tooltip title={builds[0].secondary}>
+          {secondaryWeaponImageUrl && (
+            <Tooltip title={secondaryWeapon}>
               <img 
-                src={getWeaponIcon(builds[0].secondary)}
-                alt={builds[0].secondary}
+                src={secondaryWeaponImageUrl}
+                alt={secondaryWeapon}
                 style={{ width: 24, height: 24, objectFit: 'contain' }}
                 onError={(e) => { e.target.style.display = 'none'; }}
               />

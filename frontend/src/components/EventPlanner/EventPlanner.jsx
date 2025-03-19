@@ -5,7 +5,8 @@ import AddIcon from '@mui/icons-material/Add';
 import CalendarView from './CalendarView';
 import EventForm from './EventForm';
 import EventDetails from './EventDetails';
-import { useSimulatedRole } from '../../contexts/SimulatedRoleContext'; // Added import
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
+import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -213,6 +214,15 @@ const EventPlanner = () => {
       }
       
       const userData = await userResponse.json();
+      
+      // Check if user is already signed up for this event
+      const isAlreadySignedUp = event.participants && 
+                                event.participants.some(p => p.User?.id === userData.id);
+      
+      if (isAlreadySignedUp) {
+        setError("You're already signed up for this event");
+        return;
+      }
       
       // Check if user has builds
       if (!userData.builds || userData.builds.length === 0) {

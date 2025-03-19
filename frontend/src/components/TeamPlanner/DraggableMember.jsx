@@ -2,6 +2,7 @@
 import React from 'react';
 import { useDrag } from 'react-dnd';
 import { Box, Typography, Tooltip } from '@mui/material';
+import { getWeaponImageUrl } from '../../utils/weaponUtils';
 
 export const DraggableMember = ({ member, roleType }) => {
   const [{ isDragging }, drag] = useDrag(() => ({
@@ -26,12 +27,6 @@ export const DraggableMember = ({ member, roleType }) => {
     }
   };
 
-  const getWeaponIcon = (weaponName) => {
-    if (!weaponName) return null;
-    const formattedName = weaponName.replace(/\s+/g, ' ').trim();
-    return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
-  };
-
   return (
     <Box
       ref={drag}
@@ -53,7 +48,7 @@ export const DraggableMember = ({ member, roleType }) => {
         {member.builds?.[0]?.primary && (
           <Tooltip title={member.builds[0].primary}>
             <img 
-              src={getWeaponIcon(member.builds[0].primary)}
+              src={getWeaponImageUrl(member.builds[0].primary)}
               alt={member.builds[0].primary}
               style={{ 
                 width: 24, 
@@ -69,7 +64,7 @@ export const DraggableMember = ({ member, roleType }) => {
         {member.builds?.[0]?.secondary && (
           <Tooltip title={member.builds[0].secondary}>
             <img 
-              src={getWeaponIcon(member.builds[0].secondary)}
+              src={getWeaponImageUrl(member.builds[0].secondary)}
               alt={member.builds[0].secondary}
               style={{ 
                 width: 24, 

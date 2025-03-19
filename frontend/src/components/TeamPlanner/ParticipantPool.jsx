@@ -2,6 +2,7 @@
 import React from 'react';
 import { Paper, Typography, Box, Avatar, Tooltip } from '@mui/material';
 import { DraggableMember } from './DraggableMember';
+import { getWeaponImageUrl } from '../../utils/weaponUtils';
 
 // Weapon Logic (Items Icons, CP, Etc..)
 const WEAPON_SPECS = {
@@ -39,12 +40,6 @@ const getWeaponSpec = (primary, secondary) => {
  const combo1 = `${primary}|${secondary}`;
  const combo2 = `${secondary}|${primary}`;
  return WEAPON_SPECS[combo1] || WEAPON_SPECS[combo2] || 'Unknown Spec';
-};
-
-const getWeaponIcon = (weaponName) => {
- if (!weaponName) return null;
- const formattedName = weaponName.replace(/\s+/g, ' ').trim();
- return `${process.env.PUBLIC_URL}/weapons/${formattedName} Art.png`;
 };
 
 const RoleSection = ({ title, members, roleType }) => {
@@ -102,7 +97,7 @@ const RoleSection = ({ title, members, roleType }) => {
                  {member.builds[0]?.primary && (
                    <Tooltip title={member.builds[0].primary}>
                      <img 
-                       src={getWeaponIcon(member.builds[0].primary)}
+                       src={getWeaponImageUrl(member.builds[0].primary)}
                        alt={member.builds[0].primary}
                        style={{ width: 24, height: 24 }}
                      />
@@ -111,7 +106,7 @@ const RoleSection = ({ title, members, roleType }) => {
                  {member.builds[0]?.secondary && (
                    <Tooltip title={member.builds[0].secondary}>
                      <img 
-                       src={getWeaponIcon(member.builds[0].secondary)}
+                       src={getWeaponImageUrl(member.builds[0].secondary)}
                        alt={member.builds[0].secondary}
                        style={{ width: 24, height: 24 }}
                      />

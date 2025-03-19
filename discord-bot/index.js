@@ -3018,6 +3018,183 @@ app.post('/webhook/item-request', async (req, res) => {
   }
 });
 
+// Add this function to discord-bot/index.js
+async function recoverEventTracking() {
+  try {
+    console.log(`[INFO] Recovering event message tracking after restart...`);
+    
+    // Get all event messages from tracking table
+    const eventMessagesResult = await pool.query(
+      `SELECT em.*, e.* 
+       FROM discord_event_messages em
+       JOIN events e ON em.event_id = e.id
+       WHERE e.event_time > NOW() - INTERVAL '12 hours'`  // Include recent events + upcoming ones
+    );
+    
+    const eventMessages = eventMessagesResult.rows;
+    console.log(`[INFO] Found ${eventMessages.length} event messages to recover`);
+    
+    for (const message of eventMessages) {
+      try {
+        // Try to fetch the channel
+        const channel = await client.channels.fetch(message.channel_id).catch(() => null);
+        if (!channel) {
+          console.warn(`[WARN] Cannot find channel ${message.channel_id} for event ${message.event_id}`);
+          continue;
+        }
+        
+        // Try to fetch the message
+        const discordMessage = await channel.messages.fetch(message.message_id).catch(() => null);
+        if (!discordMessage) {
+          console.warn(`[WARN] Cannot find message ${message.message_id} in channel ${message.channel_id}`);
+          continue;
+        }
+        
+        // Get updated participant data with names
+        const participantsResult = await pool.query(
+          `SELECT ep.role, u.username, u.discord_id, u.builds
+           FROM event_participants ep
+           JOIN users u ON ep.user_id = u.id
+           WHERE ep.event_id = $1
+           ORDER BY ep.created_at ASC`,
+          [message.event_id]
+        );
+        
+        // Get updated absences
+        const absenteesResult = await pool.query(
+          `SELECT ea.user_id, u.username
+           FROM event_absentees ea
+           JOIN users u ON ea.user_id = u.id
+           WHERE ea.event_id = $1
+           ORDER BY ea.created_at ASC`,
+          [message.event_id]
+        );
+        
+        // Group participants by role
+        const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
+        const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
+        const dps = participantsResult.rows.filter(p => p.role === 'DPS');
+        const absentees = absenteesResult.rows;
+        
+        // Format date and time
+        const eventDate = new Date(message.event_time);
+        const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+        const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+        
+        // Create updated embed
+        const updatedEmbed = new EmbedBuilder()
+          .setTitle(`${message.title || 'Event'}`)
+          .setColor('#1a64f3')
+          .setDescription(message.description || 'No description provided')
+          .addFields(
+            {
+              name: '⏰ Time',
+              value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+              inline: false
+            },
+            {
+              name: '📍 Location',
+              value: message.location || 'Not specified',
+              inline: false
+            },
+            {
+              name: `🛡️ Tanks (${tanks.length}/${message.tanks || 0})`,
+              value: tanks.length > 0 ? 
+                tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+                '—',
+              inline: true
+            },
+            {
+              name: `💚 Healers (${healers.length}/${message.healers || 0})`,
+              value: healers.length > 0 ? 
+                healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+                '—',
+              inline: true
+            },
+            {
+              name: `⚔️ DPS (${dps.length}/${message.dps || 0})`,
+              value: dps.length > 0 ? 
+                dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+                '—',
+              inline: true
+            },
+            {
+              name: `❌ Absent (${absentees.length})`,
+              value: absentees.length > 0 ? 
+                absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+                '—',
+              inline: true
+            },
+            {
+              name: '⏳ Tentative (0)',
+              value: '—',
+              inline: true
+            }
+          )
+          .setFooter({ text: `Event ID: ${message.event_id}` });
+        
+        // Update the embed
+        await discordMessage.edit({ embeds: [updatedEmbed] });
+        console.log(`[INFO] Recovered tracking for event "${message.title}" (${message.event_id})`);
+      } catch (eventError) {
+        console.error(`[ERROR] Error recovering event ${message.event_id}: ${eventError.message}`);
+      }
+    }
+    
+    console.log(`[INFO] Event tracking recovery complete`);
+  } catch (error) {
+    console.error(`[ERROR] Error in event recovery function: ${error.message}`);
+    console.error(error.stack);
+  }
+}
+
+async function recoverItemTracking() {
+  try {
+    console.log(`[INFO] Recovering item tracking after restart...`);
+    
+    // Get all items from tracking table
+    const trackingResult = await pool.query(
+      `SELECT t.*, gsi.*, i.name, i.type, i.icon 
+       FROM item_message_tracking t
+       JOIN guild_storage_items gsi ON t.item_id = gsi.id
+       JOIN items i ON gsi.item_id = i.id
+       WHERE gsi.quantity > 0`
+    );
+    
+    const items = trackingResult.rows;
+    console.log(`[INFO] Found ${items.length} active items to recover`);
+    
+    for (const item of items) {
+      try {
+        // Try to fetch the channel
+        const channel = await client.channels.fetch(item.channel_id).catch(() => null);
+        if (!channel) {
+          console.warn(`[WARN] Cannot find channel ${item.channel_id} for item ${item.item_id}`);
+          continue;
+        }
+        
+        // Try to fetch the message
+        const message = await channel.messages.fetch(item.message_id).catch(() => null);
+        if (!message) {
+          console.warn(`[WARN] Cannot find message ${item.message_id} in channel ${item.channel_id}`);
+          continue;
+        }
+        
+        // Update the embed with current timer information
+        await updateItemEmbed(item.item_id);
+        console.log(`[INFO] Recovered tracking for item ${item.name} (${item.item_id})`);
+      } catch (itemError) {
+        console.error(`[ERROR] Error recovering item ${item.item_id}: ${itemError.message}`);
+      }
+    }
+    
+    console.log(`[INFO] Item tracking recovery complete`);
+  } catch (error) {
+    console.error(`[ERROR] Error in recovery function: ${error.message}`);
+    console.error(error.stack);
+  }
+}
+
 // Link guild command handler
 const handleLinkGuildCommand = async (interaction) => {
   // Only server admins can use this command
@@ -4448,12 +4625,10 @@ app.post('/webhook/update-event-signup', async (req, res) => {
       
       const event = eventResult.rows[0];
       
-      // Format date and time
       const eventDate = new Date(event.event_time);
       const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
       const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
       
-      // Create updated embed WITH PARTICIPANT NAMES
       const updatedEmbed = new EmbedBuilder()
         .setTitle(`${event.title || 'Event'}`)
         .setColor('#1a64f3')
@@ -4504,8 +4679,7 @@ app.post('/webhook/update-event-signup', async (req, res) => {
           }
         )
         .setFooter({ text: `Event ID: ${eventId}` });
-      
-      // Update the embed
+
       await message.edit({ embeds: [updatedEmbed] });
       
       console.log(`[INFO] Updated Discord message with new signup data`);
@@ -4604,6 +4778,15 @@ client.on('ready', async () => {
       console.error(`[ERROR] Error creating discord_channel_config table: ${tableError.message}`);
       // Continue even if table creation fails
     }
+    
+    // Recover item tracking after restart
+    console.log('Recovering item tracking after restart...');
+    await recoverItemTracking();
+    
+    // Recover event tracking after restart
+    console.log('Recovering event tracking after restart...');
+    await recoverEventTracking();
+    
   } catch (error) {
     console.error('Error setting up database tables:', error);
   }
@@ -4617,7 +4800,7 @@ client.on('ready', async () => {
   // Verify channel configurations
   verifyEventChannelConfigurations();
   
-  // Start polling for new items
+  // Start polling for new items with lookback
   console.log('Starting storage item polling...');
   startItemPolling();
   
@@ -4636,6 +4819,9 @@ client.on('ready', async () => {
 });
 
 function startItemPolling() {
+  const initialPollTime = new Date();
+  initialPollTime.setHours(initialPollTime.getHours() - 1);
+  lastItemPoll = initialPollTime;
   console.log(`Initial item poll time set to: ${lastItemPoll.toISOString()}`);
   
   setInterval(async () => {
@@ -4663,7 +4849,6 @@ function startItemPolling() {
         try {
           console.log(`Processing new item: ${item.name} (ID: ${item.id})`);
           
-          // Format time remaining for timer display
           let timerDisplay = formatTimerDuration(item.timer_duration || 1440);
           try {
             if (item.timer_duration && (item.created_at || item.updated_at)) {
@@ -4674,7 +4859,6 @@ function startItemPolling() {
             }
           } catch (timeError) {
             console.error(`Error calculating time remaining:`, timeError);
-            // Continue with default timer display
           }
           
           const embed = new EmbedBuilder()
@@ -4704,7 +4888,7 @@ function startItemPolling() {
           }
           
           // Create request buttons
-          const buttonsRow = new ActionRowBuilder()  // Renamed from 'row' to 'buttonsRow' for clarity
+          const buttonsRow = new ActionRowBuilder()
           .addComponents(
             new ButtonBuilder()
               .setCustomId(`need_item_${item.id}`)
