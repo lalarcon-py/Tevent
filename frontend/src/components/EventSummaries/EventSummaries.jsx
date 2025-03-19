@@ -12,7 +12,15 @@ import {
   Divider,
   CircularProgress,
   Alert,
-  Avatar
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemText,
+  Tooltip
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
@@ -23,9 +31,84 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
-import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const API_URL = process.env.REACT_APP_API_URL;
+
+// BuildSelectionDialog component definition
+const BuildSelectionDialog = ({ open, builds, onClose, onSelectBuild }) => {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+        Select Build for Event
+      </DialogTitle>
+      <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
+        <Typography color="white" sx={{ mb: 2 }}>
+          Please select which build you want to use for this event:
+        </Typography>
+        <List>
+          {builds.map((build, index) => {
+            // Generate URLs directly from the public folder
+            const primaryImageUrl = build.primary ? `/weapons/${build.primary} Art.png` : null;
+            const secondaryImageUrl = build.secondary ? `/weapons/${build.secondary} Art.png` : null;
+            
+            return (
+              <ListItem
+                key={index}
+                button
+                onClick={() => onSelectBuild(build)}
+                sx={{
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: 1,
+                  mb: 1,
+                  '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' }
+                }}
+              >
+                <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
+                  {build.primary && (
+                    <img
+                      src={primaryImageUrl}
+                      alt={build.primary}
+                      style={{ width: 24, height: 24 }}
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  )}
+                  {build.secondary && (
+                    <img
+                      src={secondaryImageUrl}
+                      alt={build.secondary}
+                      style={{ width: 24, height: 24 }}
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  )}
+                </Box>
+                <ListItemText
+                  primary={
+                    <Typography color="white">
+                      {build.primary} + {build.secondary}
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography color={
+                      build.spec === 'Tank' ? '#66b3ff' :
+                      build.spec === 'Healer' ? '#66ff66' : '#ff6666'
+                    }>
+                      {build.spec}
+                    </Typography>
+                  }
+                />
+              </ListItem>
+            );
+          })}
+        </List>
+      </DialogContent>
+      <DialogActions sx={{ bgcolor: '#1e1e1e', p: 2 }}>
+        <Button onClick={onClose} sx={{ color: 'white' }}>
+          Cancel
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
 
 const EventSummaries = () => {
   const [events, setEvents] = useState([]);
@@ -34,7 +117,12 @@ const EventSummaries = () => {
   const navigate = useNavigate();
   const [successMessage, setSuccessMessage] = useState(null);
   const { user: currentUser } = useAuth();
-  const { simulatedRole } = useSimulatedRole(); // Added hook
+  const { simulatedRole } = useSimulatedRole();
+  
+  // New state variables for build selection
+  const [buildSelectionOpen, setBuildSelectionOpen] = useState(false);
+  const [userBuilds, setUserBuilds] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState(null);
   
   // Get effective role
   const effectiveRole = simulatedRole || (currentUser ? currentUser.role : null);
@@ -131,12 +219,23 @@ const EventSummaries = () => {
       if (isAlreadySignedUp) {
         setSuccessMessage("You're already signed up for this event");
         setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
         return;
       }
       
       // Check if user has builds
       if (!userData.builds || userData.builds.length === 0) {
         throw new Error("No primary build found. Please set up your builds first.");
+      }
+      
+      // If user has multiple builds, show the selection dialog
+      if (userData.builds.length > 1) {
+        console.log('User has multiple builds, opening selection dialog');
+        setUserBuilds(userData.builds);
+        setSelectedEventId(eventId);
+        setBuildSelectionOpen(true);
+        setLoading(false);
+        return;
       }
       
       // Get the primary build
@@ -614,6 +713,60 @@ const EventSummaries = () => {
           })}
         </Grid>
       )}
+      
+      {/* Build Selection Dialog */}
+      <BuildSelectionDialog
+        open={buildSelectionOpen}
+        builds={userBuilds}
+        onClose={() => setBuildSelectionOpen(false)}
+        onSelectBuild={async (selectedBuild) => {
+          // Determine role based on the selected build's spec
+          let role;
+          if (selectedBuild.spec === 'Tank') {
+            role = 'TANK';
+          } else if (selectedBuild.spec === 'Healer') {
+            role = 'HEALER';
+          } else {
+            role = 'DPS';
+          }
+          
+          try {
+            setLoading(true);
+            
+            // Send the signup request
+            const response = await fetch(`${API_URL}/api/events/${selectedEventId}/signup`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ 
+                role,
+                guildId: localStorage.getItem('guildId')
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to sign up');
+            }
+            
+            // Refresh the events data
+            await fetchEvents();
+            
+            // Show success message
+            setSuccessMessage(`Successfully signed up as ${role} using ${selectedBuild.primary}+${selectedBuild.secondary}`);
+            setTimeout(() => setSuccessMessage(null), 3000);
+          } catch (error) {
+            console.error('Error signing up with selected build:', error);
+            setError(error.message || 'Failed to sign up for event');
+          } finally {
+            setLoading(false);
+          }
+          
+          setBuildSelectionOpen(false);
+        }}
+      />
     </Box>
   );
 };

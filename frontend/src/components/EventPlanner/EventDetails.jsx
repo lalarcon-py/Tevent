@@ -1,6 +1,5 @@
 // EventDetails.jsx
 import React, { useState, useEffect } from 'react';
-
 import { Link } from 'react-router-dom';
 import {
   Box,
@@ -32,11 +31,11 @@ import { useGuildSettings } from '../../contexts/GuildSettingsContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
-import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const PARTICIPANTS_PER_PAGE = 10;
 const API_URL = process.env.REACT_APP_API_URL;
 
+// BuildSelectionDialog component
 const BuildSelectionDialog = ({ open, builds, onClose, onSelectBuild }) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -269,8 +268,9 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       
       // If user has multiple builds, show the selection dialog
       if (userData.builds.length > 1) {
-        setBuildSelectionOpen(true);
+        console.log('User has multiple builds, opening selection dialog');
         setUserBuilds(userData.builds);
+        setBuildSelectionOpen(true);
         setLoading(false);
         return;
       }
@@ -640,7 +640,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                     <Tooltip title={primary}>
                       <Box 
                         component="img"
-                        src={`${process.env.PUBLIC_URL}/weapons/${primary} Art.png`}
+                        src={`/weapons/${primary} Art.png`}
                         alt={primary}
                         sx={{ width: 24, height: 24, mr: 0.5 }}
                         onError={(e) => { e.target.style.display = 'none'; }}
@@ -651,7 +651,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                     <Tooltip title={secondary}>
                       <Box 
                         component="img"
-                        src={`${process.env.PUBLIC_URL}/weapons/${secondary} Art.png`}
+                        src={`/weapons/${secondary} Art.png`}
                         alt={secondary}
                         sx={{ width: 24, height: 24 }}
                         onError={(e) => { e.target.style.display = 'none'; }}
@@ -691,29 +691,6 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                     />
                   </Box>
                 }
-                
-              />
-              <BuildSelectionDialog
-                open={buildSelectionOpen}
-                builds={userBuilds}
-                onClose={() => setBuildSelectionOpen(false)}
-                onSelectBuild={async (selectedBuild) => {
-                  // Determine role based on the selected build's spec
-                  let role;
-                  if (selectedBuild.spec === 'Tank') {
-                    role = 'TANK';
-                  } else if (selectedBuild.spec === 'Healer') {
-                    role = 'HEALER';
-                  } else {
-                    role = 'DPS';
-                  }
-                  
-                  // Sign up with the determined role
-                  await handleSignUp(role);
-                  setSuccessMessage(`Successfully signed up as ${role} using ${selectedBuild.primary}+${selectedBuild.secondary}`);
-                  setTimeout(() => setSuccessMessage(null), 3000);
-                  setBuildSelectionOpen(false);
-                }}
               />
               <ListItemSecondaryAction>
                 <IconButton 
@@ -937,6 +914,30 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         </Grid>
       </Grid>
   
+      {/* Build Selection Dialog - moved outside of ParticipantsList */}
+      <BuildSelectionDialog
+        open={buildSelectionOpen}
+        builds={userBuilds}
+        onClose={() => setBuildSelectionOpen(false)}
+        onSelectBuild={async (selectedBuild) => {
+          // Determine role based on the selected build's spec
+          let role;
+          if (selectedBuild.spec === 'Tank') {
+            role = 'TANK';
+          } else if (selectedBuild.spec === 'Healer') {
+            role = 'HEALER';
+          } else {
+            role = 'DPS';
+          }
+          
+          // Sign up with the determined role
+          await handleSignUp(role);
+          setSuccessMessage(`Successfully signed up as ${role} using ${selectedBuild.primary}+${selectedBuild.secondary}`);
+          setTimeout(() => setSuccessMessage(null), 3000);
+          setBuildSelectionOpen(false);
+        }}
+      />
+
       <Dialog 
         open={isEditDialogOpen} 
         onClose={() => setIsEditDialogOpen(false)}
@@ -1000,7 +1001,5 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     </DialogContent>
   );
 };
-
-
 
 export default EventDetails;
