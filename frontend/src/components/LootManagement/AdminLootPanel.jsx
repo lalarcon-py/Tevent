@@ -5,11 +5,12 @@ import {
   Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText,
   Grid, Divider, Alert, FormControl, InputLabel, Select, MenuItem,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  FormLabel, RadioGroup, FormControlLabel, Radio, CircularProgress
+  FormLabel, RadioGroup, FormControlLabel, Radio, CircularProgress, Snackbar
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CasinoIcon from '@mui/icons-material/Casino';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Added for winner trophy
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
@@ -24,6 +25,7 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
   const [loading, setLoading] = useState(false);
   const [currentGuildId, setCurrentGuildId] = useState('default');
   const [triggeringRolls, setTriggeringRolls] = useState(false);
+  const [forcingRollItemId, setForcingRollItemId] = useState(null); // Track which item is being rolled
   const [newItem, setNewItem] = useState({
     id: null,
     name: '',
@@ -34,6 +36,13 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
     availableTraits: [], // Store available traits for the item
     selectedTrait: null,   // Track selected trait
     timerDuration: 1440    // Default to 24 hours (in minutes)
+  });
+
+  // State for roll results dialog
+  const [rollResultsDialog, setRollResultsDialog] = useState({
+    open: false,
+    itemName: '',
+    results: null
   });
 
   const [notification, setNotification] = useState({
@@ -86,7 +95,11 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
       });
       
       console.log('Roll check response:', response.data);
-      alert('Roll check triggered successfully! Check pending requests.');
+      setNotification({
+        open: true,
+        message: 'Roll check triggered successfully! Check pending requests.',
+        severity: 'success'
+      });
       
       // Refresh data
       await fetchAddedItems();
@@ -94,9 +107,57 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
       
     } catch (error) {
       console.error('Failed to trigger roll check:', error);
-      alert('Failed to trigger roll check: ' + (error.response?.data?.error || error.message));
+      setNotification({
+        open: true,
+        message: 'Failed to trigger roll check: ' + (error.response?.data?.error || error.message),
+        severity: 'error'
+      });
     } finally {
       setTriggeringRolls(false);
+    }
+  };
+
+  // New function to force roll for a specific item
+  const handleForceRoll = async (itemId) => {
+    try {
+      setForcingRollItemId(itemId);
+      
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      // Find the item name
+      const item = addedItems.find(item => item.id === itemId);
+      const itemName = item ? (item.Item ? item.Item.name : item.name) : 'Unknown Item';
+      
+      const response = await axiosInstance.post(`/api/guild-storage/debug/force-roll/${itemId}`, {
+        guildId
+      });
+      
+      console.log('Force roll response:', response.data);
+      
+      // Show roll results in dialog
+      setRollResultsDialog({
+        open: true,
+        itemName,
+        results: response.data.results
+      });
+      
+      // Refresh data
+      await fetchAddedItems();
+      if (refreshData) refreshData();
+      
+    } catch (error) {
+      console.error('Failed to force roll:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to force roll: ' + (error.response?.data?.error || error.message),
+        severity: 'error'
+      });
+    } finally {
+      setForcingRollItemId(null);
     }
   };
 
@@ -447,7 +508,7 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
         }
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add to Guild Storage</Typography>
+          <Typography variant="h6" gutterBottom sx={{ color: '#90caf9', mb: 0 }}>Add to Guild Storage</Typography>
           
           {/* Add roll check trigger button */}
           <Button 
@@ -763,17 +824,43 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
                   />
                 </TableCell>
                 <TableCell>
-                  <IconButton 
-                    onClick={() => handleDelete(item.id)}
-                    sx={{ 
-                      '&:hover': { 
-                        color: '#ff4444',
-                        transform: 'scale(1.1)'
-                      }
-                    }}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <IconButton 
+                      onClick={() => handleDelete(item.id)}
+                      sx={{ 
+                        '&:hover': { 
+                          color: '#ff4444',
+                          transform: 'scale(1.1)'
+                        }
+                      }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                    
+                    {/* New Force Roll button */}
+                    <IconButton
+                      onClick={() => handleForceRoll(item.id)}
+                      disabled={forcingRollItemId === item.id}
+                      sx={{ 
+                        color: '#9c27b0',
+                        '&:hover': { 
+                          color: '#ce93d8',
+                          transform: 'scale(1.1)'
+                        }
+                      }}
+                    >
+                      <CasinoIcon />
+                      {forcingRollItemId === item.id && (
+                        <CircularProgress
+                          size={24}
+                          sx={{
+                            position: 'absolute',
+                            color: '#ce93d8'
+                          }}
+                        />
+                      )}
+                    </IconButton>
+                  </Box>
                 </TableCell>
                 <TableCell>
                   <Button 
@@ -1015,6 +1102,224 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Roll Results Dialog - NEW */}
+      <Dialog 
+        open={rollResultsDialog.open} 
+        onClose={() => setRollResultsDialog({...rollResultsDialog, open: false})}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 2,
+          bgcolor: 'rgba(156, 39, 176, 0.1)' 
+        }}>
+          <CasinoIcon sx={{ color: '#9c27b0' }} />
+          Roll Results for {rollResultsDialog.itemName}
+        </DialogTitle>
+        <DialogContent>
+          {rollResultsDialog.results?.winner ? (
+            <Box>
+              {/* Winner Section */}
+              <Box sx={{ 
+                p: 3, 
+                mt: 2, 
+                mb: 3, 
+                display: 'flex', 
+                flexDirection: 'column',
+                alignItems: 'center',
+                bgcolor: 'rgba(255, 215, 0, 0.1)',
+                borderRadius: 2,
+                border: '1px solid rgba(255, 215, 0, 0.3)'
+              }}>
+                <Box sx={{ position: 'relative' }}>
+                  <EmojiEventsIcon sx={{ 
+                    color: '#ffd700', 
+                    fontSize: 60, 
+                    position: 'absolute',
+                    top: -40,
+                    left: '50%',
+                    transform: 'translateX(-50%)'
+                  }} />
+                </Box>
+                
+                <Typography variant="h5" sx={{ color: '#ffd700', mb: 2, mt: 3, fontWeight: 'bold' }}>
+                  Winner
+                </Typography>
+                
+                <Avatar 
+                  src={rollResultsDialog.results.winner.avatar_url}
+                  sx={{ 
+                    width: 80, 
+                    height: 80,
+                    border: '3px solid #ffd700',
+                    mb: 2
+                  }}
+                >
+                  {rollResultsDialog.results.winner.username?.[0] || '?'}
+                </Avatar>
+                
+                <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
+                  {rollResultsDialog.results.winner.username}
+                </Typography>
+                
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
+                  <Chip
+                    icon={<CasinoIcon />}
+                    label={`Roll: ${rollResultsDialog.results.winner.roll_value}`}
+                    sx={{
+                      bgcolor: 'rgba(255, 215, 0, 0.2)',
+                      color: '#ffd700',
+                      fontWeight: 'bold',
+                      fontSize: '1.1rem',
+                      py: 1
+                    }}
+                  />
+                  
+                  <Chip 
+                    label={rollResultsDialog.results.winner.need_or_greed === 'NEED_ITEM' ? 'Need Item' :
+                           rollResultsDialog.results.winner.need_or_greed === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}
+                    sx={{ 
+                      bgcolor: rollResultsDialog.results.winner.need_or_greed === 'NEED_ITEM' ? 'rgba(76, 175, 80, 0.2)' :
+                              rollResultsDialog.results.winner.need_or_greed === 'NEED_TRAIT' ? 'rgba(33, 150, 243, 0.2)' :
+                              'rgba(255, 152, 0, 0.2)',
+                      color: rollResultsDialog.results.winner.need_or_greed === 'NEED_ITEM' ? '#4caf50' :
+                             rollResultsDialog.results.winner.need_or_greed === 'NEED_TRAIT' ? '#2196f3' :
+                             '#ff9800',
+                      fontWeight: 'medium'
+                    }}
+                  />
+                </Box>
+              </Box>
+              
+              {/* All Rolls Section */}
+              <Typography variant="h6" sx={{ mb: 2, color: '#9c27b0' }}>
+                All Roll Results
+              </Typography>
+              
+              <TableContainer component={Paper} sx={{ 
+                bgcolor: 'rgba(30, 30, 30, 0.6)',
+                backdropFilter: 'blur(12px)'
+              }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Player</TableCell>
+                      <TableCell>Roll</TableCell>
+                      <TableCell>Need/Greed</TableCell>
+                      <TableCell>Result</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rollResultsDialog.results.allRolls.map((roll) => (
+                      <TableRow key={roll.id} sx={{
+                        bgcolor: roll.winner ? 'rgba(255, 215, 0, 0.05)' : 'transparent',
+                        '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.05)' }
+                      }}>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Avatar 
+                              src={roll.avatar_url}
+                              sx={{ 
+                                width: 35, 
+                                height: 35,
+                                border: roll.winner ? '2px solid #ffd700' : '1px solid rgba(255, 255, 255, 0.2)'
+                              }}
+                            >
+                              {roll.username?.[0] || '?'}
+                            </Avatar>
+                            <Typography sx={{ color: roll.winner ? '#ffd700' : 'white' }}>
+                              {roll.username}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={<CasinoIcon />}
+                            label={roll.roll_value}
+                            sx={{
+                              bgcolor: roll.winner ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                              color: roll.winner ? '#ffd700' : 'white',
+                              fontWeight: roll.winner ? 'bold' : 'normal'
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={roll.need_or_greed === 'NEED_ITEM' ? 'Need Item' :
+                                  roll.need_or_greed === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}
+                            size="small"
+                            sx={{ 
+                              bgcolor: roll.need_or_greed === 'NEED_ITEM' ? 'rgba(76, 175, 80, 0.2)' :
+                                      roll.need_or_greed === 'NEED_TRAIT' ? 'rgba(33, 150, 243, 0.2)' :
+                                      'rgba(255, 152, 0, 0.2)',
+                              color: roll.need_or_greed === 'NEED_ITEM' ? '#4caf50' :
+                                    roll.need_or_greed === 'NEED_TRAIT' ? '#2196f3' :
+                                    '#ff9800'
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {roll.winner ? (
+                            <Chip 
+                              label="Winner" 
+                              sx={{ bgcolor: 'rgba(255, 215, 0, 0.2)', color: '#ffd700' }}
+                              icon={<EmojiEventsIcon sx={{ color: '#ffd700' }} />}
+                            />
+                          ) : (
+                            <Chip 
+                              label="Lost Roll" 
+                              sx={{ bgcolor: 'rgba(158, 158, 158, 0.2)', color: '#9e9e9e' }}
+                            />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : (
+            <Box sx={{ p: 3, textAlign: 'center' }}>
+              <Typography variant="h6" color="error">
+                No roll results available or no requests found
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              setRollResultsDialog({...rollResultsDialog, open: false});
+              // Refresh data after viewing results
+              fetchAddedItems();
+              if (refreshData) refreshData();
+            }}
+            color="primary"
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={() => setNotification({...notification, open: false})}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setNotification({...notification, open: false})}
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

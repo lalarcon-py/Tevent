@@ -565,6 +565,177 @@ router.post('/setup-discord-channel', async (req, res) => {
   }
 });
 
-module.exports = router;
+router.post('/debug/force-roll/:storageItemId', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { storageItemId } = req.params;
+    const guildId = req.guildId || req.body.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Verify user has permission
+    const guildMember = await db.GuildMember.findOne({
+      where: { guild_id: guildId, user_id: req.user.id }
+    });
+    
+    if (!guildMember || !['Guild Master', 'Guild Advisor'].includes(guildMember.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    // Get the storage item to ensure it exists
+    const storageItem = await db.GuildStorageItem.findOne({
+      where: { id: storageItemId, guild_id: guildId },
+      include: [{
+        model: db.Item,
+        attributes: ['name', 'icon']
+      }]
+    });
+    
+    if (!storageItem) {
+      return res.status(404).json({ error: 'Storage item not found' });
+    }
+    
+    // Get all pending requests for this item
+    const pendingRequests = await db.LootRequest.findAll({
+      where: {
+        guild_id: guildId,
+        storage_item_id: storageItemId,
+        status: 'Pending'
+      },
+      include: [{
+        model: db.User,
+        as: 'user',
+        attributes: ['id', 'username', 'discord_id', 'avatar_url']
+      }]
+    });
+    
+    if (pendingRequests.length === 0) {
+      return res.status(404).json({ error: 'No pending requests found for this item' });
+    }
+    
+    // Assign roll values to each request
+    const rollResults = [];
+    
+    for (const request of pendingRequests) {
+      // Generate random roll value 1-100
+      const rollValue = Math.floor(Math.random() * 100) + 1;
+      
+      await request.update({
+        roll_value: rollValue,
+        roll_time: new Date()
+      });
+      
+      rollResults.push({
+        id: request.id,
+        user_id: request.user_id,
+        username: request.user ? request.user.username : 'Unknown',
+        avatar_url: request.user ? request.user.avatar_url : null,
+        discord_id: request.user ? request.user.discord_id : null,
+        need_or_greed: request.need_or_greed,
+        roll_value: rollValue
+      });
+    }
+    
+    // Sort rolls by priority: NEED_ITEM > NEED_TRAIT > GREED
+    // Then by roll value (highest first)
+    const priorityOrder = { 'NEED_ITEM': 0, 'NEED_TRAIT': 1, 'GREED': 2 };
+    
+    rollResults.sort((a, b) => {
+      const priorityA = priorityOrder[a.need_or_greed] || 99;
+      const priorityB = priorityOrder[b.need_or_greed] || 99;
+      
+      // First sort by need/greed priority
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      
+      // Then by roll value (highest first)
+      return b.roll_value - a.roll_value;
+    });
+    
+    // Determine the winner (first item after sorting)
+    const winner = rollResults.length > 0 ? rollResults[0] : null;
+    
+    // Update all requests with appropriate status
+    for (const result of rollResults) {
+      const isWinner = winner && result.id === winner.id;
+      
+      await db.LootRequest.update(
+        {
+          status: isWinner ? 'Approved' : 'Denied - Lost Roll',
+          won_roll: isWinner
+        },
+        {
+          where: { id: result.id }
+        }
+      );
+      
+      // Mark winner in the results
+      if (isWinner) {
+        result.winner = true;
+      }
+    }
+    
+    // If there's a winner, reduce item quantity
+    if (winner) {
+      if (storageItem.quantity > 0) {
+        await storageItem.update({
+          quantity: Math.max(0, storageItem.quantity - 1)
+        });
+      }
+      
+      // Attempt to notify Discord
+      try {
+        const discordBotUrl = process.env.DISCORD_BOT_URL || "http://heartfelt-sparkle.railway.internal:3300";
+        const axios = require('axios');
+        
+        await axios.post(`${discordBotUrl}/webhook/roll-result`, {
+          guildId: guildId,
+          itemId: storageItemId,
+          itemName: storageItem.Item ? storageItem.Item.name : 'Unknown Item',
+          winnerId: winner.user_id,
+          winnerName: winner.username,
+          winnerDiscordId: winner.discord_id,
+          rollValue: winner.roll_value,
+          needOrGreed: winner.need_or_greed,
+          allRolls: rollResults,
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+      } catch (discordError) {
+        console.warn('Failed to notify Discord of roll result:', discordError.message);
+        // Continue even if Discord notification fails
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Force roll completed successfully',
+      item: {
+        id: storageItem.id,
+        name: storageItem.Item ? storageItem.Item.name : 'Unknown Item',
+        icon: storageItem.Item ? storageItem.Item.icon : null
+      },
+      results: {
+        winner: winner ? {
+          id: winner.id,
+          user_id: winner.user_id,
+          username: winner.username,
+          avatar_url: winner.avatar_url,
+          roll_value: winner.roll_value,
+          need_or_greed: winner.need_or_greed
+        } : null,
+        allRolls: rollResults
+      }
+    });
+  } catch (error) {
+    console.error('Force roll error:', error);
+    res.status(500).json({ error: 'Failed to force roll', details: error.message });
+  }
+});
 
 module.exports = router;
