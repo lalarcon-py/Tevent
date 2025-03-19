@@ -120,43 +120,95 @@ module.exports = {
 };
 
 // Helper function to create the storage embed
-function createStorageEmbed(items, currentPage, totalPages, dkpEnabled) {
-  const embed = new EmbedBuilder()
-    .setTitle('Guild Storage')
-    .setColor('#90caf9')
-    .setDescription('Items currently available in the guild storage:')
-    .setTimestamp()
-    .setFooter({ text: `Page ${currentPage}/${totalPages}` });
-  
-  items.forEach(item => {
-    const itemName = item.Item ? item.Item.name : 'Unknown Item';
-    const itemType = item.Item ? item.Item.type : 'Unknown';
-    const quantity = item.quantity || 0;
+createStorageEmbed: (items) => {
+  console.log(`[DEBUG] createStorageEmbed called with ${items?.length || 0} items`);
+  try {
+    const embed = new EmbedBuilder()
+      .setTitle('📦 Guild Storage')
+      .setColor('#ff9800')
+      .setDescription(`Total items: ${items.length || 0}`);
     
-    let fieldValue = `Type: ${itemType}\nQuantity: ${quantity}`;
-    
-    // Only show DKP cost if DKP is enabled
-    if (dkpEnabled) {
-      const dkpCost = item.dkp_cost || 0;
-      fieldValue += `\nDKP Cost: ${dkpCost}`;
-    }
-    
-    // Add trait if it exists
-    if (item.trait) {
-      fieldValue += `\nTrait: ${item.trait}`;
-    }
-    
-    // Add item ID and request instructions
-    fieldValue += `\n\nID: ${item.id}\nUse \`/storage view ${item.id}\` to request this item`;
-    
-    embed.addFields({
-      name: itemName,
-      value: fieldValue,
-      inline: true
+    // Group by item type
+    console.log(`[DEBUG] Grouping items by type`);
+    const itemsByType = {};
+    items.forEach(item => {
+      if (!item || !item.Item) {
+        console.log(`[DEBUG] Skipping invalid item: ${JSON.stringify(item)}`);
+        return;
+      }
+      
+      const type = item.Item.type || 'Unknown';
+      if (!itemsByType[type]) {
+        itemsByType[type] = [];
+      }
+      itemsByType[type].push(item);
     });
-  });
-  
-  return embed;
+    
+    // Current time for expiration calculations
+    const now = new Date();
+    
+    // Add each type as a field (up to 25 fields - Discord limit)
+    console.log(`[DEBUG] Creating embed fields for ${Object.keys(itemsByType).length} item types`);
+    let fieldCount = 0;
+    for (const [type, typeItems] of Object.entries(itemsByType)) {
+      if (fieldCount >= 25) {
+        console.log(`[DEBUG] Maximum field count reached (25), stopping`);
+        break;
+      }
+      fieldCount++;
+      
+      // Limit items shown to prevent exceeding embed limits
+      const itemsToShow = typeItems.slice(0, 10);
+      const itemLines = itemsToShow.map(item => {
+        // Calculate expiration time if available
+        let timerText = "";
+        if (item.timer_duration && item.created_at) {
+          const creationTime = new Date(item.created_at);
+          const expirationTime = new Date(creationTime.getTime() + (item.timer_duration * 60000));
+          const timeLeft = expirationTime - now;
+          
+          // Only show timer if it hasn't expired
+          if (timeLeft > 0) {
+            const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+            const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+            timerText = ` ⏰ ${hoursLeft}h ${minutesLeft}m`;
+          } else {
+            timerText = " ⏰ Roll pending";
+          }
+        }
+        
+        return `ID: ${item.id} - ${item.Item.name || 'Unknown'} x${item.quantity || 0}${timerText}`;
+      }).join('\n');
+      
+      const moreText = typeItems.length > 10 ? `\n...and ${typeItems.length - 10} more` : '';
+      
+      console.log(`[DEBUG] Adding field for type "${type}" with ${typeItems.length} items`);
+      embed.addFields({
+        name: `${type} (${typeItems.length})`,
+        value: (itemLines || 'None') + moreText,
+        inline: false
+      });
+    }
+    
+    if (fieldCount === 0) {
+      console.log(`[DEBUG] No items found, adding empty field`);
+      embed.addFields({
+        name: 'No Items',
+        value: 'Storage is empty'
+      });
+    }
+    
+    console.log(`[DEBUG] Storage embed created successfully with ${fieldCount} fields`);
+    return embed;
+  } catch (error) {
+    console.error(`[ERROR] Error creating storage embed: ${error.message}`);
+    console.error(`[ERROR] Error stack: ${error.stack}`);
+    // Return a simple fallback embed if there's an error
+    return new EmbedBuilder()
+      .setTitle('Guild Storage')
+      .setDescription(`Error creating detailed storage information: ${error.message}`)
+      .setColor('#ff0000');
+  }
 }
 
 // Helper function to create pagination buttons

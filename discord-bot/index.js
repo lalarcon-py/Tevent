@@ -58,6 +58,33 @@ const client = new Client({
   ] 
 });
 
+function formatTimerDuration(minutes) {
+  if (!minutes) return "Default (24h)";
+  if (minutes === 5) return '5 Minutes';
+  if (minutes === 60) return '1 Hour';
+  if (minutes === 1440) return '24 Hours';
+  if (minutes === 2880) return '48 Hours';
+  if (minutes === 4320) return '72 Hours';
+  return `${minutes} Minutes`;
+}
+
+// Helper function to calculate time remaining 
+function calculateTimeRemaining(createdTime, durationMinutes) {
+  if (!createdTime || !durationMinutes) return null;
+  
+  const creationDate = new Date(createdTime);
+  const expirationTime = new Date(creationDate.getTime() + (durationMinutes * 60000));
+  const now = new Date();
+  const timeLeft = expirationTime - now;
+  
+  if (timeLeft <= 0) return "Expired - Roll pending";
+  
+  const hoursLeft = Math.floor(timeLeft / (60 * 60 * 1000));
+  const minutesLeft = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+  
+  return `${hoursLeft}h ${minutesLeft}m`;
+}
+
 async function updateItemEmbed(itemId) {
   try {
     // Get message info
@@ -88,6 +115,9 @@ async function updateItemEmbed(itemId) {
     const message = await channel.messages.fetch(tracking.message_id);
     if (!message) return false;
     
+    // Calculate time remaining for timer
+    const timeRemaining = calculateTimeRemaining(item.created_at, item.timer_duration);
+    
     // Create updated embed with counters
     const embed = new EmbedBuilder()
       .setTitle('Item Available')
@@ -97,6 +127,11 @@ async function updateItemEmbed(itemId) {
         { name: 'Type', value: item.type || 'Unknown', inline: true },
         { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
         { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
+        { 
+          name: '⏰ Roll Timer',
+          value: timeRemaining || formatTimerDuration(item.timer_duration || 1440),
+          inline: true
+        },
         { name: 'Current Requests', value: `🔴 Need: ${tracking.need_count} | 💰 Greed: ${tracking.greed_count}`, inline: false }
       )
       .setColor('#4CAF50')
@@ -135,6 +170,20 @@ async function markItemAsClaimed(itemId, claimedBy, itemName = null, itemType = 
     // If itemName and itemType are provided, use them directly
     let finalItemName = itemName || "Unknown Item";
     let finalItemType = itemType || "Unknown";
+    
+    // Get discord ID for pinging the winner, if available
+    let winnerDiscordId = null;
+    try {
+      const winnerResult = await pool.query(
+        `SELECT discord_id FROM users WHERE username = $1 LIMIT 1`,
+        [claimedBy]
+      );
+      if (winnerResult.rows.length > 0) {
+        winnerDiscordId = winnerResult.rows[0].discord_id;
+      }
+    } catch (discordIdError) {
+      console.error(`[ERROR] Error getting winner's Discord ID: ${discordIdError.message}`);
+    }
     
     // Only try to get item details from the database if name and type weren't provided
     if (!itemName || !itemType) {
@@ -191,6 +240,9 @@ async function markItemAsClaimed(itemId, claimedBy, itemName = null, itemType = 
         return false;
       }
       
+      // Create the winner mention if Discord ID is available
+      const winnerMention = winnerDiscordId ? `<@${winnerDiscordId}>` : claimedBy;
+      
       // Create updated embed showing claimed status
       const embed = new EmbedBuilder()
         .setTitle('Item Claimed')
@@ -206,27 +258,39 @@ async function markItemAsClaimed(itemId, claimedBy, itemName = null, itemType = 
         .setFooter({ text: `Item ID: ${itemId} • No longer available` });
       
       // Create disabled buttons
-      const disabledNeedButton = new ButtonBuilder()
+      const disabledNeedItemButton = new ButtonBuilder()
         .setCustomId(`need_item_${itemId}`)
-        .setLabel('Need (High Priority)')
+        .setLabel('Need Item')
         .setStyle(ButtonStyle.Danger)
-        .setEmoji('🔴')
+        .setEmoji('🛡️')
+        .setDisabled(true);
+        
+      const disabledNeedTraitButton = new ButtonBuilder()
+        .setCustomId(`need_trait_${itemId}`)
+        .setLabel('Need Trait')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('✨')
         .setDisabled(true);
         
       const disabledGreedButton = new ButtonBuilder()
         .setCustomId(`greed_item_${itemId}`)
-        .setLabel('Greed (Low Priority)')
+        .setLabel('Greed')
         .setStyle(ButtonStyle.Secondary)
         .setEmoji('💰')
         .setDisabled(true);
       
-      const disabledRow = new ActionRowBuilder().addComponents(disabledNeedButton, disabledGreedButton);
+      const disabledRow = new ActionRowBuilder().addComponents(disabledNeedItemButton, disabledNeedTraitButton, disabledGreedButton);
       
       // Update message with disabled buttons
       await message.edit({ 
         embeds: [embed],
         components: [disabledRow]
       });
+      
+      // Send a congratulation message with a ping
+      if (winnerDiscordId) {
+        await channel.send(`🎉 Congratulations ${winnerMention}! You have been awarded **${finalItemName}**!`);
+      }
       
       console.log(`[INFO] Successfully marked item ${itemId} as claimed by ${claimedBy}`);
       return true;
@@ -637,6 +701,9 @@ app.post('/webhook/new-item', async (req, res) => {
       return res.status(404).json({ error: 'Channel not found' });
     }
     
+    // Format time remaining for display if available
+    const timeRemaining = calculateTimeRemaining(item.created_at, item.timer_duration);
+    
     // Create embed
     const embed = new EmbedBuilder()
       .setTitle('New Item Added to Storage')
@@ -645,14 +712,19 @@ app.post('/webhook/new-item', async (req, res) => {
         { name: '📦 Item', value: `**${item.name}**`, inline: false },
         { name: 'Type', value: item.type || 'Unknown', inline: true },
         { name: 'Quantity', value: item.quantity.toString() || '0', inline: true },
-        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true }
+        { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
+        { 
+          name: '⏰ Roll Timer', 
+          value: timeRemaining || formatTimerDuration(item.timer_duration || 1440),
+          inline: true 
+        }
       )
       .setColor('#4CAF50')
       .setTimestamp()
       .setFooter({ text: `Item ID: ${itemId}` });
     
     if (item.trait) {
-      embed.addFields({ name: 'Trait', value: item.trait, inline: false });
+      embed.addFields({ name: 'Trait', value: item.trait, inline: true });
     }
     
     if (item.icon) {
@@ -664,14 +736,19 @@ app.post('/webhook/new-item', async (req, res) => {
       .addComponents(
         new ButtonBuilder()
           .setCustomId(`need_item_${item.id}`)
-          .setLabel('Need (High Priority)')
-          .setStyle(ButtonStyle.Danger)
-          .setEmoji('🔴'),
+          .setLabel('Need Item')
+          .setEmoji('🛡️')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`need_trait_${item.id}`)
+          .setLabel('Need Trait')
+          .setEmoji('✨')
+          .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(`greed_item_${item.id}`)
-          .setLabel('Greed (Low Priority)')
-          .setStyle(ButtonStyle.Secondary)
+          .setLabel('Greed')
           .setEmoji('💰')
+          .setStyle(ButtonStyle.Secondary)
       );
     
     // Send the message with buttons
@@ -1549,7 +1626,7 @@ client.on('interactionCreate', async (interaction) => {
           
           // Check if item is available
           const itemResult = await pool.query(
-            `SELECT gsi.*, i.name 
+            `SELECT gsi.*, i.name, i.type, i.icon 
              FROM guild_storage_items gsi
              JOIN items i ON gsi.item_id = i.id
              WHERE gsi.id = $1`,
@@ -1561,6 +1638,11 @@ client.on('interactionCreate', async (interaction) => {
           }
           
           const item = itemResult.rows[0];
+          
+          // Check if request type is valid for this item
+          if (requestType === 'NEED_TRAIT' && !item.trait) {
+            return await interaction.editReply(`This item doesn't have a trait, so you can't request it as 'Need Trait'. Please use 'Need Item' instead.`);
+          }
           
           // Check if user already has a pending request for this item
           const existingRequestResult = await pool.query(
@@ -1612,7 +1694,10 @@ client.on('interactionCreate', async (interaction) => {
             // Update the embed
             await updateItemEmbed(itemId);
             
-            return await interaction.editReply(`Your request for "${item.name}" has been updated to ${requestType}.`);
+            const requestTypeDisplay = requestType === 'NEED_ITEM' ? 'Need Item' : 
+                                  requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed';
+                                  
+            return await interaction.editReply(`Your request for "${item.name}" has been updated to ${requestTypeDisplay}.`);
           }
           
           // Create new loot request with need_or_greed field
@@ -1639,14 +1724,38 @@ client.on('interactionCreate', async (interaction) => {
           // Update the item embed with new request count
           await updateItemEmbed(itemId);
           
+          // Format timer info
+          const timeRemaining = calculateTimeRemaining(item.created_at, item.timer_duration);
+          
           // Send notification to loot channel with approve/deny buttons
+          const requestTypeDisplay = requestType === 'NEED_ITEM' ? 'Need Item' : 
+                                requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed';
+                                
           const requestEmbed = new EmbedBuilder()
             .setTitle('New Loot Request')
-            .setDescription(`**${interaction.user.username}** has requested **${item.name}** (${requestType})`)
+            .setDescription(`**${interaction.user.username}** has requested **${item.name}** (${requestTypeDisplay})`)
+            .addFields(
+              { name: 'Item Type', value: item.type || 'Unknown', inline: true },
+              { name: 'Request Type', value: requestTypeDisplay, inline: true },
+              { 
+                name: '⏰ Roll Timer',
+                value: timeRemaining || formatTimerDuration(item.timer_duration || 1440),
+                inline: true
+              }
+            )
             .setColor('#9c27b0')
             .setTimestamp()
             .setFooter({ text: `Request ID: ${requestId}` });
           
+          if (item.trait) {
+            requestEmbed.addFields({ name: 'Trait', value: item.trait, inline: true });
+          }
+          
+          if (item.icon) {
+            requestEmbed.setThumbnail(item.icon);
+          }
+          
+          // Create approve/deny action buttons
           const row = new ActionRowBuilder()
             .addComponents(
               new ButtonBuilder()
@@ -1668,7 +1777,7 @@ client.on('interactionCreate', async (interaction) => {
             [row]
           );
           
-          await interaction.editReply(`Your ${requestType} request for **${item.name}** has been submitted!`);
+          await interaction.editReply(`Your ${requestTypeDisplay} request for **${item.name}** has been submitted!`);
         } catch (error) {
           console.error(`[ERROR] Error processing item request:`, error);
           await interaction.editReply('An error occurred while processing your request.');
@@ -2832,7 +2941,7 @@ app.post('/webhook/item-request', async (req, res) => {
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
     
-    // Get item details
+    // Get item details including timer info
     const itemResult = await pool.query(
       `SELECT gsi.*, i.name, i.type 
        FROM guild_storage_items gsi
@@ -2847,12 +2956,40 @@ app.post('/webhook/item-request', async (req, res) => {
     
     const item = itemResult.rows[0];
     
+    // Get request type information if available
+    const requestTypeData = await pool.query(
+      `SELECT need_or_greed FROM loot_requests 
+       WHERE storage_item_id = $1 AND user_id = (SELECT id FROM users WHERE username = $2) 
+       AND status = 'Pending' LIMIT 1`,
+      [itemId, username]
+    );
+    
+    const requestType = requestTypeData.rows.length > 0 ? 
+      (requestTypeData.rows[0].need_or_greed === 'NEED_ITEM' ? 'Need Item' :
+      requestTypeData.rows[0].need_or_greed === 'NEED_TRAIT' ? 'Need Trait' : 'Greed') :
+      isAutomatic ? 'Need Item' : 'Unknown';
+    
+    // Format timer info
+    const timeRemaining = calculateTimeRemaining(item.created_at, item.timer_duration);
+    
     // Create notification embed with automatic flag indication if needed
     const requestEmbed = new EmbedBuilder()
       .setTitle(isAutomatic ? 'Automatic Loot Request' : 'New Loot Request')
       .setDescription(isAutomatic ? 
         `**${username}** has automatically requested **${item.name}** (from wishlist)` : 
         `**${username}** has requested **${item.name}**`)
+      .addFields(
+        { 
+          name: 'Request Type', 
+          value: requestType,
+          inline: true
+        },
+        {
+          name: '⏰ Roll Timer',
+          value: timeRemaining || formatTimerDuration(item.timer_duration || 1440),
+          inline: true
+        }
+      )
       .setColor(isAutomatic ? '#9370db' : '#9c27b0') // Different color for automatic requests
       .setTimestamp()
       .setFooter({ text: `Item ID: ${itemId}` });
