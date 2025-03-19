@@ -702,7 +702,16 @@ app.post('/webhook/new-item', async (req, res) => {
     }
     
     // Format time remaining for display if available
-    const timeRemaining = calculateTimeRemaining(item.created_at, item.timer_duration);
+    let timeRemaining = "Default (24h)";
+    if (item.timer_duration && item.created_at) {
+      try {
+        timeRemaining = calculateTimeRemaining(item.created_at, item.timer_duration) || 
+                       formatTimerDuration(item.timer_duration || 1440);
+      } catch (timeError) {
+        console.error("Error calculating time remaining:", timeError);
+        timeRemaining = formatTimerDuration(item.timer_duration || 1440);
+      }
+    }
     
     // Create embed
     const embed = new EmbedBuilder()
@@ -715,7 +724,7 @@ app.post('/webhook/new-item', async (req, res) => {
         { name: 'DKP Cost', value: (item.dkp_cost || 0).toString(), inline: true },
         { 
           name: '⏰ Roll Timer', 
-          value: timeRemaining || formatTimerDuration(item.timer_duration || 1440),
+          value: timeRemaining,
           inline: true 
         }
       )
@@ -731,8 +740,8 @@ app.post('/webhook/new-item', async (req, res) => {
       embed.setThumbnail(item.icon);
     }
     
-    // Create buttons
-    const row = new ActionRowBuilder()
+    // Create buttons - ENSURE CONSISTENT NAME
+    const buttonsRow = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
           .setCustomId(`need_item_${item.id}`)
@@ -751,10 +760,10 @@ app.post('/webhook/new-item', async (req, res) => {
           .setStyle(ButtonStyle.Secondary)
       );
     
-    // Send the message with buttons
+    // Send the message with buttons - USE THE SAME VARIABLE NAME
     const message = await channel.send({
       embeds: [embed],
-      components: [row]
+      components: [buttonsRow]  // Use buttonsRow consistently
     });
     
     // Create tracking table if needed
