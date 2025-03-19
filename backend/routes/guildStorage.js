@@ -63,13 +63,18 @@ router.get('/items', async (req, res) => {
 });
 
 // Add an item to guild storage
+// Add an item to guild storage
 router.post('/', async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const { item_id, quantity, dkp_cost, trait } = req.body;
+    // Extract timerDuration from the request body
+    const { item_id, quantity, dkp_cost, trait, timerDuration } = req.body;
+    
+    // Log timerDuration to debug
+    console.log('⏰ Received timerDuration:', timerDuration, typeof timerDuration);
     
     // Get guild ID from request using the middleware
     const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
@@ -91,6 +96,14 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     
+    // Validate timer duration
+    const validDurations = [5, 60, 1440, 2880, 4320]; // minutes (5min, 1hr, 24hr, 48hr, 72hr)
+    const validatedDuration = timerDuration !== undefined && validDurations.includes(Number(timerDuration))
+      ? Number(timerDuration)
+      : 1440; // Default to 24 hours if invalid
+    
+    console.log('⏰ Using timer duration:', validatedDuration);
+    
     // Check if item already exists in storage with the same trait
     const existingStorageItem = await db.GuildStorageItem.findOne({
       where: {
@@ -105,19 +118,24 @@ router.post('/', async (req, res) => {
     if (existingStorageItem) {
       // Update existing item quantity
       const newQuantity = existingStorageItem.quantity + (quantity || 1);
+      
+      // Update with timer_duration
       await existingStorageItem.update({
         quantity: newQuantity,
-        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost
+        dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost,
+        timer_duration: validatedDuration // Include timer duration in update
       });
+      
       storageItem = existingStorageItem;
     } else {
-      // Create new storage item
+      // Create new storage item WITH timer_duration
       storageItem = await db.GuildStorageItem.create({
         guild_id: guildId,
         item_id: item_id,
         quantity: quantity || 1,
         dkp_cost: dkp_cost || 0,
-        trait: trait || null
+        trait: trait || null,
+        timer_duration: validatedDuration // Include timer duration here
       });
       
       // New feature: Check wishlist and create automatic requests for new items
@@ -128,8 +146,14 @@ router.post('/', async (req, res) => {
     const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
       include: [db.Item]
     });
+    
+    // Make sure timer_duration is included in response
+    const response = {
+      ...fullItem.toJSON(),
+      timer_duration: validatedDuration // Ensure it's in the response
+    };
 
-    res.status(201).json(fullItem);
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error adding item to storage:', error);
     res.status(500).json({ error: 'Failed to add item to storage', details: error.message });

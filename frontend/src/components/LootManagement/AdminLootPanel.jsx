@@ -5,15 +5,16 @@ import {
   Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText,
   Grid, Divider, Alert, FormControl, InputLabel, Select, MenuItem,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  FormLabel, RadioGroup, FormControlLabel, Radio
+  FormLabel, RadioGroup, FormControlLabel, Radio, CircularProgress
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import CasinoIcon from '@mui/icons-material/Casino';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 
-const AdminLootPanel = ({ dkpEnabled }) => {
+const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
   const { user } = useAuth();
   const { simulatedRole } = useSimulatedRole();
   
@@ -22,6 +23,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
   const [templateItems, setTemplateItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [currentGuildId, setCurrentGuildId] = useState('default');
+  const [triggeringRolls, setTriggeringRolls] = useState(false);
   const [newItem, setNewItem] = useState({
     id: null,
     name: '',
@@ -32,6 +34,12 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     availableTraits: [], // Store available traits for the item
     selectedTrait: null,   // Track selected trait
     timerDuration: 1440    // Default to 24 hours (in minutes)
+  });
+
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info'
   });
 
   // State for request modal
@@ -63,6 +71,34 @@ const AdminLootPanel = ({ dkpEnabled }) => {
     fetchAddedItems();
     fetchTemplateItems();
   }, []);
+
+  const triggerRollCheck = async () => {
+    try {
+      setTriggeringRolls(true);
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        console.error('No guild ID found');
+        return;
+      }
+      
+      const response = await axiosInstance.post(`/api/guild-storage/debug/check-rolls`, {
+        guildId
+      });
+      
+      console.log('Roll check response:', response.data);
+      alert('Roll check triggered successfully! Check pending requests.');
+      
+      // Refresh data
+      await fetchAddedItems();
+      if (refreshData) refreshData();
+      
+    } catch (error) {
+      console.error('Failed to trigger roll check:', error);
+      alert('Failed to trigger roll check: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setTriggeringRolls(false);
+    }
+  };
 
   const fetchAddedItems = async () => {
     try {
@@ -126,7 +162,14 @@ const AdminLootPanel = ({ dkpEnabled }) => {
       
       console.log('Update response:', response.data);
       
-      if (response.status === 200) fetchAddedItems();
+      // Update local state immediately instead of refetching
+      if (response.status === 200) {
+        setAddedItems(prevItems => 
+          prevItems.map(item => 
+            item.id === id ? { ...item, [field]: value } : item
+          )
+        );
+      }
     } catch (error) {
       console.error('Update error:', error);
       if (error.response) {
@@ -150,7 +193,8 @@ const AdminLootPanel = ({ dkpEnabled }) => {
       }
       
       await axiosInstance.delete(`/api/guild-storage/${id}?guildId=${guildId}`);
-      fetchAddedItems();
+      // Update local state immediately
+      setAddedItems(prevItems => prevItems.filter(item => item.id !== id));
     } catch (error) {
       console.error('Delete failed:', error);
       
@@ -177,7 +221,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         console.error('Permission denied: Cannot add storage items');
         return;
       }
-
+  
       if (!newItem.id) {
         console.error('No item selected');
         return;
@@ -190,27 +234,45 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         return;
       }
       
-      // Log what we're sending to help debug
-      console.log('Adding item to storage:', {
+      // Explicitly force timerDuration to a number
+      const timerDuration = Number(newItem.timerDuration);
+      
+      // Validate it's one of the acceptable values
+      const validDurations = [5, 60, 1440, 2880, 4320];
+      if (!validDurations.includes(timerDuration)) {
+        console.warn(`Invalid timer duration: ${timerDuration}, defaulting to 1440`);
+      }
+      
+      console.log('⏰ Sending timerDuration:', timerDuration, 'Type:', typeof timerDuration);
+      
+      // Create the payload explicitly
+      const payload = {
         item_id: newItem.id,
-        quantity: newItem.quantity,
-        dkp_cost: newItem.dkpCost,
-        trait: newItem.selectedTrait, // Include selected trait
-        timerDuration: newItem.timerDuration, // Include timer duration
+        quantity: Number(newItem.quantity) || 1,
+        dkp_cost: Number(newItem.dkpCost) || 0,
+        trait: newItem.selectedTrait,
+        timerDuration: timerDuration,
         guildId
+      };
+      
+      console.log('⏰ Request payload:', payload);
+      
+      // Send the request
+      const response = await axiosInstance.post('/api/guild-storage', payload);
+      
+      console.log('⏰ Response timer_duration:', response.data.timer_duration);
+      
+      // Show success message with timer info
+      setNotification({
+        open: true,
+        message: `Item added with ${formatTimerDuration(response.data.timer_duration)} timer`,
+        severity: 'success'
       });
       
-      const response = await axiosInstance.post(`/api/guild-storage?guildId=${guildId}`, {
-        item_id: newItem.id,
-        quantity: newItem.quantity,
-        dkp_cost: newItem.dkpCost,
-        trait: newItem.selectedTrait, // Include selected trait
-        timerDuration: newItem.timerDuration, // Include timer duration
-        guildId
-      });
-      
-      console.log('Add item response:', response.data);
-      await fetchAddedItems();
+      // Add newly created item to the local state
+      if (response.data) {
+        setAddedItems(prevItems => [response.data, ...prevItems]);
+      }
       
       // Reset form after successful addition
       setNewItem({
@@ -222,14 +284,34 @@ const AdminLootPanel = ({ dkpEnabled }) => {
         icon: '',
         availableTraits: [],
         selectedTrait: null,
-        timerDuration: 1440
+        timerDuration: 1440 // Reset to default
       });
+      
+      // Also refresh data to ensure consistency
+      await fetchAddedItems();
+      
+      // Notify parent component to refresh if needed
+      if (refreshData) {
+        refreshData();
+      }
     } catch (error) {
       console.error('Failed to add item:', error);
       // More detailed error logging
       if (error.response) {
         console.error('Response data:', error.response.data);
         console.error('Response status:', error.response.status);
+        
+        setNotification({
+          open: true,
+          message: `Failed to add item: ${error.response.data?.error || 'Unknown error'}`,
+          severity: 'error'
+        });
+      } else {
+        setNotification({
+          open: true,
+          message: 'Failed to add item: Network error',
+          severity: 'error'
+        });
       }
     }
   };
@@ -364,7 +446,20 @@ const AdminLootPanel = ({ dkpEnabled }) => {
           boxShadow: '0 8px 32px rgba(144, 202, 249, 0.2)'
         }
       }}>
-        <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add to Guild Storage</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" gutterBottom sx={{ color: '#90caf9' }}>Add to Guild Storage</Typography>
+          
+          {/* Add roll check trigger button */}
+          <Button 
+            variant="outlined" 
+            color="secondary"
+            startIcon={triggeringRolls ? <CircularProgress size={20} /> : <CasinoIcon />}
+            onClick={triggerRollCheck}
+            disabled={triggeringRolls}
+          >
+            {triggeringRolls ? 'Processing...' : 'Trigger Roll Check'}
+          </Button>
+        </Box>
         
         {/* First row: Item selection */}
         <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -623,7 +718,7 @@ const AdminLootPanel = ({ dkpEnabled }) => {
                     <AccessTimeIcon sx={{ color: 'rgba(144, 202, 249, 0.8)' }} />
                     <FormControl sx={{ minWidth: 120 }}>
                       <Select
-                        value={item.timer_duration || 1440}
+                        value={Number(item.timer_duration) || 1440}
                         onChange={(e) => handleUpdate(item.id, 'timer_duration', e.target.value)}
                         size="small"
                         sx={{ 
@@ -898,6 +993,14 @@ const AdminLootPanel = ({ dkpEnabled }) => {
                   </RadioGroup>
                 </FormControl>
               )}
+
+              {/* Display roll timer info */}
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(33, 150, 243, 0.1)', borderRadius: 2 }}>
+                <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AccessTimeIcon color="info" />
+                  This item has a roll timer of {formatTimerDuration(selectedRequestItem.timer_duration || 1440)}
+                </Typography>
+              </Box>
             </Box>
           )}
         </DialogContent>

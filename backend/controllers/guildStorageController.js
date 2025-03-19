@@ -46,8 +46,14 @@ const addItemToStorage = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
+    // Log the entire request body to debug
+    console.log('⏰ FULL REQUEST BODY:', JSON.stringify(req.body));
+    
     const { item_id, quantity, dkp_cost, trait, timerDuration } = req.body;
     const guildId = req.guildId || req.body.guildId;
+    
+    // Log the specific timer duration value extracted
+    console.log('⏰ TIMER DURATION FROM REQUEST:', timerDuration, typeof timerDuration);
     
     if (!guildId) {
       return res.status(400).json({ error: 'Guild ID is required' });
@@ -83,11 +89,24 @@ const addItemToStorage = async (req, res) => {
       return res.status(404).json({ error: 'Item not found in catalog for this guild' });
     }
     
+    // Force conversion to number for timer duration
+    let parsedTimerDuration;
+    if (timerDuration === undefined || timerDuration === null) {
+      parsedTimerDuration = 1440; // Default to 24 hours
+    } else {
+      parsedTimerDuration = Number(timerDuration);
+      if (isNaN(parsedTimerDuration)) {
+        parsedTimerDuration = 1440; // Default to 24 hours if invalid
+      }
+    }
+    
     // Validate timer duration
     const validDurations = [5, 60, 1440, 2880, 4320]; // minutes (5min, 1hr, 24hr, 48hr, 72hr)
-    const validatedTimerDuration = validDurations.includes(Number(timerDuration)) 
-      ? Number(timerDuration) 
-      : 1440; // Default to 24 hours if invalid
+    const validatedTimerDuration = validDurations.includes(parsedTimerDuration) 
+      ? parsedTimerDuration 
+      : 1440; // Default to 24 hours if not in valid list
+
+    console.log('⏰ VALIDATED TIMER DURATION:', validatedTimerDuration);
     
     // Check if item already exists in storage with the same trait
     const existingStorageItem = await db.GuildStorageItem.findOne({
@@ -101,71 +120,58 @@ const addItemToStorage = async (req, res) => {
     let storageItem;
     
     if (existingStorageItem) {
-      // Update existing item quantity
+      // Update existing item quantity and explicitly update timer_duration
       const newQuantity = existingStorageItem.quantity + (quantity || 1);
       
-      // Use direct SQL to update existing item including timer_duration
-      await db.sequelize.query(
-        `UPDATE guild_storage_items 
-         SET quantity = :quantity, 
-             dkp_cost = :dkpCost, 
-             timer_duration = :timerDuration,
-             updated_at = NOW()
-         WHERE id = :id`,
-        {
-          replacements: {
-            quantity: newQuantity,
-            dkpCost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost,
-            timerDuration: validatedTimerDuration,
-            id: existingStorageItem.id
-          },
-          type: db.sequelize.QueryTypes.UPDATE
-        }
-      );
+      // Use direct SQL to update existing item
+      const updateQuery = `
+        UPDATE guild_storage_items 
+        SET quantity = ${newQuantity}, 
+            dkp_cost = ${dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost},
+            timer_duration = ${validatedTimerDuration},
+            updated_at = NOW()
+        WHERE id = '${existingStorageItem.id}'
+        RETURNING *`;
+        
+      console.log('⏰ UPDATE QUERY:', updateQuery);
+      
+      const [updateResult] = await db.sequelize.query(updateQuery);
+      console.log('⏰ UPDATE RESULT:', JSON.stringify(updateResult[0]));
       
       // Refresh the storage item from the database
       storageItem = await db.GuildStorageItem.findByPk(existingStorageItem.id);
     } else {
-      // Create new storage item using direct SQL
-      const [result] = await db.sequelize.query(
-        `INSERT INTO guild_storage_items
-         (id, guild_id, item_id, quantity, trait, dkp_cost, timer_duration, created_at, updated_at)
-         VALUES
-         (uuid_generate_v4(), :guildId, :itemId, :quantity, :trait, :dkpCost, :timerDuration, NOW(), NOW())
-         RETURNING *`,
-        {
-          replacements: {
-            guildId: guildId,
-            itemId: item_id,
-            quantity: quantity || 1,
-            trait: trait || null,
-            dkpCost: dkp_cost || 0,
-            timerDuration: validatedTimerDuration
-          },
-          type: db.sequelize.QueryTypes.INSERT
-        }
-      );
+      // Create new storage item with explicit timer_duration
+      const insertQuery = `
+        INSERT INTO guild_storage_items
+        (id, guild_id, item_id, quantity, trait, dkp_cost, timer_duration, created_at, updated_at)
+        VALUES
+        (uuid_generate_v4(), '${guildId}', '${item_id}', ${quantity || 1}, ${trait ? `'${trait}'` : 'NULL'}, ${dkp_cost || 0}, ${validatedTimerDuration}, NOW(), NOW())
+        RETURNING *`;
+        
+      console.log('⏰ INSERT QUERY:', insertQuery);
+      
+      const [insertResult] = await db.sequelize.query(insertQuery);
+      console.log('⏰ INSERT RESULT:', JSON.stringify(insertResult[0]));
       
       // Get the inserted ID from the result
-      const newItemId = result[0].id;
+      const newItemId = insertResult[0].id;
       
       // Fetch the newly created item
       storageItem = await db.GuildStorageItem.findByPk(newItemId);
     }
     
-    // Return with item details - force include timer_duration in the response
-    const fullItem = await db.GuildStorageItem.findByPk(storageItem.id, {
-      include: [{
-        model: db.Item,
-        required: false
-      }]
-    });
+    // Check what was actually stored
+    console.log('⏰ STORED ITEM:', JSON.stringify(storageItem.dataValues));
     
-    // Add timer_duration directly to the response
+    // Directly add timer_duration to response to ensure client receives it
     const response = {
-      ...fullItem.toJSON(),
-      timer_duration: validatedTimerDuration
+      ...storageItem.dataValues,
+      timer_duration: validatedTimerDuration, // Force this value to be correct
+      Item: await db.Item.findByPk(item_id)
     };
+    
+    console.log('⏰ FINAL RESPONSE:', JSON.stringify(response));
     
     res.status(201).json(response);
   } catch (error) {
