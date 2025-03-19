@@ -41,6 +41,7 @@ const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
 
 
+
 const frontendURL = process.env.NODE_ENV === 'production' 
   ? process.env.FRONTEND_URL 
   : 'http://localhost:3002';
@@ -991,7 +992,6 @@ app.post('/api/direct-member-delete', async (req, res) => {
 
 const rollScheduler = require('./utils/rollScheduler');
 
-// Run immediately at startup
 rollScheduler.checkForExpiredRequests()
   .then(() => console.log('Initial roll check completed'))
   .catch(err => console.error('Error in initial roll check:', err));

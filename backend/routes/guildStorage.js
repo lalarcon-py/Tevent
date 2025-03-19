@@ -63,7 +63,7 @@ router.get('/items', async (req, res) => {
 });
 
 // Add an item to guild storage
-// Add an item to guild storage
+// In backend/routes/guildStorage.js (POST route)
 router.post('/', async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
@@ -73,10 +73,8 @@ router.post('/', async (req, res) => {
     // Extract timerDuration from the request body
     const { item_id, quantity, dkp_cost, trait, timerDuration } = req.body;
     
-    // Log timerDuration to debug
     console.log('⏰ Received timerDuration:', timerDuration, typeof timerDuration);
     
-    // Get guild ID from request using the middleware
     const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
     
     if (!guildId) {
@@ -87,7 +85,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Item ID is required' });
     }
 
-    // Verify user has permission to add items (Guild Master or Guild Advisor only)
+    // Verify user has permission
     const guildMember = await db.GuildMember.findOne({
       where: { guild_id: guildId, user_id: req.user.id }
     });
@@ -104,6 +102,12 @@ router.post('/', async (req, res) => {
     
     console.log('⏰ Using timer duration:', validatedDuration);
     
+    // Calculate expiration time based on timer duration
+    const now = new Date();
+    const expirationTime = new Date(now.getTime() + (validatedDuration * 60000));
+    
+    console.log('⏰ Item will expire at:', expirationTime);
+    
     // Check if item already exists in storage with the same trait
     const existingStorageItem = await db.GuildStorageItem.findOne({
       where: {
@@ -119,26 +123,30 @@ router.post('/', async (req, res) => {
       // Update existing item quantity
       const newQuantity = existingStorageItem.quantity + (quantity || 1);
       
-      // Update with timer_duration
+      // Update with timer_duration and expiration_time
       await existingStorageItem.update({
         quantity: newQuantity,
         dkp_cost: dkp_cost !== undefined ? dkp_cost : existingStorageItem.dkp_cost,
-        timer_duration: validatedDuration // Include timer duration in update
+        timer_duration: validatedDuration,
+        expiration_time: expirationTime,
+        has_rolled: false // Reset roll status for the item
       });
       
       storageItem = existingStorageItem;
     } else {
-      // Create new storage item WITH timer_duration
+      // Create new storage item WITH timer_duration and expiration_time
       storageItem = await db.GuildStorageItem.create({
         guild_id: guildId,
         item_id: item_id,
         quantity: quantity || 1,
         dkp_cost: dkp_cost || 0,
         trait: trait || null,
-        timer_duration: validatedDuration // Include timer duration here
+        timer_duration: validatedDuration,
+        expiration_time: expirationTime,
+        has_rolled: false
       });
       
-      // New feature: Check wishlist and create automatic requests for new items
+      // Check wishlist and create automatic requests
       await checkWishlistAndCreateRequests(guildId, item_id, storageItem.id);
     }
 
@@ -147,10 +155,11 @@ router.post('/', async (req, res) => {
       include: [db.Item]
     });
     
-    // Make sure timer_duration is included in response
+    // Include timer_duration and expiration_time in response
     const response = {
       ...fullItem.toJSON(),
-      timer_duration: validatedDuration // Ensure it's in the response
+      timer_duration: validatedDuration,
+      expiration_time: expirationTime
     };
 
     res.status(201).json(response);
