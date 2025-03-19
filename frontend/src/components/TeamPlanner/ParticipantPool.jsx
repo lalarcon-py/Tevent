@@ -135,6 +135,27 @@ const RoleSection = ({ title, members, roleType }) => {
 };
 
 const ParticipantPool = ({ eventId, participants }) => {
+
+  React.useEffect(() => {
+    console.log('--- DEBUGGING PARTICIPANT POOL ---');
+    console.log('Total participants:', participants.length);
+    
+    // Debug the first few participants
+    if (participants.length > 0) {
+      participants.slice(0, 3).forEach((participant, index) => {
+        console.group(`Participant ${index}`);
+        debugMemberData(participant);
+        
+        // Check the weapon images
+        if (participant.builds && participant.builds[0]) {
+          checkImageUrl(participant.builds[0].primary);
+          checkImageUrl(participant.builds[0].secondary);
+        }
+        console.groupEnd();
+      });
+    }
+  }, [participants]);
+  
  return (
    <Box>
      <RoleSection 

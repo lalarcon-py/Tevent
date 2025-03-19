@@ -24,8 +24,205 @@ import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
+
+// Add this debug function at the top of your TeamPlanner.jsx file
+const debugMemberData = (member) => {
+  console.group('Member Debug Data');
+  console.log('Raw member object:', member);
+  
+  // Check userID variations
+  console.log('Member IDs:', {
+    id: member.id,
+    user_id: member.user_id,
+    userId: member.userId,
+    'User.id': member.User?.id
+  });
+  
+  // Debug builds data structures
+  console.log('Builds sources:', {
+    'member.builds': member.builds,
+    'member.User.builds': member.User?.builds,
+    'Type of builds': typeof member.builds,
+    'Type of User.builds': typeof member.User?.builds
+  });
+  
+  // Try to access the first build
+  const memberBuild = Array.isArray(member.builds) && member.builds.length > 0 
+    ? member.builds[0] 
+    : null;
+  
+  const userBuild = member.User && Array.isArray(member.User.builds) && member.User.builds.length > 0
+    ? member.User.builds[0]
+    : null;
+    
+  console.log('First build from member.builds:', memberBuild);
+  console.log('First build from member.User.builds:', userBuild);
+  
+  // Check string parsing
+  if (typeof member.builds === 'string') {
+    try {
+      const parsed = JSON.parse(member.builds);
+      console.log('Parsed member.builds string:', parsed);
+    } catch (e) {
+      console.error('Failed to parse member.builds string:', e);
+    }
+  }
+  
+  if (typeof member.User?.builds === 'string') {
+    try {
+      const parsed = JSON.parse(member.User.builds);
+      console.log('Parsed member.User.builds string:', parsed);
+    } catch (e) {
+      console.error('Failed to parse member.User.builds string:', e);
+    }
+  }
+  
+  console.groupEnd();
+  return member;
+};
+
+// Add this to check API URLs
+const checkImageUrl = (weapon) => {
+  if (!weapon) return;
+  
+  const API_URL = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:5000' 
+    : process.env.REACT_APP_API_URL;
+    
+  const url = `${API_URL}/weapons/${weapon} Art.png`;
+  
+  console.log(`Checking image for ${weapon}:`, url);
+  
+  // Try to fetch the image to see if it exists
+  fetch(url)
+    .then(response => {
+      console.log(`Image ${url} fetch status:`, response.status);
+    })
+    .catch(error => {
+      console.error(`Failed to fetch image ${url}:`, error);
+    });
+    
+  return url;
+};
+
+const fetchMemberBuilds = async (memberId) => {
+  if (!memberId) return null;
+  
+  try {
+    // Get guild ID for API request
+    const guildId = localStorage.getItem('guildId');
+    if (!guildId) {
+      console.error('No guild ID found');
+      return null;
+    }
+    
+    console.log(`Fetching builds for member: ${memberId}`);
+    
+    const response = await fetch(`${API_URL}/api/members/${memberId}?guildId=${guildId}`, {
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch member data: ${response.status}`);
+    }
+    
+    const memberData = await response.json();
+    console.log('Fetched member data:', memberData);
+    
+    if (!memberData.builds || (Array.isArray(memberData.builds) && memberData.builds.length === 0)) {
+      console.warn(`Member ${memberId} has no builds in database`);
+      return null;
+    }
+    
+    // Return the build data
+    return memberData.builds;
+  } catch (error) {
+    console.error('Error fetching member builds:', error);
+    return null;
+  }
+};
+
 const DraggableMember = ({ member, onRemove }) => {
   const dragRef = React.useRef(null);
+  const [fetchedBuilds, setFetchedBuilds] = useState(null);
+  const [isLoadingBuilds, setIsLoadingBuilds] = useState(false);
+  
+  React.useEffect(() => {
+    const loadMemberBuilds = async () => {
+      // Check if member already has builds
+      const existingBuilds = member.User?.builds || member.builds;
+      if (existingBuilds && Array.isArray(existingBuilds) && existingBuilds.length > 0) {
+        console.log('Member already has builds, no need to fetch');
+        return;
+      }
+      
+      // Get the member ID for the API request
+      const memberId = member.user_id || member.id || (member.User?.id);
+      if (!memberId) {
+        console.error('Cannot fetch builds - no valid member ID');
+        return;
+      }
+      
+      try {
+        setIsLoadingBuilds(true);
+        
+        // Get guild ID for API request
+        const guildId = localStorage.getItem('guildId');
+        if (!guildId) {
+          console.error('No guild ID found');
+          return;
+        }
+        
+        console.log(`Fetching builds for member: ${memberId}`);
+        
+        // Try fetching from the guild members endpoint
+        const response = await fetch(`/api/guilds/${guildId}/members`, {
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch guild members: ${response.status}`);
+        }
+        
+        const allMembers = await response.json();
+        
+        // Find the specific member in the members array
+        const memberData = allMembers.find(m => 
+          m.id === memberId || m.user_id === memberId || (m.User && m.User.id === memberId)
+        );
+        
+        if (!memberData) {
+          console.warn(`Member ${memberId} not found in guild members data`);
+          return;
+        }
+        
+        console.log('Found member data:', memberData);
+        
+        // Get builds from User object or direct builds property
+        let userBuilds = memberData.User?.builds || memberData.builds;
+        
+        // Parse builds if they're stored as a string
+        if (typeof userBuilds === 'string') {
+          try {
+            userBuilds = JSON.parse(userBuilds);
+          } catch (e) {
+            console.error('Failed to parse builds string:', e);
+          }
+        }
+        
+        if (userBuilds && Array.isArray(userBuilds)) {
+          console.log('Setting fetched builds:', userBuilds);
+          setFetchedBuilds(userBuilds);
+        }
+      } catch (error) {
+        console.error('Error fetching member builds:', error);
+      } finally {
+        setIsLoadingBuilds(false);
+      }
+    };
+    
+    loadMemberBuilds();
+  }, [member]);
   
   React.useEffect(() => {
     const currentEl = dragRef.current;
@@ -79,13 +276,34 @@ const DraggableMember = ({ member, onRemove }) => {
     }
   };
 
-  // Get weapon components from utils
-  const { primaryWeapon, secondaryWeapon, primaryWeaponImageUrl, secondaryWeaponImageUrl } = 
-    getWeaponComponents(member.User?.builds || member.builds || []);
-
-  // Check if user has builds data
-  const hasWeapons = member.User?.builds?.length > 0 || member.builds?.length > 0;
-  const builds = member.User?.builds || member.builds || [];
+  // Use fetchedBuilds if available, otherwise fall back to member builds
+  let builds = fetchedBuilds;
+  
+  // If no fetched builds, try to use builds from member
+  if (!builds || !Array.isArray(builds) || builds.length === 0) {
+    builds = member.User?.builds || member.builds || [];
+  }
+  
+  // If builds is a string (JSON), parse it
+  if (typeof builds === 'string') {
+    try {
+      builds = JSON.parse(builds);
+    } catch (e) {
+      console.error('Error parsing builds string:', e);
+      builds = [];
+    }
+  }
+  
+  // Ensure builds is an array
+  builds = Array.isArray(builds) ? builds : [];
+  
+  // Get primary and secondary weapons
+  const primaryWeapon = builds[0]?.primary || '';
+  const secondaryWeapon = builds[0]?.secondary || '';
+  
+  // Get image URLs directly from the public folder
+  const primaryImageUrl = primaryWeapon ? `/weapons/${primaryWeapon} Art.png` : null;
+  const secondaryImageUrl = secondaryWeapon ? `/weapons/${secondaryWeapon} Art.png` : null;
 
   return (
     <Box 
@@ -141,30 +359,65 @@ const DraggableMember = ({ member, onRemove }) => {
       </Box>
       
       {/* Weapon icons */}
-      {hasWeapons && (
-        <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
-          {primaryWeaponImageUrl && (
+      <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+        {isLoadingBuilds ? (
+          // Show loading indicator
+          <Box sx={{ 
+            width: 24, 
+            height: 24, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center' 
+          }}>
+            <Box sx={{ 
+              width: 8, 
+              height: 8, 
+              borderRadius: '50%', 
+              bgcolor: 'white', 
+              animation: 'pulse 1s infinite' 
+            }} />
+          </Box>
+        ) : primaryWeapon ? (
+          // Show weapons if we have them
+          <>
             <Tooltip title={primaryWeapon}>
               <img 
-                src={primaryWeaponImageUrl}
+                src={primaryImageUrl}
                 alt={primaryWeapon}
                 style={{ width: 24, height: 24, objectFit: 'contain' }}
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             </Tooltip>
-          )}
-          {secondaryWeaponImageUrl && (
-            <Tooltip title={secondaryWeapon}>
-              <img 
-                src={secondaryWeaponImageUrl}
-                alt={secondaryWeapon}
-                style={{ width: 24, height: 24, objectFit: 'contain' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            </Tooltip>
-          )}
-        </Box>
-      )}
+            {secondaryWeapon && (
+              <Tooltip title={secondaryWeapon}>
+                <img 
+                  src={secondaryImageUrl}
+                  alt={secondaryWeapon}
+                  style={{ width: 24, height: 24, objectFit: 'contain' }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </Tooltip>
+            )}
+          </>
+        ) : (
+          // No weapons found
+          <Tooltip title="No weapon data available">
+            <Box sx={{ 
+              width: 24, 
+              height: 24, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              bgcolor: 'rgba(255,255,255,0.1)',
+              borderRadius: '4px',
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.5)'
+            }}>
+              ?
+            </Box>
+          </Tooltip>
+        )}
+      </Box>
       
       {/* Remove button */}
       {onRemove && (

@@ -1,5 +1,6 @@
 // EventDetails.jsx
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+
 import { Link } from 'react-router-dom';
 import {
   Box,
@@ -20,7 +21,8 @@ import {
   Pagination,
   DialogActions,
   Avatar,
-  Tooltip
+  Tooltip,
+  DialogTitle
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
@@ -35,6 +37,81 @@ import { getWeaponComponents } from '../../utils/weaponUtils';
 const PARTICIPANTS_PER_PAGE = 10;
 const API_URL = process.env.REACT_APP_API_URL;
 
+const BuildSelectionDialog = ({ open, builds, onClose, onSelectBuild }) => {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
+        Select Build for Event
+      </DialogTitle>
+      <DialogContent sx={{ bgcolor: '#1e1e1e', pt: 2 }}>
+        <Typography color="white" sx={{ mb: 2 }}>
+          Please select which build you want to use for this event:
+        </Typography>
+        <List>
+          {builds.map((build, index) => {
+            // Generate URLs directly from the public folder
+            const primaryImageUrl = build.primary ? `/weapons/${build.primary} Art.png` : null;
+            const secondaryImageUrl = build.secondary ? `/weapons/${build.secondary} Art.png` : null;
+            
+            return (
+              <ListItem
+                key={index}
+                button
+                onClick={() => onSelectBuild(build)}
+                sx={{
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: 1,
+                  mb: 1,
+                  '&:hover': { bgcolor: 'rgba(144, 202, 249, 0.1)' }
+                }}
+              >
+                <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
+                  {build.primary && (
+                    <img
+                      src={primaryImageUrl}
+                      alt={build.primary}
+                      style={{ width: 24, height: 24 }}
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  )}
+                  {build.secondary && (
+                    <img
+                      src={secondaryImageUrl}
+                      alt={build.secondary}
+                      style={{ width: 24, height: 24 }}
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  )}
+                </Box>
+                <ListItemText
+                  primary={
+                    <Typography color="white">
+                      {build.primary} + {build.secondary}
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography color={
+                      build.spec === 'Tank' ? '#66b3ff' :
+                      build.spec === 'Healer' ? '#66ff66' : '#ff6666'
+                    }>
+                      {build.spec}
+                    </Typography>
+                  }
+                />
+              </ListItem>
+            );
+          })}
+        </List>
+      </DialogContent>
+      <DialogActions sx={{ bgcolor: '#1e1e1e', p: 2 }}>
+        <Button onClick={onClose} sx={{ color: 'white' }}>
+          Cancel
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [error, setError] = useState(null);
@@ -47,7 +124,9 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [absentees, setAbsentees] = useState([]);
-  const { simulatedRole } = useSimulatedRole(); // Added hook
+  const { simulatedRole } = useSimulatedRole();
+  const [buildSelectionOpen, setBuildSelectionOpen] = useState(false);
+  const [userBuilds, setUserBuilds] = useState([]);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -188,7 +267,15 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         return;
       }
       
-      // Get the primary build (first build)
+      // If user has multiple builds, show the selection dialog
+      if (userData.builds.length > 1) {
+        setBuildSelectionOpen(true);
+        setUserBuilds(userData.builds);
+        setLoading(false);
+        return;
+      }
+      
+      // Otherwise use the first build directly
       const primaryBuild = userData.builds[0];
       
       // Determine role based on the build's spec
@@ -604,6 +691,29 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                     />
                   </Box>
                 }
+                
+              />
+              <BuildSelectionDialog
+                open={buildSelectionOpen}
+                builds={userBuilds}
+                onClose={() => setBuildSelectionOpen(false)}
+                onSelectBuild={async (selectedBuild) => {
+                  // Determine role based on the selected build's spec
+                  let role;
+                  if (selectedBuild.spec === 'Tank') {
+                    role = 'TANK';
+                  } else if (selectedBuild.spec === 'Healer') {
+                    role = 'HEALER';
+                  } else {
+                    role = 'DPS';
+                  }
+                  
+                  // Sign up with the determined role
+                  await handleSignUp(role);
+                  setSuccessMessage(`Successfully signed up as ${role} using ${selectedBuild.primary}+${selectedBuild.secondary}`);
+                  setTimeout(() => setSuccessMessage(null), 3000);
+                  setBuildSelectionOpen(false);
+                }}
               />
               <ListItemSecondaryAction>
                 <IconButton 
@@ -890,5 +1000,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     </DialogContent>
   );
 };
+
+
 
 export default EventDetails;
