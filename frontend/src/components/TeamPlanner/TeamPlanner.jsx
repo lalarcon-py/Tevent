@@ -1673,7 +1673,7 @@ const TeamPlanner = () => {
                   variant="contained"
                   onClick={() => {
                     // Load presets
-                    fetch(`${API_URL}/api/team-presets/event/${eventId}?guildId=${guildId}`, {
+                    fetch(`${API_URL}/api/team-presets/guild/${guildId}`, {
                       credentials: 'include'
                     })
                     .then(response => response.json())

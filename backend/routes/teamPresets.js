@@ -56,6 +56,24 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Add this new route to get presets by guild only
+router.get('/guild/:guildId', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    const presets = await db.TeamPreset.findAll({
+      where: { guild_id: guildId }
+    });
+    res.json(presets);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get presets for an event
 router.get('/event/:eventId', async (req, res) => {
   try {
