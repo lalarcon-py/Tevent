@@ -2650,6 +2650,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle event signup buttons
+      // Handle event signup buttons
       else if (customId.startsWith('signup_')) {
         const [_, eventId, role] = customId.split('_');
         await interaction.deferReply({ ephemeral: true });
@@ -2671,10 +2672,10 @@ client.on('interactionCreate', async (interaction) => {
               ephemeral: true
             });
           }
-      
-          // Get user ID from discord ID - Include builds
+
+          // Get user ID from discord ID
           const userResult = await pool.query(
-            'SELECT id, username, builds FROM users WHERE discord_id = $1',
+            'SELECT id, username FROM users WHERE discord_id = $1',
             [interaction.user.id]
           );
           
@@ -2782,27 +2783,80 @@ client.on('interactionCreate', async (interaction) => {
             }
           }
           
-          // Update the message to reflect new participants - FIXED VERSION
+          // Update the message to reflect new signups with custom weapon emojis
           try {
             // Get all participants with their builds
             const participantsResult = await pool.query(
               `SELECT ep.role, u.username, u.discord_id, u.builds
-               FROM event_participants ep
-               JOIN users u ON ep.user_id = u.id
-               WHERE ep.event_id = $1
-               ORDER BY ep.created_at ASC`,
+              FROM event_participants ep
+              JOIN users u ON ep.user_id = u.id
+              WHERE ep.event_id = $1
+              ORDER BY ep.created_at ASC`,
               [eventId]
             );
             
             // Get absentees
             const absenteesResult = await pool.query(
               `SELECT ea.user_id, u.username
-               FROM event_absentees ea
-               JOIN users u ON ea.user_id = u.id
-               WHERE ea.event_id = $1
-               ORDER BY ea.created_at ASC`,
+              FROM event_absentees ea
+              JOIN users u ON ea.user_id = u.id
+              WHERE ea.event_id = $1
+              ORDER BY ea.created_at ASC`,
               [eventId]
             );
+            
+            // Helper function to format player name with weapon emoji
+            const formatPlayerName = (player, index) => {
+              const username = player.username || 'Unknown';
+              
+              // Check if player has build info with weapon type
+              let weaponEmoji = '';
+              if (player.builds) {
+                try {
+                  // Parse builds data if it's a string
+                  const buildsData = typeof player.builds === 'string' 
+                    ? JSON.parse(player.builds) 
+                    : player.builds;
+                  
+                  if (buildsData.weaponType) {
+                    weaponEmoji = getWeaponEmoji(buildsData.weaponType);
+                  }
+                } catch (e) {
+                  console.error('Error parsing builds data:', e);
+                }
+              }
+              
+              return `${index+1}. ${weaponEmoji} ${username}`;
+            };
+            
+            // Helper to get emoji for weapon types
+            function getWeaponEmoji(weaponType) {
+              if (!weaponType) return '';
+              
+              const type = weaponType.toString().toLowerCase();
+              
+              const emojiMap = {
+                // Using your actual emoji IDs
+                'dagger': '<:Dagger:1352127620761784321>',
+                'spear': '<:Spear:1352127656748908636>',
+                'wand': '<:Wand:1352127712180830249>',
+                'sword': '<:SwordandShield:1352127689183592459>', // Assuming sword means sword and shield
+                'swordandshield': '<:SwordandShield:1352127689183592459>',
+                'crossbow': '<:Crossbow:1352127594597978112>',
+                'greatsword': '<:Greatsword:1352127640227549265>',
+                'staff': '<:Staff:1352127671831887923>',
+                'bow': '<:Bow:1352127546308825170>'
+              };
+              
+              // Handle potential variations in naming
+              for (const [key, emoji] of Object.entries(emojiMap)) {
+                if (type.includes(key)) {
+                  return emoji;
+                }
+              }
+              
+              return ''; // No matching emoji found
+            }
             
             // Group participants by role
             const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
@@ -2815,71 +2869,49 @@ client.on('interactionCreate', async (interaction) => {
             if (message && message.embeds && message.embeds.length > 0) {
               const originalEmbed = message.embeds[0];
               
-              // Format date/time from the original embed fields if present
-              const formatDate = (date) => {
-                if (!date) return "Date not set";
-                date = new Date(date);
-                return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-              };
+              const updatedEmbed = EmbedBuilder.from(originalEmbed);
               
-              const formatTime = (date) => {
-                if (!date) return "Time not set";
-                date = new Date(date);
-                return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-              };
+              // Preserve event time and location from original embed
+              const timeField = originalEmbed.fields.find(f => f.name === '⏰ Time');
+              const locationField = originalEmbed.fields.find(f => f.name === '📍 Location');
               
-              const eventDate = new Date(eventDetails.event_time);
-              
-              const updatedEmbed = new EmbedBuilder()
-                .setTitle(originalEmbed.title || eventDetails.title || 'Event')
-                .setColor(originalEmbed.color || 0x0099ff)
-                .setDescription(originalEmbed.description || eventDetails.description || 'No description provided')
-                .addFields(
-                  {
-                    name: '⏰ Time',
-                    value: `📅 ${formatDate(eventDate)} ⌚ ${formatTime(eventDate)}`,
-                    inline: false
-                  },
-                  {
-                    name: '📍 Location',
-                    value: eventDetails.location || 'Not specified',
-                    inline: false
-                  },
-                  {
-                    name: `🛡️ Tanks (${tanks.length}/${eventDetails.tanks || 0})`,
-                    value: tanks.length > 0 ? 
-                      tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-                      '—',
-                    inline: true
-                  },
-                  {
-                    name: `💚 Healers (${healers.length}/${eventDetails.healers || 0})`,
-                    value: healers.length > 0 ? 
-                      healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-                      '—',
-                    inline: true
-                  },
-                  {
-                    name: `⚔️ DPS (${dps.length}/${eventDetails.dps || 0})`,
-                    value: dps.length > 0 ? 
-                      dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-                      '—',
-                    inline: true
-                  },
-                  {
-                    name: `❌ Absent (${absentees.length})`,
-                    value: absentees.length > 0 ? 
-                      absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
-                      '—',
-                    inline: true
-                  },
-                  {
-                    name: '⏳ Tentative (0)',
-                    value: '—',
-                    inline: true
-                  }
-                )
-                .setFooter({ text: `Event ID: ${eventId}` });
+              updatedEmbed.setFields(
+                { name: '⏰ Time', value: timeField ? timeField.value : 'Not specified', inline: false },
+                { name: '📍 Location', value: locationField ? locationField.value : 'Not specified', inline: false },
+                {
+                  name: `🛡️ Tanks (${tanks.length}/${eventDetails.tanks || 0})`,
+                  value: tanks.length > 0 ? 
+                    tanks.map((p, i) => formatPlayerName(p, i)).join('\n') : 
+                    '—',
+                  inline: true
+                },
+                {
+                  name: `💚 Healers (${healers.length}/${eventDetails.healers || 0})`,
+                  value: healers.length > 0 ? 
+                    healers.map((p, i) => formatPlayerName(p, i)).join('\n') : 
+                    '—',
+                  inline: true
+                },
+                {
+                  name: `⚔️ DPS (${dps.length}/${eventDetails.dps || 0})`,
+                  value: dps.length > 0 ? 
+                    dps.map((p, i) => formatPlayerName(p, i)).join('\n') : 
+                    '—',
+                  inline: true
+                },
+                {
+                  name: `❌ Absent (${absentees.length})`,
+                  value: absentees.length > 0 ? 
+                    absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+                    '—',
+                  inline: true
+                },
+                {
+                  name: '⏳ Tentative (0)',
+                  value: '—',
+                  inline: true
+                }
+              );
               
               await message.edit({ embeds: [updatedEmbed] });
             }
