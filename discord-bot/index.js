@@ -2650,7 +2650,6 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle event signup buttons
-      // Handle event signup buttons
       else if (customId.startsWith('signup_')) {
         const [_, eventId, role] = customId.split('_');
         await interaction.deferReply({ ephemeral: true });
@@ -2783,9 +2782,9 @@ client.on('interactionCreate', async (interaction) => {
             }
           }
           
-          // Update the message to reflect new signups with custom weapon emojis
+          // Update the message to reflect new signups with weapon icons
           try {
-            // Get all participants with their builds
+            // Get all participants with their builds - include specific fields we need
             const participantsResult = await pool.query(
               `SELECT ep.role, u.username, u.discord_id, u.builds
               FROM event_participants ep
@@ -2809,20 +2808,45 @@ client.on('interactionCreate', async (interaction) => {
             const formatPlayerName = (player, index) => {
               const username = player.username || 'Unknown';
               
+              console.log(`DEBUG: Formatting player ${username} with builds:`, JSON.stringify(player.builds));
+              
               // Check if player has build info with weapon type
               let weaponEmoji = '';
+              
               if (player.builds) {
                 try {
                   // Parse builds data if it's a string
-                  const buildsData = typeof player.builds === 'string' 
-                    ? JSON.parse(player.builds) 
-                    : player.builds;
+                  let buildsData = player.builds;
+                  if (typeof player.builds === 'string') {
+                    buildsData = JSON.parse(player.builds);
+                  }
                   
-                  if (buildsData.weaponType) {
+                  // Handle different builds structures
+                  if (Array.isArray(buildsData) && buildsData.length > 0) {
+                    // If builds is an array, use the first (primary) build
+                    const primaryBuild = buildsData[0];
+                    
+                    if (primaryBuild.weapon) {
+                      weaponEmoji = getWeaponEmoji(primaryBuild.weapon);
+                    } else if (primaryBuild.primary_weapon) {
+                      weaponEmoji = getWeaponEmoji(primaryBuild.primary_weapon);
+                    } else if (primaryBuild.weaponType) {
+                      weaponEmoji = getWeaponEmoji(primaryBuild.weaponType);
+                    }
+                  } else if (buildsData.weapon) {
+                    // If builds is an object with weapon property
+                    weaponEmoji = getWeaponEmoji(buildsData.weapon);
+                  } else if (buildsData.primary_weapon) {
+                    // If builds is an object with primary_weapon property
+                    weaponEmoji = getWeaponEmoji(buildsData.primary_weapon);
+                  } else if (buildsData.weaponType) {
+                    // If builds is an object with weaponType property
                     weaponEmoji = getWeaponEmoji(buildsData.weaponType);
                   }
+                  
+                  console.log(`DEBUG: Weapon emoji for ${username}: ${weaponEmoji}`);
                 } catch (e) {
-                  console.error('Error parsing builds data:', e);
+                  console.error(`Error processing builds for ${username}:`, e);
                 }
               }
               
@@ -2833,14 +2857,15 @@ client.on('interactionCreate', async (interaction) => {
             function getWeaponEmoji(weaponType) {
               if (!weaponType) return '';
               
-              const type = weaponType.toString().toLowerCase();
+              // Convert to string and lowercase for consistent matching
+              const type = String(weaponType).toLowerCase();
+              console.log(`DEBUG: Looking up emoji for weapon type: ${type}`);
               
               const emojiMap = {
-                // Using your actual emoji IDs
                 'dagger': '<:Dagger:1352127620761784321>',
                 'spear': '<:Spear:1352127656748908636>',
                 'wand': '<:Wand:1352127712180830249>',
-                'sword': '<:SwordandShield:1352127689183592459>', // Assuming sword means sword and shield
+                'sword': '<:SwordandShield:1352127689183592459>',
                 'swordandshield': '<:SwordandShield:1352127689183592459>',
                 'crossbow': '<:Crossbow:1352127594597978112>',
                 'greatsword': '<:Greatsword:1352127640227549265>',
@@ -2848,7 +2873,12 @@ client.on('interactionCreate', async (interaction) => {
                 'bow': '<:Bow:1352127546308825170>'
               };
               
-              // Handle potential variations in naming
+              // Try direct match first
+              if (emojiMap[type]) {
+                return emojiMap[type];
+              }
+              
+              // If no direct match, try partial match
               for (const [key, emoji] of Object.entries(emojiMap)) {
                 if (type.includes(key)) {
                   return emoji;
