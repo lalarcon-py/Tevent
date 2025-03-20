@@ -238,7 +238,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         setError('You must be logged in to sign up');
         return;
       }
-  
+    
       // First, check if the user is already signed up for this event
       const isAlreadySignedUp = event.participants?.some(p => p.User?.id === currentUser.id);
       
@@ -248,7 +248,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         setLoading(false);
         return;
       }
-    
+      
       // Get user data from public users table
       const userResponse = await fetch(`${API_URL}/api/auth/status`, {
         credentials: 'include'
@@ -288,8 +288,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         role = 'DPS';
       }
       
-      // Sign up with the determined role
-      await handleSignUp(role);
+      // Sign up with the determined role and include the build
+      await handleSignUp(role, primaryBuild);
       setSuccessMessage(`Successfully signed up as ${role}`);
       setTimeout(() => setSuccessMessage(null), 3000);
       
@@ -301,14 +301,14 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     }
   };
 
-  const handleSignUp = async (role) => {
+  const handleSignUp = async (role, selectedBuild) => {
     try {
       if (!currentUser) {
         setError('You must be logged in to sign up');
         return;
       }
-  
-      // Check if user is already signed up for this event with any role
+    
+      // Check if user is already signed up
       const existingSignup = event.participants?.find(p => p.User?.id === currentUser.id);
       
       if (existingSignup) {
@@ -323,7 +323,9 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       
       console.log(`Signing up for role ${role} with guild ID: ${guildId}`);
       
-      // Now proceed with the new signup
+      // Ensure selectedBuild is included in the request
+      console.log('Using selected build for signup:', selectedBuild);
+      
       const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
         method: 'POST',
         headers: {
@@ -332,7 +334,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         credentials: 'include',
         body: JSON.stringify({ 
           role,
-          guildId: guildId // Add this line
+          selectedBuild,
+          guildId: guildId
         })
       });
       
@@ -919,6 +922,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         open={buildSelectionOpen}
         builds={userBuilds}
         onClose={() => setBuildSelectionOpen(false)}
+        // This is a property passed to the BuildSelectionDialog component
         onSelectBuild={async (selectedBuild) => {
           // Determine role based on the selected build's spec
           let role;
@@ -930,8 +934,8 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
             role = 'DPS';
           }
           
-          // Sign up with the determined role
-          await handleSignUp(role);
+          // Sign up with the determined role and include the selected build
+          await handleSignUp(role, selectedBuild);
           setSuccessMessage(`Successfully signed up as ${role} using ${selectedBuild.primary}+${selectedBuild.secondary}`);
           setTimeout(() => setSuccessMessage(null), 3000);
           setBuildSelectionOpen(false);

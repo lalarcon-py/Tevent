@@ -742,6 +742,7 @@ const EventSummaries = () => {
               credentials: 'include',
               body: JSON.stringify({ 
                 role,
+                selectedBuild,
                 guildId: localStorage.getItem('guildId')
               })
             });

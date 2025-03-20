@@ -186,8 +186,50 @@ const RoleSection = ({ title, members, roleType }) => {
  );
 };
 
-const ParticipantPool = ({ eventId, participants }) => {
-  // Helper function to determine participant spec
+const ParticipantPool = ({ participants }) => {
+  const { eventId } = useParams();
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [buildDialogOpen, setBuildDialogOpen] = useState(false);
+  
+  // Group participants by role
+  const roleGroups = {
+    tank: participants.filter(p => determineParticipantRole(p) === 'tank'),
+    healer: participants.filter(p => determineParticipantRole(p) === 'healer'),
+    dps: participants.filter(p => determineParticipantRole(p) === 'dps')
+  };
+
+  const handleBuildSelect = (member) => {
+    setSelectedMember(member);
+    setBuildDialogOpen(true);
+  };
+
+  const handleBuildChange = (index, build) => {
+    // Get user ID
+    const userId = selectedMember.user_id || selectedMember.id || (selectedMember.User?.id);
+    
+    // Store selection in localStorage
+    storeBuildSelection(eventId, userId, selectedMember.role, index, build);
+    
+    // Update local state with new build selection
+    const updatedParticipants = participants.map(p => {
+      if ((p.user_id === userId) || (p.id === userId) || (p.User?.id === userId)) {
+        return {
+          ...p,
+          activeBuildIndex: index,
+          selectedBuild: build
+        };
+      }
+      return p;
+    });
+    
+    // Update participants state
+    setParticipants(updatedParticipants);
+    
+    // Close dialog
+    setBuildDialogOpen(false);
+    setSelectedMember(null);
+  };
+
   const getParticipantSpec = (participant) => {
     // First check if there's an event-specific selected build
     if (participant.selected_build) {
@@ -237,45 +279,58 @@ const ParticipantPool = ({ eventId, participants }) => {
     return null;
   };
 
-  React.useEffect(() => {
-    console.log('--- DEBUGGING PARTICIPANT POOL ---');
-    console.log('Total participants:', participants.length);
-    
-    // Debug the first few participants
-    if (participants.length > 0) {
-      participants.slice(0, 3).forEach((participant, index) => {
-        console.group(`Participant ${index}`);
-        console.log('Raw participant data:', participant);
-        console.log('Spec determination:', getParticipantSpec(participant));
-        console.log('Data location check:', {
-          'selected_build': participant.selected_build,
-          'participant.builds': participant.builds,
-          'participant.User?.builds': participant.User?.builds,
-          'role': participant.role
-        });
-        console.groupEnd();
-      });
-    }
-  }, [participants]);
-  
   return (
-    <Box>
-      <RoleSection 
-        title="Tanks"
-        members={participants.filter(p => getParticipantSpec(p) === 'Tank')}
-        roleType="Tank"
+    <Paper sx={{ p: 2, bgcolor: '#1e1e1e' }}>
+      {Object.entries(roleGroups).map(([role, members]) => (
+        <Box key={role} sx={{ mb: 2 }}>
+          <Typography variant="h6" sx={{ 
+            color: 'white', 
+            mb: 1,
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            pb: 0.5
+          }}>
+            {role.charAt(0).toUpperCase() + role.slice(1)} ({members.length})
+          </Typography>
+          <Box sx={{ ml: 1 }}>
+            {members.map(member => (
+              <Box 
+                key={member.id || member.user_id || (member.User?.id)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 1
+                }}
+              >
+                <DraggableMember member={member} />
+                
+                {/* Add build selection button */}
+                {(member.builds?.length > 1) && (
+                  <IconButton 
+                    size="small" 
+                    onClick={() => handleBuildSelect(member)}
+                    sx={{ color: 'white', ml: 1 }}
+                  >
+                    <SettingsIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      ))}
+      
+      {/* Build selection dialog */}
+      <BuildSelectionDialog
+        open={buildDialogOpen}
+        member={selectedMember}
+        onClose={() => {
+          setBuildDialogOpen(false);
+          setSelectedMember(null);
+        }}
+        onSelectBuild={handleBuildChange}
       />
-      <RoleSection 
-        title="Healers"
-        members={participants.filter(p => getParticipantSpec(p) === 'Healer')}
-        roleType="Healer"
-      />
-      <RoleSection 
-        title="DPS"
-        members={participants.filter(p => getParticipantSpec(p) === 'DPS')}
-        roleType="DPS"
-      />
-    </Box>
+    </Paper>
   );
 };
 

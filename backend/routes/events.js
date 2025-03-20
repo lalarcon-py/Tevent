@@ -109,17 +109,108 @@ router.get('/:eventId/absentees', async (req, res) => {
   }
 });
 
-// Event signup
+// POST endpoint for updating team members
+router.post('/:teamId/members', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { memberId, role, sourceTeamId, selectedBuild } = req.body;
+    const targetTeamId = req.params.teamId;
+    
+    // Get guild ID from request
+    let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+    
+    // Check if team exists
+    const targetTeam = await db.Team.findOne({
+      where: { 
+        id: targetTeamId,
+        guild_id: guildId
+      }, 
+      transaction: t 
+    });
+    
+    if (!targetTeam) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Target team not found' });
+    }
+
+    // If member is coming from another team, remove them from that team first
+    if (sourceTeamId) {
+      await db.TeamMember.destroy({
+        where: { 
+          team_id: sourceTeamId,
+          user_id: memberId,
+          guild_id: guildId
+        },
+        transaction: t
+      });
+    }
+
+    // Get current position count
+    const currentMembers = await db.TeamMember.count({
+      where: { 
+        team_id: targetTeamId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+
+    // Create team member data, including the selected build
+    const teamMemberData = {
+      team_id: targetTeamId,
+      user_id: memberId,
+      guild_id: guildId,
+      role: role,
+      position: currentMembers + 1
+    };
+    
+    // Add selected build if provided
+    if (selectedBuild) {
+      teamMemberData.selected_build = typeof selectedBuild === 'string' ? 
+        selectedBuild : JSON.stringify(selectedBuild);
+    }
+
+    // Create team member
+    const teamMember = await db.TeamMember.create(teamMemberData, { transaction: t });
+
+    // Get updated member data with user info
+    const updatedMember = await db.TeamMember.findOne({
+      where: { id: teamMember.id },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username', 'avatar_url', 'builds']
+      }],
+      transaction: t
+    });
+
+    await t.commit();
+    res.json(updatedMember);
+  } catch (error) {
+    await t.rollback();
+    console.error('Error updating team member:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/:id/signup', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { role } = req.body;
+    const { role, selectedBuild } = req.body;
     const eventId = req.params.id;
     
-    // Try to get guildId from multiple places
+    // Debug what we're receiving
+    console.log('Signup data received:', {
+      role,
+      selectedBuild: selectedBuild ? JSON.stringify(selectedBuild).substring(0, 100) + '...' : null,
+      eventId
+    });
+    
+    // Get guildId (existing code)
     let guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
     
-    // If no guildId explicitly provided, try to get user's primary guild
     if (!guildId && req.isAuthenticated()) {
       const guildMember = await db.GuildMember.findOne({
         where: { user_id: req.user.id },
@@ -143,12 +234,31 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
       return res.status(400).json({ error: 'Invalid role. Must be TANK, HEALER, or DPS' });
     }
 
+    // IMPORTANT: Ensure selectedBuild is properly formatted for JSONB
+    let processedBuild = selectedBuild;
+    if (selectedBuild && typeof selectedBuild === 'string') {
+      try {
+        processedBuild = JSON.parse(selectedBuild);
+      } catch (e) {
+        console.error('Error parsing selectedBuild string:', e);
+      }
+    }
+
+    // Create or update the participant
     const [participant] = await EventParticipant.upsert({
       guild_id: guildId,
       event_id: eventId,
-      user_id: req.body.userId || req.user.id, // Support admin operations
-      role
+      user_id: req.body.userId || req.user.id,
+      role,
+      selected_build: processedBuild // Use the processed build
     }, { transaction: t });
+
+    // Log what was actually saved
+    console.log('Participant saved:', {
+      id: participant.id,
+      role: participant.role,
+      hasSelectedBuild: !!participant.selected_build
+    });
 
     await t.commit();
     
@@ -187,6 +297,80 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
     await t.rollback();
     console.error('Event signup error:', error);
     res.status(500).json({ error: 'Failed to process signup' });
+  }
+});
+
+// Add to backend/routes/events.js
+router.get('/:eventId/team-planner-data', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const guildId = req.guildId || req.query.guildId || req.body?.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    console.log(`Fetching team planner data for event ${eventId}, guild ${guildId}`);
+    
+    // Get teams
+    const teams = await db.Team.findAll({
+      where: { 
+        event_id: eventId,
+        guild_id: guildId
+      },
+      include: [{
+        model: db.TeamMember,
+        as: 'members',
+        include: [{
+          model: db.User,
+          attributes: ['id', 'username', 'avatar_url', 'builds', 'combat_power']
+        }]
+      }]
+    });
+    
+    // Get event participants with selected_build
+    const participants = await db.EventParticipant.findAll({
+      where: { 
+        event_id: eventId,
+        guild_id: guildId
+      },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username', 'avatar_url', 'builds', 'combat_power']
+      }]
+    });
+    
+    // Filter out participants who are already in teams
+    const teamMemberIds = new Set(teams.flatMap(team => 
+      team.members?.map(member => member.user_id) || []
+    ));
+    
+    const availableParticipants = participants.filter(participant => 
+      !teamMemberIds.has(participant.user_id)
+    );
+    
+    // Log counts for debugging
+    console.log(`Found ${teams.length} teams and ${availableParticipants.length} available participants`);
+    
+    // Log a sample participant for debugging
+    if (availableParticipants.length > 0) {
+      const sample = availableParticipants[0];
+      console.log('Sample participant:', {
+        id: sample.id,
+        userId: sample.user_id,
+        role: sample.role,
+        hasSelectedBuild: !!sample.selected_build,
+        selectedBuildType: typeof sample.selected_build
+      });
+    }
+    
+    res.json({
+      teams,
+      participants: availableParticipants
+    });
+  } catch (error) {
+    console.error('Error fetching team planner data:', error);
+    res.status(500).json({ error: 'Failed to fetch team planner data' });
   }
 });
 

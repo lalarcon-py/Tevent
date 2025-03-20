@@ -1,3 +1,4 @@
+// backend/models/EventParticipant.js
 'use strict';
 const { Model } = require('sequelize');
 
@@ -45,6 +46,10 @@ module.exports = (sequelize, DataTypes) => {
       validate: {
         isIn: [['TANK', 'HEALER', 'DPS']]
       }
+    },
+    selected_build: {
+      type: DataTypes.JSONB,
+      allowNull: true
     }
   }, {
     sequelize,
