@@ -478,14 +478,12 @@ app.get('/oauth/callback', async (req, res) => {
   }
 });
 
-// PUT endpoint for updating members with proper validation
 app.put('/api/members/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
     const { id: _, guildId, role, ...updateData } = req.body;
     
-    // First update the User table (as it's currently doing)
     await sequelize.query(
       `UPDATE users SET 
         discord_id = :discord_id,
@@ -499,11 +497,11 @@ app.put('/api/members/:id', async (req, res) => {
       {
         replacements: { 
           id,
-          discord_id: updateData.discordId || updateData.discord_id,
-          username: updateData.username,
+          discord_id: updateData.discordId || updateData.discord_id || '',
+          username: updateData.username || '',
           status: updateData.status || 'Active',
-          avatar_url: updateData.avatarUrl || updateData.avatar_url,
-          builds: JSON.stringify(updateData.builds),
+          avatar_url: (updateData.avatarUrl || updateData.avatar_url || ''),
+          builds: JSON.stringify(updateData.builds || []),
           combat_power: updateData.combat_power || null
         },
         type: sequelize.QueryTypes.UPDATE,
@@ -511,7 +509,6 @@ app.put('/api/members/:id', async (req, res) => {
       }
     );
     
-    // IMPORTANT: Add this code to update the GuildMember table's role
     if (role) {
       await sequelize.query(
         `UPDATE guild_members SET 
@@ -530,10 +527,8 @@ app.put('/api/members/:id', async (req, res) => {
       );
     }
     
-    // Commit and return updated user
     await t.commit();
     
-    // Fetch user with current role from GuildMember
     const memberData = await db.GuildMember.findOne({
       where: {
         user_id: id,
