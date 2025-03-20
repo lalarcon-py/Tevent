@@ -66,75 +66,176 @@ const RoleSection = ({ title, members, roleType }) => {
        {title} ({members.length})
      </Typography>
      <Box sx={{ minHeight: 50 }}>
-       {members.map((member) => (
-         <DraggableMember
-           key={member.id}
-           member={{
-             ...member,
-             weaponSpec: getWeaponSpec(
-               member.builds[0]?.primary,
-               member.builds[0]?.secondary
-             )
-           }}
-           roleType={roleType}
-         >
-           <Box sx={{
-             display: 'flex',
-             alignItems: 'center',
-             gap: 2,
-             p: 1
-           }}>
-             <Avatar 
-               src={member.avatar_url}
-               alt={member.username}
-               sx={{ width: 40, height: 40 }}
-             />
-             <Box>
-               <Typography sx={{ color: 'white' }}>
-                 {member.username}
-               </Typography>
-               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                 {member.builds[0]?.primary && (
-                   <Tooltip title={member.builds[0].primary}>
-                     <img 
-                       src={getWeaponImageUrl(member.builds[0].primary)}
-                       alt={member.builds[0].primary}
-                       style={{ width: 24, height: 24 }}
-                     />
-                   </Tooltip>
-                 )}
-                 {member.builds[0]?.secondary && (
-                   <Tooltip title={member.builds[0].secondary}>
-                     <img 
-                       src={getWeaponImageUrl(member.builds[0].secondary)}
-                       alt={member.builds[0].secondary}
-                       style={{ width: 24, height: 24 }}
-                     />
-                   </Tooltip>
-                 )}
-                 <Typography sx={{ color: '#90caf9', fontSize: '0.875rem' }}>
-                   {member.weaponSpec}
+       {members.map((member) => {
+         // Try to get the event-specific build data first (if participant has selected_build property)
+         let selectedBuildForEvent = member.selected_build;
+         if (typeof selectedBuildForEvent === 'string') {
+           try {
+             selectedBuildForEvent = JSON.parse(selectedBuildForEvent);
+           } catch (e) {
+             console.error('Error parsing selected_build string:', e);
+             selectedBuildForEvent = null;
+           }
+         }
+         
+         // Fall back to general builds if no event-specific build
+         let builds = member.User?.builds || member.builds || [];
+         
+         // If builds is a string, try to parse it
+         if (typeof builds === 'string') {
+           try {
+             builds = JSON.parse(builds);
+           } catch (e) {
+             console.error('Error parsing builds string:', e);
+             builds = [];
+           }
+         }
+         
+         // Ensure builds is an array
+         builds = Array.isArray(builds) ? builds : [];
+         
+         // Use the selected build for this event if available, otherwise use first build
+         const primaryBuild = selectedBuildForEvent || (builds.length > 0 ? builds[0] : null);
+         
+         // Determine weapon spec
+         const weaponSpec = primaryBuild ? 
+           getWeaponSpec(primaryBuild.primary, primaryBuild.secondary) : 'Unknown';
+         
+         // Find the correct username from various possible locations
+         const username = member.username || 
+                         (member.User && member.User.username) || 
+                         'Unknown User';
+                         
+         // Find avatar from various possible locations
+         const avatarUrl = member.avatar_url || 
+                          (member.User && member.User.avatar_url) || 
+                          null;
+                          
+         // Find combat power from various possible locations
+         const combatPower = member.combat_power || 
+                            (member.User && member.User.combat_power) || 
+                            null;
+         
+         return (
+           <DraggableMember
+             key={member.id || member.user_id || (member.User && member.User.id)}
+             member={{
+               ...member,
+               builds: builds,
+               selectedBuild: primaryBuild,
+               weaponSpec: weaponSpec
+             }}
+             roleType={roleType}
+           >
+             <Box sx={{
+               display: 'flex',
+               alignItems: 'center',
+               gap: 2,
+               p: 1
+             }}>
+               <Avatar 
+                 src={avatarUrl}
+                 alt={username}
+                 sx={{ width: 40, height: 40 }}
+               />
+               <Box>
+                 <Typography sx={{ color: 'white' }}>
+                   {username}
                  </Typography>
+                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                   {primaryBuild?.primary && (
+                     <Tooltip title={primaryBuild.primary}>
+                       <img 
+                         src={`/weapons/${primaryBuild.primary} Art.png`}
+                         alt={primaryBuild.primary}
+                         style={{ width: 24, height: 24 }}
+                         onError={(e) => { e.target.style.display = 'none'; }}
+                       />
+                     </Tooltip>
+                   )}
+                   {primaryBuild?.secondary && (
+                     <Tooltip title={primaryBuild.secondary}>
+                       <img 
+                         src={`/weapons/${primaryBuild.secondary} Art.png`}
+                         alt={primaryBuild.secondary}
+                         style={{ width: 24, height: 24 }}
+                         onError={(e) => { e.target.style.display = 'none'; }}
+                       />
+                     </Tooltip>
+                   )}
+                   <Typography sx={{ color: '#90caf9', fontSize: '0.875rem' }}>
+                     {weaponSpec}
+                   </Typography>
+                 </Box>
                </Box>
+               {combatPower && (
+                 <Typography sx={{ 
+                   color: '#ffd700', 
+                   ml: 'auto',
+                   fontSize: '0.875rem'
+                 }}>
+                   CP: {combatPower}
+                 </Typography>
+               )}
              </Box>
-             {member.combat_power && (
-               <Typography sx={{ 
-                 color: '#ffd700', 
-                 ml: 'auto',
-                 fontSize: '0.875rem'
-               }}>
-                 CP: {member.combat_power}
-               </Typography>
-             )}
-           </Box>
-         </DraggableMember>
-       ))}
+           </DraggableMember>
+         );
+       })}
      </Box>
    </Paper>
  );
 };
 
 const ParticipantPool = ({ eventId, participants }) => {
+  // Helper function to determine participant spec
+  const getParticipantSpec = (participant) => {
+    // First check if there's an event-specific selected build
+    if (participant.selected_build) {
+      let selectedBuild = participant.selected_build;
+      if (typeof selectedBuild === 'string') {
+        try {
+          selectedBuild = JSON.parse(selectedBuild);
+          if (selectedBuild.spec) return selectedBuild.spec;
+        } catch (e) {
+          console.error('Error parsing selected_build:', e);
+        }
+      } else if (selectedBuild && selectedBuild.spec) {
+        return selectedBuild.spec;
+      }
+    }
+    
+    // Try User.builds first, then direct builds
+    let builds = participant.User?.builds || participant.builds;
+    
+    // If builds is a string, try to parse it
+    if (typeof builds === 'string') {
+      try {
+        builds = JSON.parse(builds);
+      } catch (e) {
+        console.error('Error parsing builds string:', e);
+        builds = [];
+      }
+    }
+    
+    // Ensure builds is an array
+    builds = Array.isArray(builds) ? builds : [];
+    
+    // If we have at least one build, return its spec
+    if (builds.length > 0 && builds[0]?.spec) {
+      return builds[0].spec;
+    }
+    
+    // For TANK, HEALER, DPS role values (from API)
+    if (participant.role) {
+      const role = participant.role.toUpperCase();
+      if (role === 'TANK') return 'Tank';
+      if (role === 'HEALER') return 'Healer';
+      if (role === 'DPS') return 'DPS';
+    }
+    
+    // Default return
+    return null;
+  };
 
   React.useEffect(() => {
     console.log('--- DEBUGGING PARTICIPANT POOL ---');
@@ -144,37 +245,38 @@ const ParticipantPool = ({ eventId, participants }) => {
     if (participants.length > 0) {
       participants.slice(0, 3).forEach((participant, index) => {
         console.group(`Participant ${index}`);
-        debugMemberData(participant);
-        
-        // Check the weapon images
-        if (participant.builds && participant.builds[0]) {
-          checkImageUrl(participant.builds[0].primary);
-          checkImageUrl(participant.builds[0].secondary);
-        }
+        console.log('Raw participant data:', participant);
+        console.log('Spec determination:', getParticipantSpec(participant));
+        console.log('Data location check:', {
+          'selected_build': participant.selected_build,
+          'participant.builds': participant.builds,
+          'participant.User?.builds': participant.User?.builds,
+          'role': participant.role
+        });
         console.groupEnd();
       });
     }
   }, [participants]);
   
- return (
-   <Box>
-     <RoleSection 
-       title="Tanks"
-       members={participants.filter(p => p.builds[0]?.spec === 'Tank')}
-       roleType="Tank"
-     />
-     <RoleSection 
-       title="Healers"
-       members={participants.filter(p => p.builds[0]?.spec === 'Healer')}
-       roleType="Healer"
-     />
-     <RoleSection 
-       title="DPS"
-       members={participants.filter(p => p.builds[0]?.spec === 'DPS')}
-       roleType="DPS"
-     />
-   </Box>
- );
+  return (
+    <Box>
+      <RoleSection 
+        title="Tanks"
+        members={participants.filter(p => getParticipantSpec(p) === 'Tank')}
+        roleType="Tank"
+      />
+      <RoleSection 
+        title="Healers"
+        members={participants.filter(p => getParticipantSpec(p) === 'Healer')}
+        roleType="Healer"
+      />
+      <RoleSection 
+        title="DPS"
+        members={participants.filter(p => getParticipantSpec(p) === 'DPS')}
+        roleType="DPS"
+      />
+    </Box>
+  );
 };
 
 export default ParticipantPool;

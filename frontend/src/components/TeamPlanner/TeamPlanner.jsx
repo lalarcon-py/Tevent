@@ -24,125 +24,96 @@ import { getWeaponComponents } from '../../utils/weaponUtils';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-
-// Add this debug function at the top of your TeamPlanner.jsx file
-const debugMemberData = (member) => {
-  console.group('Member Debug Data');
-  console.log('Raw member object:', member);
-  
-  // Check userID variations
-  console.log('Member IDs:', {
-    id: member.id,
-    user_id: member.user_id,
-    userId: member.userId,
-    'User.id': member.User?.id
-  });
-  
-  // Debug builds data structures
-  console.log('Builds sources:', {
-    'member.builds': member.builds,
-    'member.User.builds': member.User?.builds,
-    'Type of builds': typeof member.builds,
-    'Type of User.builds': typeof member.User?.builds
-  });
-  
-  // Try to access the first build
-  const memberBuild = Array.isArray(member.builds) && member.builds.length > 0 
-    ? member.builds[0] 
-    : null;
-  
-  const userBuild = member.User && Array.isArray(member.User.builds) && member.User.builds.length > 0
-    ? member.User.builds[0]
-    : null;
-    
-  console.log('First build from member.builds:', memberBuild);
-  console.log('First build from member.User.builds:', userBuild);
-  
-  // Check string parsing
-  if (typeof member.builds === 'string') {
-    try {
-      const parsed = JSON.parse(member.builds);
-      console.log('Parsed member.builds string:', parsed);
-    } catch (e) {
-      console.error('Failed to parse member.builds string:', e);
-    }
-  }
-  
-  if (typeof member.User?.builds === 'string') {
-    try {
-      const parsed = JSON.parse(member.User.builds);
-      console.log('Parsed member.User.builds string:', parsed);
-    } catch (e) {
-      console.error('Failed to parse member.User.builds string:', e);
-    }
-  }
-  
-  console.groupEnd();
-  return member;
-};
-
-// Add this to check API URLs
-const checkImageUrl = (weapon) => {
-  if (!weapon) return;
-  
-  const API_URL = process.env.NODE_ENV === 'development' 
-    ? 'http://localhost:5000' 
-    : process.env.REACT_APP_API_URL;
-    
-  const url = `${API_URL}/weapons/${weapon} Art.png`;
-  
-  console.log(`Checking image for ${weapon}:`, url);
-  
-  // Try to fetch the image to see if it exists
-  fetch(url)
-    .then(response => {
-      console.log(`Image ${url} fetch status:`, response.status);
-    })
-    .catch(error => {
-      console.error(`Failed to fetch image ${url}:`, error);
-    });
-    
-  return url;
-};
-
-const fetchMemberBuilds = async (memberId) => {
-  if (!memberId) return null;
-  
+// Local storage utility functions for build selection
+const storeBuildSelection = (eventId, userId, role, buildIndex) => {
   try {
-    // Get guild ID for API request
-    const guildId = localStorage.getItem('guildId');
-    if (!guildId) {
-      console.error('No guild ID found');
-      return null;
+    const storageKey = `event_${eventId}_build_selections`;
+    
+    // Get existing selections
+    let selections = {};
+    const existingData = localStorage.getItem(storageKey);
+    if (existingData) {
+      selections = JSON.parse(existingData);
     }
     
-    console.log(`Fetching builds for member: ${memberId}`);
+    // Store this user's selection
+    selections[userId] = { role, buildIndex };
     
-    const response = await fetch(`${API_URL}/api/members/${memberId}?guildId=${guildId}`, {
-      credentials: 'include'
-    });
+    // Save back to localStorage
+    localStorage.setItem(storageKey, JSON.stringify(selections));
     
-    if (!response.ok) {
-      throw new Error(`Failed to fetch member data: ${response.status}`);
-    }
-    
-    const memberData = await response.json();
-    console.log('Fetched member data:', memberData);
-    
-    if (!memberData.builds || (Array.isArray(memberData.builds) && memberData.builds.length === 0)) {
-      console.warn(`Member ${memberId} has no builds in database`);
-      return null;
-    }
-    
-    // Return the build data
-    return memberData.builds;
+    console.log(`Stored build selection for user ${userId} in event ${eventId}: ${role}, buildIndex ${buildIndex}`);
   } catch (error) {
-    console.error('Error fetching member builds:', error);
-    return null;
+    console.error('Error storing build selection:', error);
   }
+};
+
+const getStoredBuildSelection = (eventId, userId) => {
+  try {
+    const storageKey = `event_${eventId}_build_selections`;
+    const existingData = localStorage.getItem(storageKey);
+    
+    if (existingData) {
+      const selections = JSON.parse(existingData);
+      return selections[userId];
+    }
+  } catch (error) {
+    console.error('Error retrieving build selection:', error);
+  }
+  
+  return null;
+};
+
+// Logging function
+const logEvent = (event, data) => {
+  console.group(`[TeamPlanner] ${event}`);
+  console.log('Data:', data);
+  console.groupEnd();
+};
+
+const WEAPON_SPECS = {
+  'Crossbow|Dagger': 'Scorpion',
+  'Crossbow|Greatsword': 'Outrider',
+  'Crossbow|Sword and Shield': 'Raider',
+  'Crossbow|Bow': 'Scout',
+  'Crossbow|Staff': 'Battleweaver',
+  'Crossbow|Wand': 'Fury',
+  'Greatsword|Wand': 'Paladin',
+  'Greatsword|Dagger': 'Ravager',
+  'Greatsword|Sword and Shield': 'Crusader',
+  'Greatsword|Bow': 'Ranger',
+  'Greatsword|Staff': 'Sentinel',
+  'Sword and Shield|Dagger': 'Berserker',
+  'Sword and Shield|Bow': 'Warden',
+  'Sword and Shield|Staff': 'Disciple',
+  'Sword and Shield|Wand': 'Templar',
+  'Bow|Dagger': 'Infiltrator',
+  'Bow|Staff': 'Liberator',
+  'Bow|Wand': 'Seeker',
+  'Staff|Dagger': 'Spellblade',
+  'Staff|Wand': 'Invocator',
+  'Wand|Dagger': 'Darkblighter',
+  'Spear|Greatsword': 'Gladiator',
+  'Spear|Sword and Shield': 'Steelheart',
+  'Spear|Staff': 'Eradicator',
+  'Spear|Dagger': 'Shadowdancer',
+  'Spear|Crossbow': 'Cavalier',
+  'Spear|Wand': 'Voidlance',
+  'Spear|Bow': 'Impaler'
+};
+
+const getWeaponSpec = (primary, secondary) => {
+  if (!primary || !secondary) return 'Unknown';
+  
+  // Try both orders of the weapons
+  const combo1 = `${primary}|${secondary}`;
+  const combo2 = `${secondary}|${primary}`;
+  
+  return WEAPON_SPECS[combo1] || WEAPON_SPECS[combo2] || 'Unknown';
 };
 
 const DraggableMember = ({ member, onRemove }) => {
+  const { eventId } = useParams();
   const dragRef = React.useRef(null);
   
   React.useEffect(() => {
@@ -187,25 +158,59 @@ const DraggableMember = ({ member, onRemove }) => {
     };
   }, [member]);
   
-  // Color based on role
+  // Color based on role - this is key!
   const getRoleColor = (role) => {
-    switch (role?.toLowerCase()) {
-      case 'tank': return '#66b3ff';
-      case 'healer': return '#66ff66';
-      case 'dps': return '#ff6666';
-      default: return 'white';
-    }
+    if (!role) return 'white';
+    
+    const roleUpper = role.toUpperCase();
+    if (roleUpper === 'TANK') return '#66b3ff';
+    if (roleUpper === 'HEALER') return '#66ff66'; 
+    if (roleUpper === 'DPS') return '#ff6666';
+    return 'white';
   };
 
-  // Extract builds directly from member data
+  // Find the correct build based on role
+  const findBuildByRole = (builds, role) => {
+    if (!builds || !Array.isArray(builds) || builds.length === 0) return null;
+    
+    // Look for stored selection first
+    const storedSelection = getStoredBuildSelection(eventId, member.user_id);
+    if (storedSelection) {
+      // If we have a stored selection with buildIndex
+      if (storedSelection.buildIndex !== undefined && 
+          builds.length > storedSelection.buildIndex) {
+        return builds[storedSelection.buildIndex];
+      }
+    }
+    
+    // Try to match by role
+    if (role) {
+      const roleMapping = {
+        'TANK': 'Tank',
+        'HEALER': 'Healer',
+        'DPS': 'DPS'
+      };
+      
+      const normalizedRole = roleMapping[role.toUpperCase()] || role;
+      
+      // Find build matching the role
+      const matchingBuild = builds.find(b => 
+        b.spec && b.spec.toUpperCase() === normalizedRole.toUpperCase()
+      );
+      
+      if (matchingBuild) return matchingBuild;
+    }
+    
+    // Default to first build
+    return builds[0];
+  };
+  
+  // Get builds from User or directly
   let builds = [];
   
-  // First try to get builds from User object
   if (member.User && member.User.builds) {
     builds = member.User.builds;
-  } 
-  // Then try direct builds property
-  else if (member.builds) {
+  } else if (member.builds) {
     builds = member.builds;
   }
   
@@ -222,10 +227,16 @@ const DraggableMember = ({ member, onRemove }) => {
   // Ensure builds is an array
   builds = Array.isArray(builds) ? builds : [];
   
+  // Find the appropriate build based on role
+  const activeBuild = findBuildByRole(builds, member.role);
+  
   // Get weapon information
-  const primaryWeapon = builds[0]?.primary || '';
-  const secondaryWeapon = builds[0]?.secondary || '';
-
+  const primaryWeapon = activeBuild?.primary || '';
+  const secondaryWeapon = activeBuild?.secondary || '';
+  
+  // Calculate weapon spec from the combination instead of reading it directly
+  const weaponSpec = getWeaponSpec(primaryWeapon, secondaryWeapon);
+  
   return (
     <Box 
       ref={dragRef} 
@@ -267,7 +278,7 @@ const DraggableMember = ({ member, onRemove }) => {
           {member.User?.username || member.username}
         </Typography>
         
-        {/* Role text */}
+        {/* Role and spec text */}
         <Typography 
           variant="caption"
           sx={{
@@ -275,7 +286,7 @@ const DraggableMember = ({ member, onRemove }) => {
             fontSize: '0.75rem'
           }}
         >
-          {member.role}
+          {member.role}{weaponSpec ? ` (${weaponSpec})` : ''}
         </Typography>
       </Box>
       
@@ -455,11 +466,63 @@ const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit, canEdit }) => {
 };
 
 const ParticipantPool = ({ participants }) => {
-  const roleGroups = {
-    Tank: participants.filter(p => p.role?.toLowerCase() === 'tank'),
-    Healer: participants.filter(p => p.role?.toLowerCase() === 'healer'),
-    DPS: participants.filter(p => p.role?.toLowerCase() === 'dps')
+  const { eventId } = useParams();
+  
+  // Helper function to determine role
+  const determineRole = (participant) => {
+    // If role is explicitly set, use that
+    if (participant.role) {
+      const roleUpper = participant.role.toUpperCase();
+      if (roleUpper === 'TANK' || roleUpper === 'HEALER' || roleUpper === 'DPS') {
+        return roleUpper.toLowerCase();
+      }
+    }
+    
+    // Check for stored selection
+    const storedSelection = getStoredBuildSelection(eventId, participant.user_id || participant.id);
+    if (storedSelection && storedSelection.role) {
+      return storedSelection.role.toLowerCase();
+    }
+    
+    // No role info - check builds
+    let builds = participant.User?.builds || participant.builds || [];
+    
+    // If builds is a string, parse it
+    if (typeof builds === 'string') {
+      try {
+        builds = JSON.parse(builds);
+      } catch (e) {
+        console.error('Error parsing builds string:', e);
+        builds = [];
+      }
+    }
+    
+    if (Array.isArray(builds) && builds.length > 0 && builds[0]?.spec) {
+      const spec = builds[0].spec.toUpperCase();
+      if (spec === 'TANK') return 'tank';
+      if (spec === 'HEALER') return 'healer';
+      if (spec === 'DPS') return 'dps';
+    }
+    
+    return 'unknown';
   };
+
+  // Group participants by role
+  const roleGroups = {
+    tank: participants.filter(p => determineRole(p) === 'tank'),
+    healer: participants.filter(p => determineRole(p) === 'healer'),
+    dps: participants.filter(p => determineRole(p) === 'dps')
+  };
+
+  // Log participant grouping
+  useEffect(() => {
+    logEvent('PARTICIPANT_GROUPING', {
+      tanks: roleGroups.tank.length,
+      healers: roleGroups.healer.length,
+      dps: roleGroups.dps.length,
+      total: participants.length
+    });
+  }, [participants]);
 
   return (
     <Paper sx={{ p: 2, bgcolor: '#1e1e1e' }}>
@@ -471,12 +534,12 @@ const ParticipantPool = ({ participants }) => {
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
             pb: 0.5
           }}>
-            {role} ({members.length})
+            {role.charAt(0).toUpperCase() + role.slice(1)} ({members.length})
           </Typography>
           <Box sx={{ ml: 1 }}>
             {members.map(member => (
               <DraggableMember 
-                key={member.id} 
+                key={member.id || member.user_id || (member.User?.id)} 
                 member={member} 
               />
             ))}
@@ -520,6 +583,60 @@ const TeamManagement = ({ onCreateTeam, onRemoveTeam, teamCount, canEdit }) => {
   );
 };
 
+const formatMemberWithBuilds = (member) => {
+  if (!member) return null;
+  
+  logEvent('FORMAT_MEMBER_START', {
+    id: member.id,
+    userId: member.user_id,
+    role: member.role
+  });
+  
+  // Get builds from User or directly
+  let builds = [];
+  
+  if (member.User && member.User.builds) {
+    builds = member.User.builds;
+  } else if (member.builds) {
+    builds = member.builds;
+  }
+  
+  // If builds is a string, parse it
+  if (typeof builds === 'string') {
+    try {
+      builds = JSON.parse(builds);
+    } catch (e) {
+      console.error('Error parsing builds string:', e);
+      builds = [];
+    }
+  }
+  
+  // Ensure builds is an array
+  builds = Array.isArray(builds) ? builds : [];
+  
+  // Ensure User property exists
+  const userInfo = member.User || {};
+  
+  const result = {
+    ...member,
+    user_id: member.user_id || member.id || userInfo.id,
+    User: {
+      ...userInfo,
+      id: userInfo.id || member.user_id || member.id,
+      builds: builds
+    },
+    builds: builds
+  };
+  
+  logEvent('FORMAT_MEMBER_RESULT', {
+    userId: result.user_id,
+    role: result.role,
+    buildsLength: result.builds.length
+  });
+  
+  return result;
+};
+
 const TeamPlanner = () => {
   const { eventId } = useParams();
   const { simulatedRole } = useSimulatedRole(); // Get simulated role
@@ -534,6 +651,8 @@ const TeamPlanner = () => {
   const [isAnnouncingTeams, setIsAnnouncingTeams] = useState(false);
   const [announceSuccess, setAnnounceSuccess] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [deletePresetDialog, setDeletePresetDialog] = useState(false);
+  const [presetToDelete, setPresetToDelete] = useState(null);
 
   // Check if user has permission to edit teams based on role
   const hasEditPermission = () => {
@@ -556,7 +675,7 @@ const TeamPlanner = () => {
           return;
         }
         
-        console.log(`Fetching data with guild ID: ${guildId}`);
+        logEvent('FETCH_START', { eventId, guildId });
         
         // Fetch user role
         try {
@@ -599,7 +718,11 @@ const TeamPlanner = () => {
           throw new Error(`Event with ID ${eventId} not found`);
         }
     
-        console.log('Found event data:', eventData);
+        logEvent('EVENT_DATA', {
+          eventId: eventData.id,
+          title: eventData.title,
+          participantsCount: eventData.participants?.length || 0
+        });
 
         try {
           const absenteesResponse = await fetch(`${API_URL}/api/events/${eventId}/absentees?guildId=${guildId}`, {
@@ -616,9 +739,7 @@ const TeamPlanner = () => {
         
         // Extract participants from event data
         const participantsData = eventData.participants || [];
-    
-        console.log('Participants data:', participantsData);
-    
+        
         // Filter out participants who are already in teams
         const teamMemberIds = teamsData.flatMap(team => 
           team.members?.map(member => member.user_id || member.User?.id) || []
@@ -630,10 +751,17 @@ const TeamPlanner = () => {
         });
     
         // Format participants to ensure they have the correct structure
-        const formattedParticipants = availableParticipants.map(participant => formatMemberWithBuilds(participant));
+        const formattedParticipants = availableParticipants.map(participant => 
+          formatMemberWithBuilds(participant)
+        );
     
         setParticipants(formattedParticipants);
         setTeams(teamsData);
+        
+        logEvent('SETUP_COMPLETE', {
+          participantCount: formattedParticipants.length,
+          teamCount: teamsData.length
+        });
       } catch (error) {
         console.error('Error fetching data:', error);
         setError(error.message || 'Failed to load data');
@@ -718,6 +846,7 @@ const TeamPlanner = () => {
       setIsAnnouncingTeams(false);
     }
   };
+
   const handleCloseSnackbar = () => {
     setAnnounceSuccess(null);
   };
@@ -792,6 +921,8 @@ const TeamPlanner = () => {
       return;
     }
     
+    logEvent('CREATE_TEAM_START', { eventId, guildId });
+    
     try {
       const response = await fetch(`${API_URL}/api/teams`, {
         method: 'POST',
@@ -804,10 +935,18 @@ const TeamPlanner = () => {
         })
       });
   
-      if (!response.ok) throw new Error('Failed to create team');
+      if (!response.ok) {
+        const errorData = await response.json();
+        logEvent('CREATE_TEAM_ERROR', { status: response.status, error: errorData });
+        throw new Error(errorData.error || 'Failed to create team');
+      }
+      
       const newTeam = await response.json();
+      logEvent('CREATE_TEAM_SUCCESS', { teamId: newTeam.id, name: newTeam.name });
+      
       setTeams(prev => [...prev, { ...newTeam, members: [] }]);
     } catch (error) {
+      console.error('Failed to create team:', error);
       setError('Failed to create team');
     }
   };
@@ -817,6 +956,13 @@ const TeamPlanner = () => {
       setError('You do not have permission to remove team members');
       return;
     }
+    
+    logEvent('REMOVE_MEMBER_START', {
+      teamId,
+      memberId: member.id,
+      userId: member.user_id,
+      role: member.role
+    });
     
     try {
       if (!member.user_id) {
@@ -834,12 +980,21 @@ const TeamPlanner = () => {
       }
   
       const memberExists = participants.some(p => p.user_id === member.user_id);
+      logEvent('MEMBER_EXISTS_CHECK', { exists: memberExists });
+      
       if (!memberExists) {
+        // ADD THE MEMBER BACK TO PARTICIPANTS POOL WITH ORIGINAL ROLE
         const memberWithUser = formatMemberWithBuilds({
           ...member,
           id: member.user_id,
-          User: member.User
+          User: member.User,
+          role: member.role // Keep the role!
         });
+        
+        logEvent('ADDING_TO_PARTICIPANTS', {
+          role: memberWithUser.role
+        });
+        
         setParticipants(prev => [...prev, memberWithUser]);
       }
   
@@ -853,9 +1008,143 @@ const TeamPlanner = () => {
         return team;
       }));
   
+      logEvent('REMOVE_MEMBER_SUCCESS', { teamId, userId: member.user_id });
     } catch (error) {
       console.error('Error removing team member:', error);
+      logEvent('REMOVE_MEMBER_ERROR', { error: error.message });
       setError(error.message || 'Failed to remove team member');
+    }
+  };
+
+  const handleDrop = async (memberId, teamId) => {
+    if (!hasEditPermission()) {
+      setError('You do not have permission to modify teams');
+      return;
+    }
+    
+    logEvent('DROP_START', { memberId, teamId });
+    
+    try {
+      let member = participants.find(p => 
+        p.id === memberId || p.user_id === memberId || 
+        (p.User && p.User.id === memberId)
+      );
+      let sourceTeamId = null;
+  
+      if (!member) {
+        for (const team of teams) {
+          const foundMember = team.members?.find(m => 
+            m.id === memberId || m.user_id === memberId || 
+            (m.User && m.User.id === memberId)
+          );
+          if (foundMember) {
+            member = foundMember;
+            sourceTeamId = team.id;
+            break;
+          }
+        }
+      }
+  
+      if (!member) {
+        logEvent('DROP_ERROR', { error: 'Member not found', memberId });
+        return;
+      }
+      
+      logEvent('MEMBER_FOUND', {
+        sourceTeamId,
+        role: member.role
+      });
+      
+      if (sourceTeamId === teamId) {
+        logEvent('DROP_CANCELLED', { reason: 'Same team' });
+        return;
+      }
+      
+      const userId = member.user_id || member.id || (member.User && member.User.id);
+      if (!userId) {
+        console.error('Unable to determine user ID from member:', member);
+        logEvent('DROP_ERROR', { error: 'Invalid user ID' });
+        throw new Error('Invalid member data - missing user ID');
+      }
+  
+      // Preserve the role when making API request
+      const response = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          memberId: userId,
+          role: member.role, // Keep the original role
+          sourceTeamId,
+          guildId: guildId
+        })
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        logEvent('API_ERROR', { status: response.status, error: errorData });
+        throw new Error(errorData.error || 'Failed to update team member');
+      }
+  
+      const updatedMember = await response.json();
+      logEvent('API_SUCCESS', { updatedMember: {
+        id: updatedMember.id,
+        role: updatedMember.role
+      }});
+  
+      // When processing UI updates, ensure we keep the role
+      if (sourceTeamId) {
+        setTeams(prev => prev.map(team => {
+          if (team.id === sourceTeamId) {
+            return {
+              ...team,
+              members: team.members.filter(m => 
+                m.id !== memberId && 
+                m.user_id !== memberId && 
+                (m.User?.id !== memberId)
+              )
+            };
+          }
+          if (team.id === teamId) {
+            return {
+              ...team,
+              members: [...(team.members || []), {
+                ...member,
+                role: member.role // Keep the original role
+              }]
+            };
+          }
+          return team;
+        }));
+      } else {
+        setParticipants(prev => prev.filter(p => 
+          p.id !== memberId && 
+          p.user_id !== memberId && 
+          (p.User?.id !== memberId)
+        ));
+        
+        setTeams(prev => prev.map(team => {
+          if (team.id === teamId) {
+            return {
+              ...team,
+              members: [...(team.members || []), {
+                ...member,
+                role: member.role // Keep the original role
+              }]
+            };
+          }
+          return team;
+        }));
+      }
+      
+      logEvent('STATE_UPDATED', {
+        action: sourceTeamId ? 'Moved between teams' : 'Moved from participants to team',
+        teamId
+      });
+    } catch (error) {
+      console.error('Error updating team:', error);
+      logEvent('DROP_ERROR', { error: error.message });
+      setError('Failed to update team');
     }
   };
 
@@ -885,118 +1174,6 @@ const TeamPlanner = () => {
     } catch (error) {
       console.error('Error removing team:', error);
       setError('Failed to remove team');
-    }
-  };
-
-  const handleDrop = async (memberId, teamId) => {
-    if (!hasEditPermission()) {
-      setError('You do not have permission to modify teams');
-      return;
-    }
-    
-    try {
-      let member = participants.find(p => 
-        p.id === memberId || p.user_id === memberId || 
-        (p.User && p.User.id === memberId)
-      );
-      let sourceTeamId = null;
-  
-      if (!member) {
-        for (const team of teams) {
-          const foundMember = team.members?.find(m => 
-            m.id === memberId || m.user_id === memberId || 
-            (m.User && m.User.id === memberId)
-          );
-          if (foundMember) {
-            member = foundMember;
-            sourceTeamId = team.id;
-            break;
-          }
-        }
-      }
-  
-      if (!member) {
-        return;
-      }
-      
-      if (sourceTeamId === teamId) {
-        return;
-      }
-      
-      const userId = member.user_id || member.id || (member.User && member.User.id);
-      if (!userId) {
-        console.error('Unable to determine user ID from member:', member);
-        throw new Error('Invalid member data - missing user ID');
-      }
-  
-      const response = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          memberId: userId,
-          role: member.role,
-          sourceTeamId,
-          guildId: guildId
-        })
-      });
-  
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update team member');
-      }
-  
-      const updatedMember = await response.json();
-      console.log('Updated member response:', updatedMember);
-  
-      const memberWithUserData = formatMemberWithBuilds({
-        ...updatedMember,
-        User: {
-          ...(member.User || {}),
-          builds: member.User?.builds || member.builds || []
-        }
-      });
-  
-      if (sourceTeamId) {
-        setTeams(prev => prev.map(team => {
-          if (team.id === sourceTeamId) {
-            return {
-              ...team,
-              members: team.members.filter(m => 
-                m.id !== memberId && 
-                m.user_id !== memberId && 
-                (m.User?.id !== memberId)
-              )
-            };
-          }
-          if (team.id === teamId) {
-            return {
-              ...team,
-              members: [...(team.members || []), memberWithUserData]
-            };
-          }
-          return team;
-        }));
-      } else {
-        setParticipants(prev => prev.filter(p => 
-          p.id !== memberId && 
-          p.user_id !== memberId && 
-          (p.User?.id !== memberId)
-        ));
-        
-        setTeams(prev => prev.map(team => {
-          if (team.id === teamId) {
-            return {
-              ...team,
-              members: [...(team.members || []), memberWithUserData]
-            };
-          }
-          return team;
-        }));
-      }
-    } catch (error) {
-      console.error('Error updating team:', error);
-      setError('Failed to update team');
     }
   };
 
@@ -1059,7 +1236,6 @@ const TeamPlanner = () => {
       console.error('Error cleaning up teams:', error);
     }
   };
-
 
   const loadPreset = async (presetId) => {
     if (!hasEditPermission()) {
@@ -1144,58 +1320,6 @@ const TeamPlanner = () => {
     }
   };
 
-  const isDuplicateMember = (memberId) => {
-    // Check teams
-    const inTeams = teams.some(team => 
-      team.members?.some(member => member.user_id === memberId)
-    );
-    
-    // Check participants
-    const inParticipants = participants.some(
-      participant => participant.user_id === memberId
-    );
-  
-    return inTeams || inParticipants;
-  };
-
-  const formatMemberWithBuilds = (member) => {
-    if (!member) return null;
-    
-    console.log('Formatting member:', member);
-    
-    let builds = member.User?.builds || member.builds || [];
-    
-    // If builds is a string, parse it
-    if (typeof builds === 'string') {
-      try {
-        builds = JSON.parse(builds);
-      } catch (e) {
-        console.error('Error parsing builds:', e);
-        builds = [];
-      }
-    }
-  
-    // Ensure builds is an array
-    builds = Array.isArray(builds) ? builds : [];
-  
-    // Ensure User property exists
-    const userInfo = member.User || {};
-  
-    return {
-      ...member,
-      user_id: member.user_id || member.id || userInfo.id,
-      User: {
-        ...userInfo,
-        id: userInfo.id || member.user_id || member.id,
-        builds: builds
-      },
-      builds: builds
-    };
-  };
-
-  const [deletePresetDialog, setDeletePresetDialog] = useState(false);
-  const [presetToDelete, setPresetToDelete] = useState(null);
-
   const handleDeletePreset = async (preset) => {
     if (!hasEditPermission()) {
       setError('You do not have permission to delete presets');
@@ -1222,13 +1346,6 @@ const TeamPlanner = () => {
 
   // Check if user has edit permissions
   const canEdit = hasEditPermission();
-  // For debugging permissions
-  console.log('Permission check:', {
-    canEdit,
-    simulatedRole,
-    userRole,
-    effectiveRole: simulatedRole || userRole
-  });
 
   if (error) {
     return (
