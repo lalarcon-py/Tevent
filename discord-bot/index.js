@@ -2815,33 +2815,41 @@ client.on('interactionCreate', async (interaction) => {
               
               if (player.builds) {
                 try {
-                  // Parse builds data if it's a string
+                  // Handle builds regardless of whether it's a string or object
                   let buildsData = player.builds;
+                  
+                  // If it's a string (regular JSON), parse it
                   if (typeof player.builds === 'string') {
                     buildsData = JSON.parse(player.builds);
                   }
                   
-                  // Handle different builds structures
-                  if (Array.isArray(buildsData) && buildsData.length > 0) {
-                    // If builds is an array, use the first (primary) build
-                    const primaryBuild = buildsData[0];
-                    
-                    if (primaryBuild.weapon) {
-                      weaponEmoji = getWeaponEmoji(primaryBuild.weapon);
-                    } else if (primaryBuild.primary_weapon) {
-                      weaponEmoji = getWeaponEmoji(primaryBuild.primary_weapon);
-                    } else if (primaryBuild.weaponType) {
-                      weaponEmoji = getWeaponEmoji(primaryBuild.weaponType);
+                  // Add debugging to see the actual data structure
+                  console.log(`DEBUG: Builds data type: ${typeof buildsData}`);
+                  console.log(`DEBUG: Builds data structure:`, JSON.stringify(buildsData));
+                  
+                  // More robust structure checking
+                  if (buildsData) {
+                    if (Array.isArray(buildsData)) {
+                      // Handle array format
+                      if (buildsData.length > 0) {
+                        const primaryBuild = buildsData[0];
+                        // Check all possible property paths
+                        const weaponType = primaryBuild.weapon || 
+                                           primaryBuild.primary_weapon || 
+                                           primaryBuild.weaponType ||
+                                           (primaryBuild.equipment && primaryBuild.equipment.weapon);
+                        
+                        if (weaponType) weaponEmoji = getWeaponEmoji(weaponType);
+                      }
+                    } else {
+                      // Handle object format (could be from JSONB)
+                      const weaponType = buildsData.weapon || 
+                                         buildsData.primary_weapon || 
+                                         buildsData.weaponType ||
+                                         (buildsData.equipment && buildsData.equipment.weapon);
+                      
+                      if (weaponType) weaponEmoji = getWeaponEmoji(weaponType);
                     }
-                  } else if (buildsData.weapon) {
-                    // If builds is an object with weapon property
-                    weaponEmoji = getWeaponEmoji(buildsData.weapon);
-                  } else if (buildsData.primary_weapon) {
-                    // If builds is an object with primary_weapon property
-                    weaponEmoji = getWeaponEmoji(buildsData.primary_weapon);
-                  } else if (buildsData.weaponType) {
-                    // If builds is an object with weaponType property
-                    weaponEmoji = getWeaponEmoji(buildsData.weaponType);
                   }
                   
                   console.log(`DEBUG: Weapon emoji for ${username}: ${weaponEmoji}`);
