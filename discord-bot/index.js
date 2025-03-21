@@ -958,22 +958,22 @@ app.post('/webhook/new-event', async (req, res) => {
         .addComponents(
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_TANK`)
-            .setLabel('Sign up as Tank')
+            .setLabel('Tank')
             .setEmoji('1352736996405022780')
             .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_HEALER`)
-            .setLabel('Sign up as Healer')
+            .setLabel('Healer')
             .setEmoji('1352737011479482468')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_DPS`)
-            .setLabel('Sign up as DPS')
+            .setLabel('DPS')
             .setEmoji('1352737043972624518')
             .setStyle(ButtonStyle.Danger),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_ABSENT`)
-            .setLabel('Mark as Absent')
+            .setLabel('Absent')
             .setEmoji('❌')
             .setStyle(ButtonStyle.Secondary)
         );
@@ -3690,22 +3690,22 @@ async function handleEventsCommand(interaction, appGuildId) {
       .addComponents(
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_TANK`)
-          .setLabel('Sign up as Tank')
+          .setLabel('Tank')
           .setEmoji('1352736996405022780')
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_HEALER`)
-          .setLabel('Sign up as Healer')
+          .setLabel('Healer')
           .setEmoji('1352737011479482468')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_DPS`)
-          .setLabel('Sign up as DPS')
+          .setLabel('DPS')
           .setEmoji('1352737043972624518')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_ABSENT`)
-          .setLabel('Mark as Absent')
+          .setLabel('Absent')
           .setEmoji('❌')
           .setStyle(ButtonStyle.Secondary)
       );

@@ -102,7 +102,7 @@ module.exports = {
         }).join('\n');
       };
       
-      // Helper function to get emoji for weapon types using custom Discord emojis
+      // Helper function to get emoji for weapon types
       function getWeaponEmoji(weaponType) {
         if (!weaponType) return '';
         
@@ -153,44 +153,27 @@ module.exports = {
         }).join('\n');
       };
       
-      // Build progress bars for roles - updated with custom emojis
-      const buildProgressBar = (current, max, emoji) => {
-        if (max <= 0) return '';
-        
-        const full = '█';
-        const empty = '░';
-        
-        // Limit to actual max
-        current = Math.min(current, max);
-        
-        // Calculate filled slots (each character represents 10%)
-        const filledSlots = Math.round((current / max) * 10);
-        const emptySlots = 10 - filledSlots;
-        
-        return `${emoji} ${full.repeat(filledSlots)}${empty.repeat(emptySlots)} ${current}/${max}`;
-      };
-      
-      // Create description with title, time, and progress bars - updated with custom emojis
-      const description = [
-        `${statusEmoji} **${event.title || 'Event'}** ${countdownText}`,
-        '',
-        `📅 **${dateFormatted}** at **${timeFormatted}**`,
-        `📍 **Location:** ${event.location || '—'}`,
-        '',
-        `${buildProgressBar(tanks.length, event.tanks || 0, tankEmoji)}`,
-        `${buildProgressBar(healers.length, event.healers || 0, healerEmoji)}`,
-        `${buildProgressBar(dps.length, event.dps || 0, dpsEmoji)}`,
-        '',
-        event.description ? `**Description:** ${event.description}` : ''
-      ].filter(line => line !== '').join('\n');
-      
-      // Create embed
+      // Create embed with simplified description - no progress bars
       const embed = new EmbedBuilder()
         .setTitle(`${statusEmoji} ${event.title || 'Event'}`)
         .setColor(statusColor)
-        .setDescription(description);
+        .setDescription(`${statusEmoji} **${event.title || 'Event'}** ${countdownText}\n\n${event.description || ''}`);
       
-      // Add fields for current signups - updated with custom emojis
+      // Add date/time and location as inline fields
+      embed.addFields(
+        { 
+          name: 'Time: ', 
+          value: `📅 ${dateFormatted} at **${timeFormatted}**`, 
+          inline: true 
+        },
+        { 
+          name: 'Location: ', 
+          value: event.location || 'Not specified', 
+          inline: true 
+        }
+      );
+      
+      // Add fields for current signups - with player names
       embed.addFields(
         { 
           name: `${tankEmoji} Tanks (${tanks.length}/${event.tanks || 0})`, 
@@ -209,17 +192,16 @@ module.exports = {
         }
       );
       
-      // Add absentees and tentative in a separate row
       embed.addFields(
         { 
           name: `❌ Absent (${absentees.length || 0})`, 
           value: formatAbsentees(), 
-          inline: true 
+          inline: false
         },
         { 
           name: `⏳ Tentative (0)`, 
           value: '—', 
-          inline: true 
+          inline: false
         }
       );
       
@@ -231,7 +213,6 @@ module.exports = {
         });
       }
       
-      // Add footer with helpful UI hints
       embed.setFooter({ 
         text: `Use buttons below to sign up • Event ID: ${event.id}` 
       });
@@ -251,28 +232,20 @@ module.exports = {
    */
   createTeamEmbed: (team) => {
     try {
-      // Custom role emojis
       const tankEmoji = '<:Tank:1352736996405022780>';
       const healerEmoji = '<:Healer:1352737011479482468>';
       const dpsEmoji = '<:DPS:1352737043972624518>';
       
-      // Handle case where members might be undefined
       const members = team.members || [];
-      
-      // Format members by role with enhanced styling
       const tanks = members.filter(m => m.role === 'TANK') || [];
       const healers = members.filter(m => m.role === 'HEALER') || [];
       const dps = members.filter(m => m.role === 'DPS') || [];
       
-      // Calculate total participants
       const totalParticipants = tanks.length + healers.length + dps.length;
-      
-      // Get additional team data if available
       const late = team.late || [];
       const tentative = team.tentative || [];
       const extras = late.length + tentative.length;
       
-      // Calculate total with extras
       const totalDisplay = `${totalParticipants}${extras > 0 ? ` (+${extras})` : ''}`;
       
       // Format date string
@@ -284,7 +257,6 @@ module.exports = {
         hour: 'numeric', minute: '2-digit', hour12: true 
       });
       
-      // Time ago calculation with modern display
       const now = new Date();
       const diffTime = Math.abs(now - eventDate);
       const diffHours = Math.floor(diffTime / (1000 * 60 * 60));

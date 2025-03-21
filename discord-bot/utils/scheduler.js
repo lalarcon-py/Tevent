@@ -64,22 +64,22 @@ module.exports = (client) => {
                   .addComponents(
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_TANK`)
-                      .setLabel('Sign up as Tank')
+                      .setLabel('Tank')
                       .setEmoji('1352736996405022780')
                       .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_HEALER`)
-                      .setLabel('Sign up as Healer')
+                      .setLabel('Healer')
                       .setEmoji('1352737011479482468')
                       .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_DPS`)
-                      .setLabel('Sign up as DPS') 
+                      .setLabel('DPS') 
                       .setEmoji('1352737043972624518')
                       .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_ABSENT`)
-                      .setLabel('Mark as Absent')
+                      .setLabel('Absent')
                       .setEmoji('❌')
                       .setStyle(ButtonStyle.Secondary)
   );
