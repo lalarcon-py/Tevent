@@ -1143,35 +1143,162 @@ client.on('guildMemberAdd', async (member) => {
   try {
     // Get app guild ID from database
     const appGuildId = await getGuildMapping(member.guild.id);
-    if (!appGuildId) return; // Skip if no mapping exists
+    if (!appGuildId) {
+      console.log(`[INFO] No guild mapping found for Discord server ${member.guild.id}. Skipping user registration.`);
+      return; // Skip if no mapping exists
+    }
     
-    // Login to get session cookie
-    const loginResponse = await axios.post(`${API_URL}/api/auth/bot-login`, {
-      botSecret: process.env.DISCORD_CLIENT_SECRET
-    });
+    // Log attempt to register user
+    console.log(`[INFO] Attempting to register user ${member.user.username} (${member.id}) to guild ${appGuildId}`);
     
-    if (!loginResponse.data.success) {
-      console.error('Bot login failed');
+    // Check if API_URL is configured properly
+    if (!API_URL || API_URL === 'https://tevent.app') {
+      console.log(`[WARN] API_URL not properly configured or backend unavailable. Cannot register user automatically.`);
       return;
     }
     
-    const cookies = loginResponse.headers['set-cookie'];
-    
-    // Add the user to the application guild
-    await axios.post(`${API_URL}/api/users`, {
-      discordId: member.id,
-      username: member.user.username,
-      role: 'Guild Member',
-      guildId: appGuildId
-    }, {
-      headers: {
-        Cookie: cookies
+    // Try direct database registration first instead of API
+    try {
+      // Check if user already exists
+      const existingResult = await pool.query(
+        'SELECT id FROM users WHERE discord_id = $1',
+        [member.id]
+      );
+      
+      if (existingResult.rows && existingResult.rows.length > 0) {
+        console.log(`[INFO] User ${member.user.username} already exists in database.`);
+        
+        // Check if user is in the guild
+        const memberResult = await pool.query(
+          'SELECT id FROM guild_members WHERE guild_id = $1 AND user_id = $2',
+          [appGuildId, existingResult.rows[0].id]
+        );
+        
+        if (!memberResult.rows || memberResult.rows.length === 0) {
+          // Add user to guild
+          await pool.query(
+            `INSERT INTO guild_members
+             (id, guild_id, user_id, role, created_at, updated_at)
+             VALUES
+             (gen_random_uuid(), $1, $2, 'Guild Member', NOW(), NOW())`,
+            [appGuildId, existingResult.rows[0].id]
+          );
+          
+          console.log(`[INFO] Added existing user ${member.user.username} to guild ${appGuildId}`);
+        } else {
+          console.log(`[INFO] User ${member.user.username} already in guild ${appGuildId}`);
+        }
+        
+        return;
       }
-    });
+      
+      // Register new user directly in database
+      const userResult = await pool.query(
+        `INSERT INTO users
+         (id, username, discord_id, created_at, updated_at)
+         VALUES
+         (gen_random_uuid(), $1, $2, NOW(), NOW())
+         RETURNING id`,
+        [member.user.username, member.id]
+      );
+      
+      if (userResult.rows && userResult.rows.length > 0) {
+        // Add user to guild
+        await pool.query(
+          `INSERT INTO guild_members
+           (id, guild_id, user_id, role, created_at, updated_at)
+           VALUES
+           (gen_random_uuid(), $1, $2, 'Guild Member', NOW(), NOW())`,
+          [appGuildId, userResult.rows[0].id]
+        );
+        
+        console.log(`[INFO] Successfully registered user ${member.user.username} to guild ${appGuildId}`);
+      }
+      
+      return;
+    } catch (dbError) {
+      console.error(`[ERROR] Database registration failed: ${dbError.message}`);
+      // Fall back to API method if database direct access fails
+    }
     
-    console.log(`User ${member.user.username} added to guild ${appGuildId}!`);
+    // API fallback method (only attempt if above fails)
+    try {
+      // First try token-based authentication
+      let authHeader = null;
+      
+      try {
+        const tokenResponse = await axios.post(`${API_URL}/auth/bot-token`, {
+          botSecret: process.env.DISCORD_CLIENT_SECRET
+        }, {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000 // 5 second timeout
+        });
+        
+        if (tokenResponse.data && tokenResponse.data.token) {
+          console.log('[INFO] Token authentication successful');
+          authHeader = { 'Authorization': `Bearer ${tokenResponse.data.token}` };
+        }
+      } catch (tokenError) {
+        console.log(`[WARN] Token auth failed, trying session auth: ${tokenError.message}`);
+      }
+      
+      // If token auth failed, try session-based auth
+      if (!authHeader) {
+        try {
+          const loginResponse = await axios.post(`${API_URL}/auth/bot-login`, {
+            botSecret: process.env.DISCORD_CLIENT_SECRET
+          }, {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 5000 // 5 second timeout
+          });
+          
+          if (loginResponse.headers['set-cookie']) {
+            console.log('[INFO] Session authentication successful');
+            authHeader = { Cookie: loginResponse.headers['set-cookie'] };
+          } else {
+            throw new Error('No session cookie received');
+          }
+        } catch (loginError) {
+          console.error(`[ERROR] Authentication failed: ${loginError.message}`);
+          return; // Exit if we can't authenticate
+        }
+      }
+      
+      // Now add the user with authentication
+      try {
+        await axios.post(`${API_URL}/api/users`, {
+          discordId: member.id,
+          username: member.user.username,
+          role: 'Guild Member',
+          guildId: appGuildId
+        }, {
+          headers: {
+            ...(authHeader || {}),
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000 // 5 second timeout
+        });
+        
+        console.log(`[INFO] User ${member.user.username} added to guild ${appGuildId} via API!`);
+      } catch (userError) {
+        // Check specific error - if user already exists, this is expected
+        if (userError.response && userError.response.status === 409) {
+          console.log(`[INFO] User ${member.user.username} already exists in the system.`);
+        } else {
+          console.error(`[ERROR] Failed to add user: ${userError.message}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[ERROR] Error adding new user: ${error.message}`);
+      // Do not crash, just log the error and continue
+    }
   } catch (error) {
     console.error('Error adding new user:', error);
+    // Just log the error, do not crash the bot
   }
 });
 

@@ -39,7 +39,7 @@ module.exports = {
         statusColor = '#f44336'; // Red for today
       }
       
-      // HARDCODED emoji strings - do not use template literals
+      // Hardcoded emoji strings
       const tankEmoji = '<:Tank:1352736996405022780>';
       const healerEmoji = '<:Healer:1352737011479482468>';
       const dpsEmoji = '<:DPS:1352737043972624518>';
@@ -153,23 +153,18 @@ module.exports = {
         }).join('\n');
       };
       
-      // Create embed with simplified title and description - no duplicate role info
+      // Create embed with simplified title and description
       const embed = new EmbedBuilder()
         .setTitle(`${statusEmoji} ${event.title || 'Event'}`)
         .setColor(statusColor)
         .setDescription(`${countdownText}${event.description ? `\n\n${event.description}` : ''}`);
       
-      // Add date/time and location as inline fields on the same line
+      // Add time as non-inline field (removing location to fix layout issues)
       embed.addFields(
         { 
-          name: '⏰ Time', 
+          name: '⏰ Time & Date', 
           value: `📅 ${dateFormatted} at **${timeFormatted}**`, 
-          inline: true 
-        },
-        { 
-          name: '📍 Location', 
-          value: event.location || 'Not specified', 
-          inline: true 
+          inline: false 
         }
       );
       
