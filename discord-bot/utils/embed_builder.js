@@ -135,37 +135,113 @@ module.exports = {
    * Create an embed for a team
    */
   createTeamEmbed: (team) => {
-    const tanks = team.members?.filter(m => m.role === 'TANK') || [];
-    const healers = team.members?.filter(m => m.role === 'HEALER') || [];
-    const dps = team.members?.filter(m => m.role === 'DPS') || [];
-    
-    const embed = new EmbedBuilder()
-      .setTitle(`👥 Team: ${team.name}`)
-      .setColor('#2ecc71')
-      .addFields(
-        { 
-          name: '🛡️ Tanks', 
-          value: tanks.length > 0 ? 
-            tanks.map(m => m.User?.username || 'Unknown').join('\n') : 'None', 
-          inline: true 
-        },
-        { 
-          name: '💚 Healers', 
-          value: healers.length > 0 ? 
-            healers.map(m => m.User?.username || 'Unknown').join('\n') : 'None', 
-          inline: true 
-        },
-        { 
-          name: '⚔️ DPS', 
-          value: dps.length > 0 ? 
-            dps.map(m => m.User?.username || 'Unknown').join('\n') : 'None', 
-          inline: true 
+    try {
+        // Handle case where members might be undefined
+        const members = team.members || [];
+        
+        // Format members by role
+        const tanks = members.filter(m => m.role === 'TANK') || [];
+        const healers = members.filter(m => m.role === 'HEALER') || [];
+        const dps = members.filter(m => m.role === 'DPS') || [];
+        
+        // Calculate total participants
+        const totalParticipants = tanks.length + healers.length + dps.length;
+        
+        // Get absentees and tentative members (if available in your data structure)
+        const late = team.late || [];
+        const tentative = team.tentative || [];
+        const extras = late.length + tentative.length;
+        
+        // Calculate total with extras
+        const totalDisplay = `${totalParticipants}${extras > 0 ? ` (+${extras})` : ''}`;
+        
+        // Format date string (adjust based on your event data structure)
+        const eventDate = new Date(team.event_time || team.created_at || new Date());
+        const dateString = eventDate.toLocaleDateString('en-US', { 
+            month: 'long', day: 'numeric', year: 'numeric' 
+        });
+        const timeString = eventDate.toLocaleTimeString('en-US', { 
+            hour: 'numeric', minute: '2-digit', hour12: true 
+        });
+        
+        // Time ago calculation
+        const now = new Date();
+        const diffTime = Math.abs(now - eventDate);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        let timeAgoString = '';
+        
+        if (diffDays === 0) {
+            timeAgoString = 'today';
+        } else if (diffDays === 1) {
+            timeAgoString = 'a day ago';
+        } else {
+            timeAgoString = `${diffDays} days ago`;
         }
-      )
-      .setFooter({ text: `Team ID: ${team.id}` });
-    
-    return embed;
-  },
+        
+        // Format players with numbers - exactly like image
+        const formatPlayers = (players) => {
+            if (!players || players.length === 0) return '—';
+            
+            return players.map((player, index) => {
+                const username = player.User?.username || player.username || 'Unknown';
+                return `${index + 1} ${username}`;
+            }).join('\n');
+        };
+        
+        // Create the embed with exact formatting as shown in image
+        const embed = new EmbedBuilder()
+            .setTitle(`Conflict ${team.name || 'Tevent/Bellandir'}`)
+            .setColor('#DC143C') // Crimson red color
+            .setDescription(`👤 ${totalDisplay}\n📅 ${dateString}    ⏰ ${timeString}    ⏱ ${timeAgoString}`)
+            .addFields(
+                { 
+                    name: `Tank (${tanks.length})`, 
+                    value: formatPlayers(tanks), 
+                    inline: true 
+                },
+                { 
+                    name: `Dps (${dps.length})`, 
+                    value: formatPlayers(dps), 
+                    inline: true 
+                },
+                { 
+                    name: `Healer (${healers.length})`, 
+                    value: formatPlayers(healers), 
+                    inline: true 
+                }
+            );
+        
+        // Add late section if members exist
+        if (late.length > 0) {
+            embed.addFields({
+                name: `⏲ Late (${late.length}):`,
+                value: formatPlayers(late),
+                inline: false
+            });
+        }
+        
+        // Add tentative section if members exist
+        if (tentative.length > 0) {
+            embed.addFields({
+                name: `⏳ Tentative (${tentative.length}):`,
+                value: formatPlayers(tentative),
+                inline: false
+            });
+        }
+        
+        // Add footer with links exactly as shown in image
+        embed.setFooter({ text: `Web View | Comp | Gcat | Premium` });
+        
+        return embed;
+    } catch (error) {
+        console.error('Error creating team embed:', error);
+        // Return a simple fallback embed if there's an error
+        return new EmbedBuilder()
+            .setTitle('Team Details')
+            .setDescription('Error creating detailed team information')
+            .setColor('#ff0000');
+    }
+},
   
   /**
    * Create an embed for attendance statistics
