@@ -39,6 +39,11 @@ module.exports = {
         statusColor = '#f44336'; // Red for today
       }
       
+      // Custom role emojis
+      const tankEmoji = '<:Tank:1352736996405022780>';
+      const healerEmoji = '<:Healer:1352737011479482468>';
+      const dpsEmoji = '<:DPS:1352737043972624518>';
+      
       // Format the time for display
       const dateFormatted = eventTime.toLocaleDateString('en-US', { 
         weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
@@ -148,7 +153,7 @@ module.exports = {
         }).join('\n');
       };
       
-      // Build progress bars for roles
+      // Build progress bars for roles - updated with custom emojis
       const buildProgressBar = (current, max, emoji) => {
         if (max <= 0) return '';
         
@@ -165,16 +170,16 @@ module.exports = {
         return `${emoji} ${full.repeat(filledSlots)}${empty.repeat(emptySlots)} ${current}/${max}`;
       };
       
-      // Create description with title, time, and progress bars
+      // Create description with title, time, and progress bars - updated with custom emojis
       const description = [
         `${statusEmoji} **${event.title || 'Event'}** ${countdownText}`,
         '',
         `📅 **${dateFormatted}** at **${timeFormatted}**`,
         `📍 **Location:** ${event.location || '—'}`,
         '',
-        `${buildProgressBar(tanks.length, event.tanks || 0, '🛡️')}`,
-        `${buildProgressBar(healers.length, event.healers || 0, '💚')}`,
-        `${buildProgressBar(dps.length, event.dps || 0, '⚔️')}`,
+        `${buildProgressBar(tanks.length, event.tanks || 0, tankEmoji)}`,
+        `${buildProgressBar(healers.length, event.healers || 0, healerEmoji)}`,
+        `${buildProgressBar(dps.length, event.dps || 0, dpsEmoji)}`,
         '',
         event.description ? `**Description:** ${event.description}` : ''
       ].filter(line => line !== '').join('\n');
@@ -185,20 +190,20 @@ module.exports = {
         .setColor(statusColor)
         .setDescription(description);
       
-      // Add fields for current signups
+      // Add fields for current signups - updated with custom emojis
       embed.addFields(
         { 
-          name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`, 
+          name: `${tankEmoji} Tanks (${tanks.length}/${event.tanks || 0})`, 
           value: formatPlayers(tanks), 
           inline: true 
         },
         { 
-          name: `💚 Healers (${healers.length}/${event.healers || 0})`, 
+          name: `${healerEmoji} Healers (${healers.length}/${event.healers || 0})`, 
           value: formatPlayers(healers), 
           inline: true 
         },
         { 
-          name: `⚔️ DPS (${dps.length}/${event.dps || 0})`, 
+          name: `${dpsEmoji} DPS (${dps.length}/${event.dps || 0})`, 
           value: formatPlayers(dps), 
           inline: true 
         }
@@ -246,6 +251,11 @@ module.exports = {
    */
   createTeamEmbed: (team) => {
     try {
+      // Custom role emojis
+      const tankEmoji = '<:Tank:1352736996405022780>';
+      const healerEmoji = '<:Healer:1352737011479482468>';
+      const dpsEmoji = '<:DPS:1352737043972624518>';
+      
       // Handle case where members might be undefined
       const members = team.members || [];
       
@@ -374,12 +384,12 @@ module.exports = {
           `${team.description ? `**Notes:** ${team.description}\n` : ''}`
         );
       
-      // Create role distribution bar if we have role limits
+      // Create role distribution bar if we have role limits - updated with custom emojis
       if (team.max_tanks || team.max_healers || team.max_dps) {
         const roleBar = [
-          `🛡️ \`${tanks.length}/${team.max_tanks || '∞'}\` | ` +
-          `💚 \`${healers.length}/${team.max_healers || '∞'}\` | ` +
-          `⚔️ \`${dps.length}/${team.max_dps || '∞'}\``
+          `${tankEmoji} \`${tanks.length}/${team.max_tanks || '∞'}\` | ` +
+          `${healerEmoji} \`${healers.length}/${team.max_healers || '∞'}\` | ` +
+          `${dpsEmoji} \`${dps.length}/${team.max_dps || '∞'}\``
         ];
         
         embed.addFields({
@@ -389,20 +399,20 @@ module.exports = {
         });
       }
       
-      // Add role fields with enhanced styling
+      // Add role fields with enhanced styling - updated with custom emojis
       embed.addFields(
         { 
-          name: `🛡️ Tanks (${tanks.length})`, 
+          name: `${tankEmoji} Tanks (${tanks.length})`, 
           value: formatPlayers(tanks), 
           inline: true 
         },
         { 
-          name: `💚 Healers (${healers.length})`, 
+          name: `${healerEmoji} Healers (${healers.length})`, 
           value: formatPlayers(healers), 
           inline: true 
         },
         { 
-          name: `⚔️ DPS (${dps.length})`, 
+          name: `${dpsEmoji} DPS (${dps.length})`, 
           value: formatPlayers(dps), 
           inline: true 
         }

@@ -107,6 +107,10 @@ module.exports = {
           if (embeds.length === 0) {
             return interaction.reply('Error displaying event information. Please try again later.');
           }
+
+          const tankEmoji = '<:Tank:1352736996405022780>';
+          const healerEmoji = '<:Healer:1352737011479482468>';
+          const dpsEmoji = '<:DPS:1352737043972624518>';
           
           // Create signup buttons for first event
           const row = new ActionRowBuilder()
@@ -114,17 +118,17 @@ module.exports = {
               new ButtonBuilder()
                 .setCustomId(`signup_${eventId}_TANK`)
                 .setLabel('Tank')
-                .setEmoji('🛡️')
+                .setEmoji('1352736996405022780')
                 .setStyle(ButtonStyle.Primary),
               new ButtonBuilder()
                 .setCustomId(`signup_${eventId}_HEALER`)
                 .setLabel('Healer')
-                .setEmoji('💚')
+                .setEmoji('1352737011479482468')
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder()
                 .setCustomId(`signup_${eventId}_DPS`)
                 .setLabel('DPS')
-                .setEmoji('⚔️')
+                .setEmoji('1352737043972624518')
                 .setStyle(ButtonStyle.Danger),
               new ButtonBuilder()
                 .setCustomId(`signup_${eventId}_TENTATIVE`)
@@ -171,17 +175,17 @@ module.exports = {
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_TANK`)
                 .setLabel('Sign up as Tank')
-                .setEmoji('🛡️')
+                .setEmoji('1352736996405022780')
                 .setStyle(ButtonStyle.Primary),
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_HEALER`)
                 .setLabel('Sign up as Healer')
-                .setEmoji('💚')
+                .setEmoji('1352737011479482468')
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_DPS`)
                 .setLabel('Sign up as DPS')
-                .setEmoji('⚔️')
+                .setEmoji('1352737043972624518')
                 .setStyle(ButtonStyle.Danger),
               new ButtonBuilder()
                 .setCustomId(`signup_${event.id}_ABSENT`)

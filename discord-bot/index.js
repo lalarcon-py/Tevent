@@ -262,7 +262,7 @@ async function markItemAsClaimed(itemId, claimedBy, itemName = null, itemType = 
         .setCustomId(`need_item_${itemId}`)
         .setLabel('Need Item')
         .setStyle(ButtonStyle.Danger)
-        .setEmoji('🛡️')
+        .setEmoji('${tankEmoji}')
         .setDisabled(true);
         
       const disabledNeedTraitButton = new ButtonBuilder()
@@ -373,18 +373,18 @@ function setupScheduledPostings(client) {
           });
           
           // Add react instructions
-          eventEmbed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+          eventEmbed.setDescription(`${event.description || 'No description provided'}\n\n**React to sign up:**\n${tankEmoji} - Tank\n${healerEmoji} - Healer\n${dpsEmoji} - DPS\n❌ - Absent`);
           
           const message = await channel.send({ embeds: [eventEmbed] });
           
           // Add role reactions
-          await message.react('🛡️'); // Tank
-          await message.react('💚'); // Healer
-          await message.react('⚔️'); // DPS
+          await message.react('${tankEmoji}'); // Tank
+          await message.react('${healerEmoji}'); // Healer
+          await message.react('${dpsEmoji}'); // DPS
           await message.react('❌'); // Absent
           
           // Set up collector for signups
-          const filter = (reaction, user) => ['🛡️', '💚', '⚔️', '❌'].includes(reaction.emoji.name) && !user.bot;
+          const filter = (reaction, user) => ['${tankEmoji}', '${healerEmoji}', '${dpsEmoji}', '❌'].includes(reaction.emoji.name) && !user.bot;
           const collector = message.createReactionCollector({ filter, time: 7 * 24 * 60 * 60 * 1000 });
           
           // Handle reactions
@@ -419,15 +419,15 @@ function setupScheduledPostings(client) {
               let role, action;
               
               switch(reaction.emoji.name) {
-                case '🛡️':
+                case '${tankEmoji}':
                   role = 'TANK';
                   action = 'signup';
                   break;
-                case '💚':
+                case '${healerEmoji}':
                   role = 'HEALER';
                   action = 'signup';
                   break;
-                case '⚔️':
+                case '${dpsEmoji}':
                   role = 'DPS';
                   action = 'signup';
                   break;
@@ -587,7 +587,7 @@ function setupScheduledPostings(client) {
                   }
                 });
                 
-                updatedEmbed.setDescription(`${updatedEvent.description || 'No description provided'}\n\n**React to sign up:**\n🛡️ - Tank\n💚 - Healer\n⚔️ - DPS\n❌ - Absent`);
+                updatedEmbed.setDescription(`${updatedEvent.description || 'No description provided'}\n\n**React to sign up:**\n${tankEmoji} - Tank\n${healerEmoji} - Healer\n${dpsEmoji} - DPS\n❌ - Absent`);
                 updatedEmbed.setFooter({ text: `React with emojis below to sign up • Event ID: ${eventId}` });
                 
                 await message.edit({ embeds: [updatedEmbed] });
@@ -746,7 +746,7 @@ app.post('/webhook/new-item', async (req, res) => {
         new ButtonBuilder()
           .setCustomId(`need_item_${item.id}`)
           .setLabel('Need Item')
-          .setEmoji('🛡️')
+          .setEmoji('1352736996405022780')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId(`need_trait_${item.id}`)
@@ -904,21 +904,21 @@ app.post('/webhook/new-event', async (req, res) => {
           inline: false
         },
         {
-          name: `🛡️ Tanks (${tanks.length}/${eventData.tanks || 0})`,
+          name: `${tankEmoji} Tanks (${tanks.length}/${eventData.tanks || 0})`,
           value: tanks.length > 0 ? 
             tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
             '—',
           inline: true
         },
         {
-          name: `💚 Healers (${healers.length}/${eventData.healers || 0})`,
+          name: `${healerEmoji} Healers (${healers.length}/${eventData.healers || 0})`,
           value: healers.length > 0 ? 
             healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
             '—',
           inline: true
         },
         {
-          name: `⚔️ DPS (${dps.length}/${eventData.dps || 0})`,
+          name: `${dpsEmoji} DPS (${dps.length}/${eventData.dps || 0})`,
           value: dps.length > 0 ? 
             dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
             '—',
@@ -955,17 +955,17 @@ app.post('/webhook/new-event', async (req, res) => {
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_TANK`)
             .setLabel('Sign up as Tank')
-            .setEmoji('🛡️')
+            .setEmoji('1352736996405022780')
             .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_HEALER`)
             .setLabel('Sign up as Healer')
-            .setEmoji('💚')
+            .setEmoji('1352737011479482468')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_DPS`)
             .setLabel('Sign up as DPS')
-            .setEmoji('⚔️')
+            .setEmoji('1352737043972624518')
             .setStyle(ButtonStyle.Danger),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_ABSENT`)
@@ -1572,9 +1572,9 @@ client.on('interactionCreate', async (interaction) => {
                 .setFields(
                   { name: '⏰ Time', value: originalEmbed.fields[0].value, inline: false },
                   { name: '📍 Location', value: originalEmbed.fields[1].value, inline: false },
-                  { name: '🛡️ Tanks', value: `${updatedCounts.rows[0].tank_count}/${eventDetails.tanks || 0}`, inline: true },
-                  { name: '💚 Healers', value: `${updatedCounts.rows[0].healer_count}/${eventDetails.healers || 0}`, inline: true },
-                  { name: '⚔️ DPS', value: `${updatedCounts.rows[0].dps_count}/${eventDetails.dps || 0}`, inline: true }
+                  { name: '${tankEmoji} Tanks', value: `${updatedCounts.rows[0].tank_count}/${eventDetails.tanks || 0}`, inline: true },
+                  { name: '${healerEmoji} Healers', value: `${updatedCounts.rows[0].healer_count}/${eventDetails.healers || 0}`, inline: true },
+                  { name: '${dpsEmoji} DPS', value: `${updatedCounts.rows[0].dps_count}/${eventDetails.dps || 0}`, inline: true }
                 );
               
               await message.edit({ embeds: [updatedEmbed] });
@@ -2651,12 +2651,15 @@ client.on('interactionCreate', async (interaction) => {
       
       // Handle event signup buttons
       client.on('interactionCreate', async (interaction) => {
-        if (interaction.isButton() && interaction.customId.startsWith('signup_')) {
-          const [_, eventId, role] = interaction.customId.split('_');
-          await interaction.deferReply({ ephemeral: true });
-          
+        if (interaction.customId.startsWith('signup_')) {
           try {
-            // Check guild mapping first
+            const [_, eventId, role] = interaction.customId.split('_');
+            console.log(`[DEBUG] Processing signup for event: ${eventId}, role: ${role}`);
+            
+            // First, defer the reply to make it ephemeral (visible only to the user who clicked)
+            await interaction.deferReply({ ephemeral: true });
+            
+            // Check guild mapping
             const discordGuildId = interaction.guild?.id;
             if (!discordGuildId) {
               return await interaction.editReply({
@@ -2665,7 +2668,8 @@ client.on('interactionCreate', async (interaction) => {
               });
             }
             
-            const appGuildId = await getGuildMapping(discordGuildId);
+            // Get app guild ID from mapping
+            const appGuildId = await getGuildIdFromDiscord(discordGuildId);
             if (!appGuildId) {
               return await interaction.editReply({
                 content: 'This Discord server is not linked to an application guild.',
@@ -2673,7 +2677,7 @@ client.on('interactionCreate', async (interaction) => {
               });
             }
       
-            // Get user ID from discord ID
+            // Get user from discord ID
             const userResult = await pool.query(
               'SELECT id, username, builds FROM users WHERE discord_id = $1',
               [interaction.user.id]
@@ -2684,8 +2688,9 @@ client.on('interactionCreate', async (interaction) => {
             }
             
             const userId = userResult.rows[0].id;
+            const userBuilds = userResult.rows[0].builds;
             
-            // Get the event details
+            // Get event details
             const eventResult = await pool.query(
               'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
               [eventId, appGuildId]
@@ -2697,7 +2702,7 @@ client.on('interactionCreate', async (interaction) => {
             
             const eventDetails = eventResult.rows[0];
             
-            // Handle "ABSENT" special case
+            // Handle different role types
             if (role === 'ABSENT') {
               // Remove from participants
               await pool.query(
@@ -2717,7 +2722,7 @@ client.on('interactionCreate', async (interaction) => {
               
               await interaction.editReply(`You have been marked as absent for "${eventDetails.title}".`);
             } else if (role === 'TENTATIVE') {
-              // Handle tentative signup if table exists
+              // Handle tentative signup
               try {
                 // Check if we have a tentative table, if not create one
                 await pool.query(`
@@ -2836,7 +2841,11 @@ client.on('interactionCreate', async (interaction) => {
               }
             }
             
-            // Update the message to reflect new counts
+            // IMPORTANT: This is the critical new part to update the embed immediately
+            // Defer update of the original message
+            await interaction.deferUpdate().catch(e => console.error('Error deferring update:', e)); 
+            
+            // Get updated event data for refreshing the embed
             try {
               // Get all participants with their builds
               const participantsResult = await pool.query(
@@ -2875,224 +2884,63 @@ client.on('interactionCreate', async (interaction) => {
                 // Table might not exist, ignore
               }
               
-              // Helper function to get emoji for weapon types
-              function getWeaponEmoji(weaponType) {
-                if (!weaponType) return '';
-                
-                // Convert to string and lowercase for consistent matching
-                const type = String(weaponType).toLowerCase();
-                
-                const emojiMap = {
-                  'dagger': '<:Dagger:1352127620761784321>',
-                  'spear': '<:Spear:1352127656748908636>',
-                  'wand': '<:Wand:1352127712180830249>',
-                  'sword': '<:SwordandShield:1352127689183592459>',
-                  'swordandshield': '<:SwordandShield:1352127689183592459>',
-                  'crossbow': '<:Crossbow:1352127594597978112>',
-                  'greatsword': '<:Greatsword:1352127640227549265>',
-                  'staff': '<:Staff:1352127671831887923>',
-                  'bow': '<:Bow:1352127546308825170>'
-                };
-                
-                // Try direct match first
-                if (emojiMap[type]) {
-                  return emojiMap[type];
-                }
-                
-                // If no direct match, try partial match
-                for (const [key, emoji] of Object.entries(emojiMap)) {
-                  if (type.includes(key)) {
-                    return emoji;
-                  }
-                }
-                
-                return ''; // No matching emoji found
-              }
-              
-              // Helper function to format player names with weapon emoji
-              const formatPlayerName = (player, index) => {
-                const username = player.username || 'Unknown';
-                
-                let weaponEmoji = '';
-                
-                if (player.builds) {
-                  try {
-                    // Parse builds data if it's a string
-                    let buildsData = player.builds;
-                    if (typeof player.builds === 'string') {
-                      buildsData = JSON.parse(player.builds);
-                    }
-                    
-                    // Handle different builds structures
-                    if (Array.isArray(buildsData) && buildsData.length > 0) {
-                      // If builds is an array, use the first (primary) build
-                      const primaryBuild = buildsData[0];
-                      
-                      if (primaryBuild.weapon) {
-                        weaponEmoji = getWeaponEmoji(primaryBuild.weapon);
-                      } else if (primaryBuild.primary_weapon) {
-                        weaponEmoji = getWeaponEmoji(primaryBuild.primary_weapon);
-                      } else if (primaryBuild.weaponType) {
-                        weaponEmoji = getWeaponEmoji(primaryBuild.weaponType);
-                      }
-                    } else if (buildsData.weapon) {
-                      // If builds is an object with weapon property
-                      weaponEmoji = getWeaponEmoji(buildsData.weapon);
-                    } else if (buildsData.primary_weapon) {
-                      // If builds is an object with primary_weapon property
-                      weaponEmoji = getWeaponEmoji(buildsData.primary_weapon);
-                    } else if (buildsData.weaponType) {
-                      // If builds is an object with weaponType property
-                      weaponEmoji = getWeaponEmoji(buildsData.weaponType);
-                    }
-                  } catch (e) {
-                    console.error(`Error processing builds for ${username}:`, e);
-                  }
-                }
-                
-                return `${index+1}. ${weaponEmoji} **${username}**`;
+              // Combine all data into an event object
+              const updatedEvent = {
+                ...eventDetails,
+                participants: participantsResult.rows,
+                absentees: absenteesResult.rows,
+                tentative: tentativeMembers
               };
               
-              // Group participants by role
-              const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
-              const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
-              const dps = participantsResult.rows.filter(p => p.role === 'DPS');
-              const absentees = absenteesResult.rows;
+              // Create a new embed with the updated data
+              const updatedEmbed = require('./utils/embed_builder').createEventEmbed(updatedEvent);
               
-              // Only update original message if it's from the current interaction
-              const message = interaction.message;
-              if (message && message.embeds && message.embeds.length > 0) {
-                const originalEmbed = message.embeds[0];
-                
-                // Calculate time until event for the countdown
-                const eventTime = new Date(eventDetails.event_time);
-                const now = new Date();
-                const timeUntil = eventTime - now;
-                const daysUntil = Math.floor(timeUntil / (1000 * 60 * 60 * 24));
-                const hoursUntil = Math.floor((timeUntil % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                
-                // Format countdown
-                let countdownText = '';
-                if (eventTime < now) {
-                  countdownText = '`Event ended`';
-                } else if (daysUntil === 0 && hoursUntil === 0) {
-                  countdownText = '`Starting soon!`';
-                } else if (daysUntil === 0) {
-                  countdownText = `\`In ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''}\``;
-                } else if (daysUntil === 1) {
-                  countdownText = '`Tomorrow`';
-                } else {
-                  countdownText = `\`In ${daysUntil} days\``;
-                }
-                
-                // Status indicators based on time
-                let statusEmoji = '🔶'; // Default - upcoming
-                let statusColor = '#0099ff'; // Default blue color
-                
-                if (eventTime < now) {
-                  statusEmoji = '✓'; 
-                  statusColor = '#808080';
-                } else if (timeUntil < 3600000) {
-                  statusEmoji = '⚠️';
-                  statusColor = '#ff9900';
-                } else if (daysUntil === 0) {
-                  statusEmoji = '🔴';
-                  statusColor = '#f44336';
-                }
-                
-                // Format the date for display
-                const dateFormatted = eventTime.toLocaleDateString('en-US', { 
-                  weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
-                });
-                const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
-                  hour: 'numeric', minute: '2-digit', hour12: true 
-                });
-                
-                // Build progress bars for roles
-                const buildProgressBar = (current, max, emoji) => {
-                  if (max <= 0) return '';
-                  
-                  const full = '█';
-                  const empty = '░';
-                  
-                  // Limit to actual max
-                  current = Math.min(current, max);
-                  
-                  // Calculate filled slots (each character represents 10%)
-                  const filledSlots = Math.round((current / max) * 10);
-                  const emptySlots = 10 - filledSlots;
-                  
-                  return `${emoji} ${full.repeat(filledSlots)}${empty.repeat(emptySlots)} ${current}/${max}`;
-                };
-                
-                // Create description with updated progress bars
-                const description = [
-                  `${statusEmoji} **${eventDetails.title || 'Event'}** ${countdownText}`,
-                  '',
-                  `📅 **${dateFormatted}** at **${timeFormatted}**`,
-                  `📍 **Location:** ${eventDetails.location || '—'}`,
-                  '',
-                  `${buildProgressBar(tanks.length, eventDetails.tanks || 0, '🛡️')}`,
-                  `${buildProgressBar(healers.length, eventDetails.healers || 0, '💚')}`,
-                  `${buildProgressBar(dps.length, eventDetails.dps || 0, '⚔️')}`,
-                  '',
-                  eventDetails.description ? `**Description:** ${eventDetails.description}` : ''
-                ].filter(line => line !== '').join('\n');
-                
-                const updatedEmbed = new EmbedBuilder()
-                  .setTitle(`${statusEmoji} ${eventDetails.title || 'Event'}`)
-                  .setColor(statusColor)
-                  .setDescription(description)
-                  .addFields(
-                    {
-                      name: `🛡️ Tanks (${tanks.length}/${eventDetails.tanks || 0})`,
-                      value: tanks.length > 0 ? 
-                        tanks.map((p, i) => formatPlayerName(p, i)).join('\n') : 
-                        '—',
-                      inline: true
-                    },
-                    {
-                      name: `💚 Healers (${healers.length}/${eventDetails.healers || 0})`,
-                      value: healers.length > 0 ? 
-                        healers.map((p, i) => formatPlayerName(p, i)).join('\n') : 
-                        '—',
-                      inline: true
-                    },
-                    {
-                      name: `⚔️ DPS (${dps.length}/${eventDetails.dps || 0})`,
-                      value: dps.length > 0 ? 
-                        dps.map((p, i) => formatPlayerName(p, i)).join('\n') : 
-                        '—',
-                      inline: true
-                    },
-                    {
-                      name: `❌ Absent (${absentees.length})`,
-                      value: absentees.length > 0 ? 
-                        absentees.map((a, i) => `${i+1}. ~~**${a.username}**~~`).join('\n') : 
-                        '—',
-                      inline: true
-                    },
-                    {
-                      name: `⏳ Tentative (${tentativeMembers.length})`,
-                      value: tentativeMembers.length > 0 ? 
-                        tentativeMembers.map((t, i) => `${i+1}. *${t.username}*`).join('\n') : 
-                        '—',
-                      inline: true
-                    }
-                  )
-                  .setFooter({ text: `Use buttons below to sign up • Event ID: ${eventId}` });
-                
-                await message.edit({ embeds: [updatedEmbed] });
-              }
+              // Create signup buttons with custom role emojis
+              const row = new ActionRowBuilder()
+                .addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${eventId}_TANK`)
+                    .setLabel('Tank')
+                    .setEmoji('1352736996405022780') // Tank emoji ID
+                    .setStyle(ButtonStyle.Primary),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${eventId}_HEALER`)
+                    .setLabel('Healer')
+                    .setEmoji('1352737011479482468') // Healer emoji ID
+                    .setStyle(ButtonStyle.Success),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${eventId}_DPS`)
+                    .setLabel('DPS')
+                    .setEmoji('1352737043972624518') // DPS emoji ID
+                    .setStyle(ButtonStyle.Danger),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${eventId}_TENTATIVE`)
+                    .setLabel('Tentative')
+                    .setEmoji('⏳')
+                    .setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder()
+                    .setCustomId(`signup_${eventId}_ABSENT`)
+                    .setLabel('Absent')
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Secondary)
+                );
               
-              // Post public confirmation
-              await interaction.followUp({
-                content: `${interaction.user.username} has signed up for "${eventDetails.title}" as ${role === 'ABSENT' ? 'absent' : (role === 'TENTATIVE' ? 'tentative' : role)}.`,
-                ephemeral: false
+              // Update the original message with the new embed and buttons
+              await interaction.message.edit({
+                embeds: [updatedEmbed],
+                components: [row]
               });
+              
+              console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
             } catch (updateError) {
-              console.error(`Error updating event message:`, updateError);
+              console.error(`[ERROR] Error updating event embed:`, updateError);
             }
+            
+            // Post public confirmation
+            await interaction.followUp({
+              content: `${interaction.user.username} has signed up for "${eventDetails.title}" as ${role === 'ABSENT' ? 'absent' : (role === 'TENTATIVE' ? 'tentative' : role)}.`,
+              ephemeral: false
+            });
           } catch (error) {
             console.error(`Error processing signup button:`, error);
             await interaction.editReply('An error occurred while processing your signup.');
@@ -3282,7 +3130,10 @@ async function recoverEventTracking() {
         const eventDate = new Date(message.event_time);
         const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
         const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
-        
+
+        const tankEmoji = '<:Tank:1352736996405022780>';
+        const healerEmoji = '<:Healer:1352737011479482468>';
+        const dpsEmoji = '<:DPS:1352737043972624518>';
         // Create updated embed
         const updatedEmbed = new EmbedBuilder()
           .setTitle(`${message.title || 'Event'}`)
@@ -3300,21 +3151,21 @@ async function recoverEventTracking() {
               inline: false
             },
             {
-              name: `🛡️ Tanks (${tanks.length}/${message.tanks || 0})`,
+              name: `${tankEmoji} Tanks (${tanks.length}/${message.tanks || 0})`,
               value: tanks.length > 0 ? 
                 tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
                 '—',
               inline: true
             },
             {
-              name: `💚 Healers (${healers.length}/${message.healers || 0})`,
+              name: `${healerEmoji} Healers (${healers.length}/${message.healers || 0})`,
               value: healers.length > 0 ? 
                 healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
                 '—',
               inline: true
             },
             {
-              name: `⚔️ DPS (${dps.length}/${message.dps || 0})`,
+              name: `${dpsEmoji} DPS (${dps.length}/${message.dps || 0})`,
               value: dps.length > 0 ? 
                 dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
                 '—',
@@ -3762,22 +3613,27 @@ async function handleEventsCommand(interaction, appGuildId) {
         .addComponents(
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_TANK`)
-            .setLabel('Sign up as Tank')
-            .setEmoji('🛡️')
+            .setLabel('Tank')
+            .setEmoji('1352736996405022780')
             .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_HEALER`)
-            .setLabel('Sign up as Healer')
-            .setEmoji('💚')
+            .setLabel('Healer')
+            .setEmoji('1352737011479482468')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
             .setCustomId(`signup_${eventId}_DPS`)
-            .setLabel('Sign up as DPS')
-            .setEmoji('⚔️')
+            .setLabel('DPS')
+            .setEmoji('1352737043972624518') 
             .setStyle(ButtonStyle.Danger),
           new ButtonBuilder()
+            .setCustomId(`signup_${eventId}_TENTATIVE`)
+            .setLabel('Tentative')
+            .setEmoji('⏳')
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
             .setCustomId(`signup_${eventId}_ABSENT`)
-            .setLabel('Mark as Absent')
+            .setLabel('Absent')
             .setEmoji('❌')
             .setStyle(ButtonStyle.Secondary)
         );
@@ -3831,17 +3687,17 @@ async function handleEventsCommand(interaction, appGuildId) {
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_TANK`)
           .setLabel('Sign up as Tank')
-          .setEmoji('🛡️')
+          .setEmoji('1352736996405022780')
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_HEALER`)
           .setLabel('Sign up as Healer')
-          .setEmoji('💚')
+          .setEmoji('1352737011479482468')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_DPS`)
           .setLabel('Sign up as DPS')
-          .setEmoji('⚔️')
+          .setEmoji('1352737043972624518')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId(`signup_${events[0].id}_ABSENT`)
@@ -4591,9 +4447,9 @@ app.post('/webhook/announce-teams', async (req, res) => {
             
             // Create a cleaner team display
             const teamText = [
-              `🛡️ **Tanks:** ${tanks || '—'}`,
-              `💚 **Healers:** ${healers || '—'}`,
-              `⚔️ **DPS:** ${dps || '—'}`
+              `${tankEmoji} **Tanks:** ${tanks || '—'}`,
+              `${healerEmoji} **Healers:** ${healers || '—'}`,
+              `${dpsEmoji} **DPS:** ${dps || '—'}`
             ].join('\n');
             
             batchEmbed.addFields({
@@ -4619,9 +4475,9 @@ app.post('/webhook/announce-teams', async (req, res) => {
           
           // Create a cleaner team display
           const teamText = [
-            `🛡️ **Tanks:** ${tanks || '—'}`,
-            `💚 **Healers:** ${healers || '—'}`,
-            `⚔️ **DPS:** ${dps || '—'}`
+            `${tankEmoji} **Tanks:** ${tanks || '—'}`,
+            `${healerEmoji} **Healers:** ${healers || '—'}`,
+            `${dpsEmoji} **DPS:** ${dps || '—'}`
           ].join('\n');
           
           mainEmbed.addFields({
@@ -4897,21 +4753,21 @@ app.post('/webhook/update-event-signup', async (req, res) => {
             inline: false
           },
           {
-            name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`,
+            name: `${tankEmoji} Tanks (${tanks.length}/${event.tanks || 0})`,
             value: tanks.length > 0 ? 
               tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
               '—',
             inline: true
           },
           {
-            name: `💚 Healers (${healers.length}/${event.healers || 0})`,
+            name: `${healerEmoji} Healers (${healers.length}/${event.healers || 0})`,
             value: healers.length > 0 ? 
               healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
               '—',
             inline: true
           },
           {
-            name: `⚔️ DPS (${dps.length}/${event.dps || 0})`,
+            name: `${dpsEmoji} DPS (${dps.length}/${event.dps || 0})`,
             value: dps.length > 0 ? 
               dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
               '—',
@@ -5145,7 +5001,7 @@ function startItemPolling() {
             new ButtonBuilder()
               .setCustomId(`need_item_${item.id}`)
               .setLabel('Need Item')
-              .setEmoji('🛡️')
+              .setEmoji('1352736996405022780')
               .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
               .setCustomId(`need_trait_${item.id}`)
