@@ -290,7 +290,7 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
 
   const handleAddItem = async () => {
     try {
-      // Check permission
+      // Check permission - this stays the same
       if (!hasStoragePermission()) {
         console.error('Permission denied: Cannot add storage items');
         return;
@@ -319,22 +319,30 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
       
       console.log('⏰ Sending timerDuration:', timerDuration, 'Type:', typeof timerDuration);
       
-      // Create the payload explicitly
+      // IMPORTANT: Create the payload explicitly with guildId included twice for redundancy
+      // This ensures the backend always receives the guild context correctly
       const payload = {
         item_id: newItem.id,
         quantity: Number(newItem.quantity) || 1,
         dkp_cost: Number(newItem.dkpCost) || 0,
         trait: newItem.selectedTrait,
         timerDuration: timerDuration,
-        guildId
+        guildId: guildId // Add explicit guildId in payload
       };
       
-      console.log('⏰ Request payload:', payload);
+      console.log('⏰ Request payload for adding item:', payload);
+      
+      // Add auth debugging
+      console.log('Auth context for request:', {
+        userId: user?.id,
+        userRole: user?.role,
+        effectiveRole: simulatedRole || user?.role
+      });
       
       // Send the request
       const response = await axiosInstance.post('/api/guild-storage', payload);
       
-      console.log('⏰ Response timer_duration:', response.data.timer_duration);
+      console.log('⏰ Response from server:', response.data);
       
       // Show success message with timer info
       setNotification({
