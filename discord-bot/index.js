@@ -2099,18 +2099,22 @@ client.on('interactionCreate', async (interaction) => {
       'Spear|Bow': 'Impaler'
     };
     
+    // Create select menu options from the weapon specs
+    const options = Object.entries(WEAPON_SPECS).map(([weapons, spec]) => {
+      return {
+        label: spec,
+        description: weapons.replace('|', ' + '),
+        value: spec
+      };
+    });
+    
+    // Create the selection menu using SelectMenu component
     const row = new ActionRowBuilder()
       .addComponents(
-        new StringSelectMenuBuilder()
+        new SelectMenuBuilder()
           .setCustomId(`select_build_${eventId}_${role}`)
           .setPlaceholder('Select your class/build')
-          .addOptions(
-            Object.entries(WEAPON_SPECS).map(([weapons, spec]) => ({
-              label: spec,
-              description: weapons.replace('|', ' + '),
-              value: spec,
-            }))
-          )
+          .addOptions(options)
       );
     
     // Show class selection as ephemeral message
@@ -2123,7 +2127,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isStringSelectMenu()) return;
+  if (!interaction.isStringSelectMenu()) return;  // Updated to use non-deprecated method
   
   const customId = interaction.customId;
   if (customId.startsWith('select_build_')) {
