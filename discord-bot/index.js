@@ -262,7 +262,7 @@ async function markItemAsClaimed(itemId, claimedBy, itemName = null, itemType = 
         .setCustomId(`need_item_${itemId}`)
         .setLabel('Need Item')
         .setStyle(ButtonStyle.Danger)
-        .setEmoji('${tankEmoji}')
+        .setEmoji('1352736996405022780')
         .setDisabled(true);
         
       const disabledNeedTraitButton = new ButtonBuilder()
