@@ -2650,315 +2650,455 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle event signup buttons
-      else if (customId.startsWith('signup_')) {
-        const [_, eventId, role] = customId.split('_');
-        await interaction.deferReply({ ephemeral: true });
-        
-        try {
-          // Check guild mapping first
-          const discordGuildId = interaction.guild?.id;
-          if (!discordGuildId) {
-            return await interaction.editReply({
-              content: 'This button must be used in a Discord server.',
-              ephemeral: true
-            });
-          }
+      client.on('interactionCreate', async (interaction) => {
+        if (interaction.isButton() && interaction.customId.startsWith('signup_')) {
+          const [_, eventId, role] = interaction.customId.split('_');
+          await interaction.deferReply({ ephemeral: true });
           
-          const appGuildId = await getGuildMapping(discordGuildId);
-          if (!appGuildId) {
-            return await interaction.editReply({
-              content: 'This Discord server is not linked to an application guild.',
-              ephemeral: true
-            });
-          }
-
-          // Get user ID from discord ID
-          const userResult = await pool.query(
-            'SELECT id, username FROM users WHERE discord_id = $1',
-            [interaction.user.id]
-          );
-          
-          if (!userResult.rows || userResult.rows.length === 0) {
-            return await interaction.editReply('You need to register on the website first before signing up for events.');
-          }
-          
-          const userId = userResult.rows[0].id;
-          
-          // Get the event details
-          const eventResult = await pool.query(
-            'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
-            [eventId, appGuildId]
-          );
-          
-          if (!eventResult.rows || eventResult.rows.length === 0) {
-            return await interaction.editReply('Event not found.');
-          }
-          
-          const eventDetails = eventResult.rows[0];
-          
-          // Handle "ABSENT" special case
-          if (role === 'ABSENT') {
-            // Remove from participants
-            await pool.query(
-              'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-              [eventId, userId]
+          try {
+            // Check guild mapping first
+            const discordGuildId = interaction.guild?.id;
+            if (!discordGuildId) {
+              return await interaction.editReply({
+                content: 'This button must be used in a Discord server.',
+                ephemeral: true
+              });
+            }
+            
+            const appGuildId = await getGuildMapping(discordGuildId);
+            if (!appGuildId) {
+              return await interaction.editReply({
+                content: 'This Discord server is not linked to an application guild.',
+                ephemeral: true
+              });
+            }
+      
+            // Get user ID from discord ID
+            const userResult = await pool.query(
+              'SELECT id, username, builds FROM users WHERE discord_id = $1',
+              [interaction.user.id]
             );
             
-            // Add to absentees
-            await pool.query(
-              `INSERT INTO event_absentees 
-                (id, guild_id, event_id, user_id, created_at, updated_at)
-              VALUES 
-                (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-              ON CONFLICT (event_id, user_id) DO NOTHING`,
-              [appGuildId, eventId, userId]
+            if (!userResult.rows || userResult.rows.length === 0) {
+              return await interaction.editReply('You need to register on the website first before signing up for events.');
+            }
+            
+            const userId = userResult.rows[0].id;
+            
+            // Get the event details
+            const eventResult = await pool.query(
+              'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
+              [eventId, appGuildId]
             );
             
-            await interaction.editReply(`You have been marked as absent for "${eventDetails.title}".`);
-          } else {
-            // Regular role signup
+            if (!eventResult.rows || eventResult.rows.length === 0) {
+              return await interaction.editReply('Event not found.');
+            }
             
-            // Check if already signed up
-            const existingSignup = await pool.query(
-              'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
-              [eventId, userId]
-            );
+            const eventDetails = eventResult.rows[0];
             
-            if (existingSignup.rows && existingSignup.rows.length > 0) {
-              // Update existing signup
+            // Handle "ABSENT" special case
+            if (role === 'ABSENT') {
+              // Remove from participants
               await pool.query(
-                'UPDATE event_participants SET role = $1 WHERE id = $2',
-                [role, existingSignup.rows[0].id]
-              );
-              
-              await interaction.editReply(`Your role for "${eventDetails.title}" has been updated to ${role}.`);
-            } else {
-              // Check role capacity
-              const roleCountsResult = await pool.query(
-                `SELECT 
-                  COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-                  COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-                  COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-                FROM event_participants
-                WHERE event_id = $1`,
-                [eventId]
-              );
-              
-              const roleCounts = roleCountsResult.rows[0];
-              
-              // Verify there's room for this role
-              const roleLimits = {
-                'TANK': eventDetails.tanks || 0,
-                'HEALER': eventDetails.healers || 0,
-                'DPS': eventDetails.dps || 0
-              };
-              
-              const currentCounts = {
-                'TANK': parseInt(roleCounts?.tank_count || 0),
-                'HEALER': parseInt(roleCounts?.healer_count || 0),
-                'DPS': parseInt(roleCounts?.dps_count || 0)
-              };
-              
-              if (currentCounts[role] >= roleLimits[role]) {
-                return await interaction.editReply(`Sorry, the ${role} spots are full for this event.`);
-              }
-              
-              // Remove from absentees if marked before
-              await pool.query(
-                'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
                 [eventId, userId]
               );
               
-              // Create new signup
+              // Add to absentees
               await pool.query(
-                `INSERT INTO event_participants 
-                  (id, guild_id, event_id, user_id, role, created_at, updated_at)
-                VALUES
-                  (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
-                [appGuildId, eventId, userId, role]
+                `INSERT INTO event_absentees 
+                  (id, guild_id, event_id, user_id, created_at, updated_at)
+                VALUES 
+                  (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                ON CONFLICT (event_id, user_id) DO NOTHING`,
+                [appGuildId, eventId, userId]
               );
               
-              await interaction.editReply(`You have been signed up for "${eventDetails.title}" as ${role}.`);
-            }
-          }
-          
-          // Update the message to reflect new signups with weapon icons
-          try {
-            // Get all participants with their builds - include specific fields we need
-            const participantsResult = await pool.query(
-              `SELECT ep.role, u.username, u.discord_id, u.builds
-              FROM event_participants ep
-              JOIN users u ON ep.user_id = u.id
-              WHERE ep.event_id = $1
-              ORDER BY ep.created_at ASC`,
-              [eventId]
-            );
-            
-            // Get absentees
-            const absenteesResult = await pool.query(
-              `SELECT ea.user_id, u.username
-              FROM event_absentees ea
-              JOIN users u ON ea.user_id = u.id
-              WHERE ea.event_id = $1
-              ORDER BY ea.created_at ASC`,
-              [eventId]
-            );
-            
-            // Helper function to format player name with weapon emoji
-            const formatPlayerName = (player, index) => {
-              const username = player.username || 'Unknown';
+              await interaction.editReply(`You have been marked as absent for "${eventDetails.title}".`);
+            } else if (role === 'TENTATIVE') {
+              // Handle tentative signup if table exists
+              try {
+                // Check if we have a tentative table, if not create one
+                await pool.query(`
+                  CREATE TABLE IF NOT EXISTS event_tentative (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    guild_id UUID NOT NULL,
+                    event_id UUID NOT NULL, 
+                    user_id UUID NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(event_id, user_id)
+                  )
+                `);
+                
+                // Remove from participants and absentees
+                await pool.query(
+                  'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+                
+                await pool.query(
+                  'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+                
+                // Add to tentative
+                await pool.query(
+                  `INSERT INTO event_tentative 
+                    (id, guild_id, event_id, user_id, created_at, updated_at)
+                  VALUES
+                    (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                  ON CONFLICT (event_id, user_id) DO UPDATE SET
+                    updated_at = NOW()`,
+                  [appGuildId, eventId, userId]
+                );
+                
+                await interaction.editReply(`You have been marked as tentative for "${eventDetails.title}".`);
+              } catch (tentativeError) {
+                console.error('Error handling tentative signup:', tentativeError);
+                await interaction.editReply(`An error occurred while marking you as tentative.`);
+              }
+            } else {
+              // Regular role signup
               
-              console.log(`DEBUG: Formatting player ${username} with builds:`, JSON.stringify(player.builds));
+              // Check if already signed up
+              const existingSignup = await pool.query(
+                'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
               
-              // Check if player has build info with weapon type
-              let weaponEmoji = '';
-              
-              if (player.builds) {
-                try {
-                  // Parse builds data if it's a string
-                  let buildsData = player.builds;
-                  if (typeof player.builds === 'string') {
-                    buildsData = JSON.parse(player.builds);
-                  }
-                  
-                  // Handle different builds structures
-                  if (Array.isArray(buildsData) && buildsData.length > 0) {
-                    // If builds is an array, use the first (primary) build
-                    const primaryBuild = buildsData[0];
-                    
-                    if (primaryBuild.weapon) {
-                      weaponEmoji = getWeaponEmoji(primaryBuild.weapon);
-                    } else if (primaryBuild.primary_weapon) {
-                      weaponEmoji = getWeaponEmoji(primaryBuild.primary_weapon);
-                    } else if (primaryBuild.weaponType) {
-                      weaponEmoji = getWeaponEmoji(primaryBuild.weaponType);
-                    }
-                  } else if (buildsData.weapon) {
-                    // If builds is an object with weapon property
-                    weaponEmoji = getWeaponEmoji(buildsData.weapon);
-                  } else if (buildsData.primary_weapon) {
-                    // If builds is an object with primary_weapon property
-                    weaponEmoji = getWeaponEmoji(buildsData.primary_weapon);
-                  } else if (buildsData.weaponType) {
-                    // If builds is an object with weaponType property
-                    weaponEmoji = getWeaponEmoji(buildsData.weaponType);
-                  }
-                  
-                  console.log(`DEBUG: Weapon emoji for ${username}: ${weaponEmoji}`);
-                } catch (e) {
-                  console.error(`Error processing builds for ${username}:`, e);
+              if (existingSignup.rows && existingSignup.rows.length > 0) {
+                // Update existing signup
+                await pool.query(
+                  'UPDATE event_participants SET role = $1 WHERE id = $2',
+                  [role, existingSignup.rows[0].id]
+                );
+                
+                await interaction.editReply(`Your role for "${eventDetails.title}" has been updated to ${role}.`);
+              } else {
+                // Check role capacity
+                const roleCountsResult = await pool.query(
+                  `SELECT 
+                    COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+                    COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+                    COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
+                  FROM event_participants
+                  WHERE event_id = $1`,
+                  [eventId]
+                );
+                
+                const roleCounts = roleCountsResult.rows[0];
+                
+                // Verify there's room for this role
+                const roleLimits = {
+                  'TANK': eventDetails.tanks || 0,
+                  'HEALER': eventDetails.healers || 0,
+                  'DPS': eventDetails.dps || 0
+                };
+                
+                const currentCounts = {
+                  'TANK': parseInt(roleCounts?.tank_count || 0),
+                  'HEALER': parseInt(roleCounts?.healer_count || 0),
+                  'DPS': parseInt(roleCounts?.dps_count || 0)
+                };
+                
+                if (currentCounts[role] >= roleLimits[role]) {
+                  return await interaction.editReply(`Sorry, the ${role} spots are full for this event.`);
                 }
+                
+                // Remove from absentees if marked before
+                await pool.query(
+                  'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+                
+                // Remove from tentative if marked before
+                try {
+                  await pool.query(
+                    'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                    [eventId, userId]
+                  );
+                } catch (e) {
+                  // Table might not exist, ignore
+                }
+                
+                // Create new signup
+                await pool.query(
+                  `INSERT INTO event_participants 
+                    (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                  VALUES
+                    (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                  [appGuildId, eventId, userId, role]
+                );
+                
+                await interaction.editReply(`You have been signed up for "${eventDetails.title}" as ${role}.`);
+              }
+            }
+            
+            // Update the message to reflect new counts
+            try {
+              // Get all participants with their builds
+              const participantsResult = await pool.query(
+                `SELECT ep.role, u.username, u.discord_id, u.builds
+                 FROM event_participants ep
+                 JOIN users u ON ep.user_id = u.id
+                 WHERE ep.event_id = $1
+                 ORDER BY ep.created_at ASC`,
+                [eventId]
+              );
+              
+              // Get absentees
+              const absenteesResult = await pool.query(
+                `SELECT ea.user_id, u.username
+                 FROM event_absentees ea
+                 JOIN users u ON ea.user_id = u.id
+                 WHERE ea.event_id = $1
+                 ORDER BY ea.created_at ASC`,
+                [eventId]
+              );
+              
+              // Get tentative members if the table exists
+              let tentativeMembers = [];
+              try {
+                const tentativeResult = await pool.query(
+                  `SELECT et.user_id, u.username
+                   FROM event_tentative et
+                   JOIN users u ON et.user_id = u.id
+                   WHERE et.event_id = $1
+                   ORDER BY et.created_at ASC`,
+                  [eventId]
+                );
+                
+                tentativeMembers = tentativeResult.rows || [];
+              } catch (e) {
+                // Table might not exist, ignore
               }
               
-              return `${index+1}. ${weaponEmoji} ${username}`;
-            };
-            
-            // Helper to get emoji for weapon types
-            function getWeaponEmoji(weaponType) {
-              if (!weaponType) return '';
+              // Helper function to get emoji for weapon types
+              function getWeaponEmoji(weaponType) {
+                if (!weaponType) return '';
+                
+                // Convert to string and lowercase for consistent matching
+                const type = String(weaponType).toLowerCase();
+                
+                const emojiMap = {
+                  'dagger': '<:Dagger:1352127620761784321>',
+                  'spear': '<:Spear:1352127656748908636>',
+                  'wand': '<:Wand:1352127712180830249>',
+                  'sword': '<:SwordandShield:1352127689183592459>',
+                  'swordandshield': '<:SwordandShield:1352127689183592459>',
+                  'crossbow': '<:Crossbow:1352127594597978112>',
+                  'greatsword': '<:Greatsword:1352127640227549265>',
+                  'staff': '<:Staff:1352127671831887923>',
+                  'bow': '<:Bow:1352127546308825170>'
+                };
+                
+                // Try direct match first
+                if (emojiMap[type]) {
+                  return emojiMap[type];
+                }
+                
+                // If no direct match, try partial match
+                for (const [key, emoji] of Object.entries(emojiMap)) {
+                  if (type.includes(key)) {
+                    return emoji;
+                  }
+                }
+                
+                return ''; // No matching emoji found
+              }
               
-              // Convert to string and lowercase for consistent matching
-              const type = String(weaponType).toLowerCase();
-              console.log(`DEBUG: Looking up emoji for weapon type: ${type}`);
-              
-              const emojiMap = {
-                'dagger': '<:Dagger:1352127620761784321>',
-                'spear': '<:Spear:1352127656748908636>',
-                'wand': '<:Wand:1352127712180830249>',
-                'sword': '<:SwordandShield:1352127689183592459>',
-                'swordandshield': '<:SwordandShield:1352127689183592459>',
-                'crossbow': '<:Crossbow:1352127594597978112>',
-                'greatsword': '<:Greatsword:1352127640227549265>',
-                'staff': '<:Staff:1352127671831887923>',
-                'bow': '<:Bow:1352127546308825170>'
+              // Helper function to format player names with weapon emoji
+              const formatPlayerName = (player, index) => {
+                const username = player.username || 'Unknown';
+                
+                let weaponEmoji = '';
+                
+                if (player.builds) {
+                  try {
+                    // Parse builds data if it's a string
+                    let buildsData = player.builds;
+                    if (typeof player.builds === 'string') {
+                      buildsData = JSON.parse(player.builds);
+                    }
+                    
+                    // Handle different builds structures
+                    if (Array.isArray(buildsData) && buildsData.length > 0) {
+                      // If builds is an array, use the first (primary) build
+                      const primaryBuild = buildsData[0];
+                      
+                      if (primaryBuild.weapon) {
+                        weaponEmoji = getWeaponEmoji(primaryBuild.weapon);
+                      } else if (primaryBuild.primary_weapon) {
+                        weaponEmoji = getWeaponEmoji(primaryBuild.primary_weapon);
+                      } else if (primaryBuild.weaponType) {
+                        weaponEmoji = getWeaponEmoji(primaryBuild.weaponType);
+                      }
+                    } else if (buildsData.weapon) {
+                      // If builds is an object with weapon property
+                      weaponEmoji = getWeaponEmoji(buildsData.weapon);
+                    } else if (buildsData.primary_weapon) {
+                      // If builds is an object with primary_weapon property
+                      weaponEmoji = getWeaponEmoji(buildsData.primary_weapon);
+                    } else if (buildsData.weaponType) {
+                      // If builds is an object with weaponType property
+                      weaponEmoji = getWeaponEmoji(buildsData.weaponType);
+                    }
+                  } catch (e) {
+                    console.error(`Error processing builds for ${username}:`, e);
+                  }
+                }
+                
+                return `${index+1}. ${weaponEmoji} **${username}**`;
               };
               
-              // Try direct match first
-              if (emojiMap[type]) {
-                return emojiMap[type];
+              // Group participants by role
+              const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
+              const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
+              const dps = participantsResult.rows.filter(p => p.role === 'DPS');
+              const absentees = absenteesResult.rows;
+              
+              // Only update original message if it's from the current interaction
+              const message = interaction.message;
+              if (message && message.embeds && message.embeds.length > 0) {
+                const originalEmbed = message.embeds[0];
+                
+                // Calculate time until event for the countdown
+                const eventTime = new Date(eventDetails.event_time);
+                const now = new Date();
+                const timeUntil = eventTime - now;
+                const daysUntil = Math.floor(timeUntil / (1000 * 60 * 60 * 24));
+                const hoursUntil = Math.floor((timeUntil % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                
+                // Format countdown
+                let countdownText = '';
+                if (eventTime < now) {
+                  countdownText = '`Event ended`';
+                } else if (daysUntil === 0 && hoursUntil === 0) {
+                  countdownText = '`Starting soon!`';
+                } else if (daysUntil === 0) {
+                  countdownText = `\`In ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''}\``;
+                } else if (daysUntil === 1) {
+                  countdownText = '`Tomorrow`';
+                } else {
+                  countdownText = `\`In ${daysUntil} days\``;
+                }
+                
+                // Status indicators based on time
+                let statusEmoji = '🔶'; // Default - upcoming
+                let statusColor = '#0099ff'; // Default blue color
+                
+                if (eventTime < now) {
+                  statusEmoji = '✓'; 
+                  statusColor = '#808080'; // Gray for past events
+                } else if (timeUntil < 3600000) { // Less than 1 hour
+                  statusEmoji = '⚠️';
+                  statusColor = '#ff9900'; // Orange for imminent
+                } else if (daysUntil === 0) { // Today
+                  statusEmoji = '🔴';
+                  statusColor = '#f44336'; // Red for today
+                }
+                
+                // Format the date for display
+                const dateFormatted = eventTime.toLocaleDateString('en-US', { 
+                  weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+                });
+                const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
+                  hour: 'numeric', minute: '2-digit', hour12: true 
+                });
+                
+                // Build progress bars for roles
+                const buildProgressBar = (current, max, emoji) => {
+                  if (max <= 0) return '';
+                  
+                  const full = '█';
+                  const empty = '░';
+                  
+                  // Limit to actual max
+                  current = Math.min(current, max);
+                  
+                  // Calculate filled slots (each character represents 10%)
+                  const filledSlots = Math.round((current / max) * 10);
+                  const emptySlots = 10 - filledSlots;
+                  
+                  return `${emoji} ${full.repeat(filledSlots)}${empty.repeat(emptySlots)} ${current}/${max}`;
+                };
+                
+                // Create description with updated progress bars
+                const description = [
+                  `${statusEmoji} **${eventDetails.title || 'Event'}** ${countdownText}`,
+                  '',
+                  `📅 **${dateFormatted}** at **${timeFormatted}**`,
+                  `📍 **Location:** ${eventDetails.location || '—'}`,
+                  '',
+                  `${buildProgressBar(tanks.length, eventDetails.tanks || 0, '🛡️')}`,
+                  `${buildProgressBar(healers.length, eventDetails.healers || 0, '💚')}`,
+                  `${buildProgressBar(dps.length, eventDetails.dps || 0, '⚔️')}`,
+                  '',
+                  eventDetails.description ? `**Description:** ${eventDetails.description}` : ''
+                ].filter(line => line !== '').join('\n');
+                
+                const updatedEmbed = new EmbedBuilder()
+                  .setTitle(`${statusEmoji} ${eventDetails.title || 'Event'}`)
+                  .setColor(statusColor)
+                  .setDescription(description)
+                  .addFields(
+                    {
+                      name: `🛡️ Tanks (${tanks.length}/${eventDetails.tanks || 0})`,
+                      value: tanks.length > 0 ? 
+                        tanks.map((p, i) => formatPlayerName(p, i)).join('\n') : 
+                        '—',
+                      inline: true
+                    },
+                    {
+                      name: `💚 Healers (${healers.length}/${eventDetails.healers || 0})`,
+                      value: healers.length > 0 ? 
+                        healers.map((p, i) => formatPlayerName(p, i)).join('\n') : 
+                        '—',
+                      inline: true
+                    },
+                    {
+                      name: `⚔️ DPS (${dps.length}/${eventDetails.dps || 0})`,
+                      value: dps.length > 0 ? 
+                        dps.map((p, i) => formatPlayerName(p, i)).join('\n') : 
+                        '—',
+                      inline: true
+                    },
+                    {
+                      name: `❌ Absent (${absentees.length})`,
+                      value: absentees.length > 0 ? 
+                        absentees.map((a, i) => `${i+1}. ~~**${a.username}**~~`).join('\n') : 
+                        '—',
+                      inline: true
+                    },
+                    {
+                      name: `⏳ Tentative (${tentativeMembers.length})`,
+                      value: tentativeMembers.length > 0 ? 
+                        tentativeMembers.map((t, i) => `${i+1}. *${t.username}*`).join('\n') : 
+                        '—',
+                      inline: true
+                    }
+                  )
+                  .setFooter({ text: `Use buttons below to sign up • Event ID: ${eventId}` });
+                
+                await message.edit({ embeds: [updatedEmbed] });
               }
               
-              // If no direct match, try partial match
-              for (const [key, emoji] of Object.entries(emojiMap)) {
-                if (type.includes(key)) {
-                  return emoji;
-                }
-              }
-              
-              return ''; // No matching emoji found
+              // Post public confirmation
+              await interaction.followUp({
+                content: `${interaction.user.username} has signed up for "${eventDetails.title}" as ${role === 'ABSENT' ? 'absent' : (role === 'TENTATIVE' ? 'tentative' : role)}.`,
+                ephemeral: false
+              });
+            } catch (updateError) {
+              console.error(`Error updating event message:`, updateError);
             }
-            
-            // Group participants by role
-            const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
-            const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
-            const dps = participantsResult.rows.filter(p => p.role === 'DPS');
-            const absentees = absenteesResult.rows;
-            
-            // Only update original message if it's from the current interaction
-            const message = interaction.message;
-            if (message && message.embeds && message.embeds.length > 0) {
-              const originalEmbed = message.embeds[0];
-              
-              const updatedEmbed = EmbedBuilder.from(originalEmbed);
-              
-              // Preserve event time and location from original embed
-              const timeField = originalEmbed.fields.find(f => f.name === '⏰ Time');
-              const locationField = originalEmbed.fields.find(f => f.name === '📍 Location');
-              
-              updatedEmbed.setFields(
-                { name: '⏰ Time', value: timeField ? timeField.value : 'Not specified', inline: false },
-                { name: '📍 Location', value: locationField ? locationField.value : 'Not specified', inline: false },
-                {
-                  name: `🛡️ Tanks (${tanks.length}/${eventDetails.tanks || 0})`,
-                  value: tanks.length > 0 ? 
-                    tanks.map((p, i) => formatPlayerName(p, i)).join('\n') : 
-                    '—',
-                  inline: true
-                },
-                {
-                  name: `💚 Healers (${healers.length}/${eventDetails.healers || 0})`,
-                  value: healers.length > 0 ? 
-                    healers.map((p, i) => formatPlayerName(p, i)).join('\n') : 
-                    '—',
-                  inline: true
-                },
-                {
-                  name: `⚔️ DPS (${dps.length}/${eventDetails.dps || 0})`,
-                  value: dps.length > 0 ? 
-                    dps.map((p, i) => formatPlayerName(p, i)).join('\n') : 
-                    '—',
-                  inline: true
-                },
-                {
-                  name: `❌ Absent (${absentees.length})`,
-                  value: absentees.length > 0 ? 
-                    absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
-                    '—',
-                  inline: true
-                },
-                {
-                  name: '⏳ Tentative (0)',
-                  value: '—',
-                  inline: true
-                }
-              );
-              
-              await message.edit({ embeds: [updatedEmbed] });
-            }
-            
-            // Post public confirmation
-            await interaction.followUp({
-              content: `${interaction.user.username} has signed up for "${eventDetails.title}" as ${role === 'ABSENT' ? 'absent' : role}.`,
-              ephemeral: false
-            });
-          } catch (updateError) {
-            console.error(`Error updating event message:`, updateError);
+          } catch (error) {
+            console.error(`Error processing signup button:`, error);
+            await interaction.editReply('An error occurred while processing your signup.');
           }
-        } catch (error) {
-          console.error(`Error processing signup button:`, error);
-          await interaction.editReply('An error occurred while processing your signup.');
         }
-      }
+      });
     }
     // Handle select menu interactions
     else if (interaction.isSelectMenu()) {
@@ -4308,7 +4448,6 @@ app.post('/webhook/announce-teams', async (req, res) => {
     }
     
     const channelId = channelConfigResult.rows[0].channel_id;
-    console.log(`[INFO] Using channel ID: ${channelId}`);
     
     // Verify the channel exists and the bot has access
     let channel;
@@ -4318,7 +4457,6 @@ app.post('/webhook/announce-teams', async (req, res) => {
         console.error(`[ERROR] Channel not found: ${channelId}`);
         return res.status(404).json({ error: 'Channel not found' });
       }
-      console.log(`[INFO] Successfully fetched channel: ${channel.name}`);
     } catch (channelError) {
       console.error(`[ERROR] Failed to fetch channel: ${channelError.message}`);
       return res.status(500).json({ 
@@ -4347,19 +4485,85 @@ app.post('/webhook/announce-teams', async (req, res) => {
       const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       
-      // Create a single embed for all teams
+      // Helper function to get emoji for weapon types using custom Discord emojis
+      function getWeaponEmoji(weaponType) {
+        if (!weaponType) return '';
+        
+        // Convert to string and lowercase for consistent matching
+        const type = String(weaponType).toLowerCase();
+        
+        const emojiMap = {
+          'dagger': '<:Dagger:1352127620761784321>',
+          'spear': '<:Spear:1352127656748908636>',
+          'wand': '<:Wand:1352127712180830249>',
+          'sword': '<:SwordandShield:1352127689183592459>',
+          'swordandshield': '<:SwordandShield:1352127689183592459>',
+          'crossbow': '<:Crossbow:1352127594597978112>',
+          'greatsword': '<:Greatsword:1352127640227549265>',
+          'staff': '<:Staff:1352127671831887923>',
+          'bow': '<:Bow:1352127546308825170>'
+        };
+        
+        // Try direct match first
+        if (emojiMap[type]) {
+          return emojiMap[type];
+        }
+        
+        // If no direct match, try partial match
+        for (const [key, emoji] of Object.entries(emojiMap)) {
+          if (type.includes(key)) {
+            return emoji;
+          }
+        }
+        
+        return ''; // No matching emoji found
+      }
+      
+      // Create a modern main embed for team announcements
       const mainEmbed = new EmbedBuilder()
-        .setTitle(`${eventData.title} - Team Assignments`)
-        .setDescription(`**Event Time**: 📅 ${dateFormatted} at ${timeFormatted}\n**Location**: ${eventData.location || 'Not specified'}\n\n${eventData.description || ''}`)
+        .setTitle(`📋 ${eventData.title} - Team Assignments`)
+        .setDescription(
+          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
+          `${eventData.description || ''}\n\n` +
+          `👥 **Total Teams:** ${teams.length}`
+        )
         .setColor('#1a64f3')
         .setTimestamp()
-        .setFooter({ text: `Boonstone + Interserver + Open World PvP` });
+        .setFooter({ text: `Use /team view [team_id] for detailed team information` });
       
       console.log(`[INFO] Processing ${teams.length} teams...`);
       
       // Discord has a limit of 25 fields per embed
       const MAX_FIELDS = 25;
       const needsMultipleEmbeds = teams.length > MAX_FIELDS;
+      
+      // Format players with weapon emojis
+      const formatMembers = (members, role) => {
+        if (!members || members.length === 0) return '';
+        
+        return members.filter(m => m.role?.toUpperCase() === role).map(m => {
+          const username = m.username || 'Unknown';
+          let weaponEmoji = '';
+          
+          try {
+            if (m.builds) {
+              const builds = typeof m.builds === 'string' 
+                ? JSON.parse(m.builds) 
+                : m.builds;
+              
+              if (builds && builds.length > 0) {
+                const primaryBuild = builds[0];
+                weaponEmoji = getWeaponEmoji(primaryBuild.weapon || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing builds:', e);
+          }
+          
+          return `${weaponEmoji} ${username}`;
+        }).join(', ');
+      };
       
       // If we need multiple embeds, adjust our approach
       if (needsMultipleEmbeds) {
@@ -4380,27 +4584,20 @@ app.post('/webhook/announce-teams', async (req, res) => {
             const team = teamBatch[j];
             const groupNumber = i + j + 1;
             
-            // Group members by role with nice formatting
-            const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
-            const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
-            const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
+            // Format team members with roles and weapon types
+            const tanks = formatMembers(team.members, 'TANK');
+            const healers = formatMembers(team.members, 'HEALER');
+            const dps = formatMembers(team.members, 'DPS');
             
-            let teamText = '';
-            
-            if (tanks.length > 0) {
-              teamText += `🛡️ **Tanks**: ${tanks.map(m => m.username).join(', ')}\n`;
-            }
-            
-            if (healers.length > 0) {
-              teamText += `💚 **Healers**: ${healers.map(m => m.username).join(', ')}\n`;
-            }
-            
-            if (dps.length > 0) {
-              teamText += `⚔️ **DPS**: ${dps.map(m => m.username).join(', ')}`;
-            }
+            // Create a cleaner team display
+            const teamText = [
+              `🛡️ **Tanks:** ${tanks || '—'}`,
+              `💚 **Healers:** ${healers || '—'}`,
+              `⚔️ **DPS:** ${dps || '—'}`
+            ].join('\n');
             
             batchEmbed.addFields({
-              name: `${team.name}`,
+              name: `Group ${groupNumber}: ${team.name}`,
               value: teamText || 'No members assigned',
               inline: false
             });
@@ -4415,24 +4612,17 @@ app.post('/webhook/announce-teams', async (req, res) => {
         teams.forEach((team, index) => {
           const groupNumber = index + 1;
           
-          // Group members by role with nice formatting
-          const tanks = team.members.filter(m => m.role?.toUpperCase() === 'TANK');
-          const healers = team.members.filter(m => m.role?.toUpperCase() === 'HEALER');
-          const dps = team.members.filter(m => m.role?.toUpperCase() === 'DPS');
+          // Format team members with roles and weapon types
+          const tanks = formatMembers(team.members, 'TANK');
+          const healers = formatMembers(team.members, 'HEALER');
+          const dps = formatMembers(team.members, 'DPS');
           
-          let teamText = '';
-          
-          if (tanks.length > 0) {
-            teamText += `🛡️ **Tanks**: ${tanks.map(m => m.username).join(', ')}\n`;
-          }
-          
-          if (healers.length > 0) {
-            teamText += `💚 **Healers**: ${healers.map(m => m.username).join(', ')}\n`;
-          }
-          
-          if (dps.length > 0) {
-            teamText += `⚔️ **DPS**: ${dps.map(m => m.username).join(', ')}`;
-          }
+          // Create a cleaner team display
+          const teamText = [
+            `🛡️ **Tanks:** ${tanks || '—'}`,
+            `💚 **Healers:** ${healers || '—'}`,
+            `⚔️ **DPS:** ${dps || '—'}`
+          ].join('\n');
           
           mainEmbed.addFields({
             name: `Group ${groupNumber}: ${team.name}`,

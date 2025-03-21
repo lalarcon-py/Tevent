@@ -1,3 +1,4 @@
+// discord-bot/utils/embed_builder.js
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 /**
@@ -7,9 +8,6 @@ module.exports = {
   /**
    * Create an embed for an event
    */
-  /**
- * Create an embed for an event
- */
   createEventEmbed: (event) => {
     try {
       // Convert event_time to Date if it's a string
@@ -21,14 +19,48 @@ module.exports = {
       const now = new Date();
       const eventHasPassed = eventTime < now;
       
-      // Format the time for display (keeping the existing format)
-      const dateFormatted = `${eventTime.toLocaleDateString('en-US', { 
-        month: 'long', day: 'numeric', year: 'numeric' 
-      })}`;
-      const timeFormatted = `${eventTime.toLocaleTimeString('en-US', { 
+      // Calculate time until event
+      const timeUntil = eventTime - now;
+      const daysUntil = Math.floor(timeUntil / (1000 * 60 * 60 * 24));
+      const hoursUntil = Math.floor((timeUntil % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      // Status indicators based on time
+      let statusEmoji = '🔶'; // Default - upcoming
+      let statusColor = '#0099ff'; // Default blue color
+      
+      if (eventHasPassed) {
+        statusEmoji = '✓'; 
+        statusColor = '#808080'; // Gray for past events
+      } else if (timeUntil < 3600000) { // Less than 1 hour
+        statusEmoji = '⚠️';
+        statusColor = '#ff9900'; // Orange for imminent
+      } else if (daysUntil === 0) { // Today
+        statusEmoji = '🔴';
+        statusColor = '#f44336'; // Red for today
+      }
+      
+      // Format the time for display
+      const dateFormatted = eventTime.toLocaleDateString('en-US', { 
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+      });
+      const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
         hour: 'numeric', minute: '2-digit', hour12: true 
-      })}`;
-  
+      });
+      
+      // Format countdown
+      let countdownText = '';
+      if (eventHasPassed) {
+        countdownText = '`Event ended`';
+      } else if (daysUntil === 0 && hoursUntil === 0) {
+        countdownText = '`Starting soon!`';
+      } else if (daysUntil === 0) {
+        countdownText = `\`In ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''}\``;
+      } else if (daysUntil === 1) {
+        countdownText = '`Tomorrow`';
+      } else {
+        countdownText = `\`In ${daysUntil} days\``;
+      }
+      
       // Get participants
       let participants = event.participants || [];
       
@@ -37,14 +69,67 @@ module.exports = {
       const healers = participants.filter(p => p.role === 'HEALER');
       const dps = participants.filter(p => p.role === 'DPS');
       
-      // Format players for each role
+      // Format players with class/build icons
       const formatPlayers = (players) => {
         if (players.length === 0) return '—';
+        
         return players.map((p, idx) => {
           const name = p.User?.username || p.username || 'Unknown';
-          return `${idx + 1}. ${name}`;
+          // Try to get build info if available
+          let buildEmoji = '';
+          
+          try {
+            if (p.User?.builds) {
+              const builds = typeof p.User.builds === 'string' 
+                ? JSON.parse(p.User.builds) 
+                : p.User.builds;
+              
+              if (builds && builds.length > 0) {
+                const primaryBuild = builds[0];
+                buildEmoji = getWeaponEmoji(primaryBuild.weapon || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing builds:', e);
+          }
+          
+          return `${idx + 1}. ${buildEmoji} **${name}**`;
         }).join('\n');
       };
+      
+      // Helper function to get emoji for weapon types using custom Discord emojis
+      function getWeaponEmoji(weaponType) {
+        if (!weaponType) return '';
+        
+        // Convert to string and lowercase for consistent matching
+        const type = String(weaponType).toLowerCase();
+        
+        const emojiMap = {
+          'dagger': '<:Dagger:1352127620761784321>',
+          'spear': '<:Spear:1352127656748908636>',
+          'wand': '<:Wand:1352127712180830249>',
+          'sword': '<:SwordandShield:1352127689183592459>',
+          'swordandshield': '<:SwordandShield:1352127689183592459>',
+          'crossbow': '<:Crossbow:1352127594597978112>',
+          'greatsword': '<:Greatsword:1352127640227549265>',
+          'staff': '<:Staff:1352127671831887923>',
+          'bow': '<:Bow:1352127546308825170>'
+        };
+        
+        // Try direct match first
+        if (emojiMap[type]) {
+          return emojiMap[type];
+        }
+        
+        // If no direct match, try partial match
+        for (const [key, emoji] of Object.entries(emojiMap)) {
+          if (type.includes(key)) {
+            return emoji;
+          }
+        }
+        
+        return ''; // No matching emoji found
+      }
       
       // Get absentees
       let absentees = [];
@@ -59,25 +144,48 @@ module.exports = {
         if (absentees.length === 0) return '—';
         return absentees.map((a, idx) => {
           const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
-          return `${idx + 1}. ${username}`;
+          return `${idx + 1}. ~~**${username}**~~`;
         }).join('\n');
       };
       
-      // Create embed description
+      // Build progress bars for roles
+      const buildProgressBar = (current, max, emoji) => {
+        if (max <= 0) return '';
+        
+        const full = '█';
+        const empty = '░';
+        
+        // Limit to actual max
+        current = Math.min(current, max);
+        
+        // Calculate filled slots (each character represents 10%)
+        const filledSlots = Math.round((current / max) * 10);
+        const emptySlots = 10 - filledSlots;
+        
+        return `${emoji} ${full.repeat(filledSlots)}${empty.repeat(emptySlots)} ${current}/${max}`;
+      };
+      
+      // Create description with title, time, and progress bars
       const description = [
-        `⏰ Time`,
-        `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
-        `📍 Location`,
-        `${event.location || '—'}`
-      ].join('\n');
+        `${statusEmoji} **${event.title || 'Event'}** ${countdownText}`,
+        '',
+        `📅 **${dateFormatted}** at **${timeFormatted}**`,
+        `📍 **Location:** ${event.location || '—'}`,
+        '',
+        `${buildProgressBar(tanks.length, event.tanks || 0, '🛡️')}`,
+        `${buildProgressBar(healers.length, event.healers || 0, '💚')}`,
+        `${buildProgressBar(dps.length, event.dps || 0, '⚔️')}`,
+        '',
+        event.description ? `**Description:** ${event.description}` : ''
+      ].filter(line => line !== '').join('\n');
       
       // Create embed
       const embed = new EmbedBuilder()
-        .setTitle(event.title || 'Event')
-        .setColor(eventHasPassed ? '#808080' : '#0099ff')
+        .setTitle(`${statusEmoji} ${event.title || 'Event'}`)
+        .setColor(statusColor)
         .setDescription(description);
       
-      // Add role fields as separate columns
+      // Add fields for current signups
       embed.addFields(
         { 
           name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`, 
@@ -96,7 +204,7 @@ module.exports = {
         }
       );
       
-      // Add absentees and tentative
+      // Add absentees and tentative in a separate row
       embed.addFields(
         { 
           name: `❌ Absent (${absentees.length || 0})`, 
@@ -110,7 +218,6 @@ module.exports = {
         }
       );
       
-      // Add event status if it has passed
       if (eventHasPassed) {
         embed.addFields({
           name: '⚠️ Event Status',
@@ -119,7 +226,10 @@ module.exports = {
         });
       }
       
-      embed.setFooter({ text: `Event ID: ${event.id}` });
+      // Add footer with helpful UI hints
+      embed.setFooter({ 
+        text: `Use buttons below to sign up • Event ID: ${event.id}` 
+      });
       
       return embed;
     } catch (error) {
@@ -136,112 +246,199 @@ module.exports = {
    */
   createTeamEmbed: (team) => {
     try {
-        // Handle case where members might be undefined
-        const members = team.members || [];
+      // Handle case where members might be undefined
+      const members = team.members || [];
+      
+      // Format members by role with enhanced styling
+      const tanks = members.filter(m => m.role === 'TANK') || [];
+      const healers = members.filter(m => m.role === 'HEALER') || [];
+      const dps = members.filter(m => m.role === 'DPS') || [];
+      
+      // Calculate total participants
+      const totalParticipants = tanks.length + healers.length + dps.length;
+      
+      // Get additional team data if available
+      const late = team.late || [];
+      const tentative = team.tentative || [];
+      const extras = late.length + tentative.length;
+      
+      // Calculate total with extras
+      const totalDisplay = `${totalParticipants}${extras > 0 ? ` (+${extras})` : ''}`;
+      
+      // Format date string
+      const eventDate = new Date(team.event_time || team.created_at || new Date());
+      const dateString = eventDate.toLocaleDateString('en-US', { 
+        weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' 
+      });
+      const timeString = eventDate.toLocaleTimeString('en-US', { 
+        hour: 'numeric', minute: '2-digit', hour12: true 
+      });
+      
+      // Time ago calculation with modern display
+      const now = new Date();
+      const diffTime = Math.abs(now - eventDate);
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      let timeAgoString = '';
+      if (diffHours < 1) {
+        timeAgoString = '`Just now`';
+      } else if (diffHours < 24) {
+        timeAgoString = `\`${diffHours}h ago\``;
+      } else if (diffDays === 1) {
+        timeAgoString = '`Yesterday`';
+      } else {
+        timeAgoString = `\`${diffDays}d ago\``;
+      }
+      
+      // Format players with weapon icons and better styling
+      const formatPlayers = (players) => {
+        if (!players || players.length === 0) return '—';
         
-        // Format members by role
-        const tanks = members.filter(m => m.role === 'TANK') || [];
-        const healers = members.filter(m => m.role === 'HEALER') || [];
-        const dps = members.filter(m => m.role === 'DPS') || [];
+        return players.map((player, index) => {
+          const username = player.User?.username || player.username || 'Unknown';
+          let buildEmoji = '';
+          
+          // Get player build/weapon info
+          try {
+            if (player.User?.builds) {
+              const builds = typeof player.User.builds === 'string' 
+                ? JSON.parse(player.User.builds) 
+                : player.User.builds;
+              
+              if (builds && builds.length > 0) {
+                const primaryBuild = builds[0];
+                buildEmoji = getWeaponEmoji(primaryBuild.weapon || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing builds:', e);
+          }
+          
+          return `${index + 1}. ${buildEmoji} **${username}**`;
+        }).join('\n');
+      };
+      
+      // Helper function to get emoji for weapon types using custom Discord emojis
+      function getWeaponEmoji(weaponType) {
+        if (!weaponType) return '';
         
-        // Calculate total participants
-        const totalParticipants = tanks.length + healers.length + dps.length;
+        // Convert to string and lowercase for consistent matching
+        const type = String(weaponType).toLowerCase();
         
-        // Get absentees and tentative members (if available in your data structure)
-        const late = team.late || [];
-        const tentative = team.tentative || [];
-        const extras = late.length + tentative.length;
-        
-        // Calculate total with extras
-        const totalDisplay = `${totalParticipants}${extras > 0 ? ` (+${extras})` : ''}`;
-        
-        // Format date string (adjust based on your event data structure)
-        const eventDate = new Date(team.event_time || team.created_at || new Date());
-        const dateString = eventDate.toLocaleDateString('en-US', { 
-            month: 'long', day: 'numeric', year: 'numeric' 
-        });
-        const timeString = eventDate.toLocaleTimeString('en-US', { 
-            hour: 'numeric', minute: '2-digit', hour12: true 
-        });
-        
-        // Time ago calculation
-        const now = new Date();
-        const diffTime = Math.abs(now - eventDate);
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        let timeAgoString = '';
-        
-        if (diffDays === 0) {
-            timeAgoString = 'today';
-        } else if (diffDays === 1) {
-            timeAgoString = 'a day ago';
-        } else {
-            timeAgoString = `${diffDays} days ago`;
-        }
-        
-        // Format players with numbers - exactly like image
-        const formatPlayers = (players) => {
-            if (!players || players.length === 0) return '—';
-            
-            return players.map((player, index) => {
-                const username = player.User?.username || player.username || 'Unknown';
-                return `${index + 1} ${username}`;
-            }).join('\n');
+        const emojiMap = {
+          'dagger': '<:Dagger:1352127620761784321>',
+          'spear': '<:Spear:1352127656748908636>',
+          'wand': '<:Wand:1352127712180830249>',
+          'sword': '<:SwordandShield:1352127689183592459>',
+          'swordandshield': '<:SwordandShield:1352127689183592459>',
+          'crossbow': '<:Crossbow:1352127594597978112>',
+          'greatsword': '<:Greatsword:1352127640227549265>',
+          'staff': '<:Staff:1352127671831887923>',
+          'bow': '<:Bow:1352127546308825170>'
         };
         
-        // Create the embed with exact formatting as shown in image
-        const embed = new EmbedBuilder()
-            .setTitle(`Conflict ${team.name || 'Tevent/Bellandir'}`)
-            .setColor('#DC143C') // Crimson red color
-            .setDescription(`👤 ${totalDisplay}\n📅 ${dateString}    ⏰ ${timeString}    ⏱ ${timeAgoString}`)
-            .addFields(
-                { 
-                    name: `Tank (${tanks.length})`, 
-                    value: formatPlayers(tanks), 
-                    inline: true 
-                },
-                { 
-                    name: `Dps (${dps.length})`, 
-                    value: formatPlayers(dps), 
-                    inline: true 
-                },
-                { 
-                    name: `Healer (${healers.length})`, 
-                    value: formatPlayers(healers), 
-                    inline: true 
-                }
-            );
-        
-        // Add late section if members exist
-        if (late.length > 0) {
-            embed.addFields({
-                name: `⏲ Late (${late.length}):`,
-                value: formatPlayers(late),
-                inline: false
-            });
+        // Try direct match first
+        if (emojiMap[type]) {
+          return emojiMap[type];
         }
         
-        // Add tentative section if members exist
-        if (tentative.length > 0) {
-            embed.addFields({
-                name: `⏳ Tentative (${tentative.length}):`,
-                value: formatPlayers(tentative),
-                inline: false
-            });
+        // If no direct match, try partial match
+        for (const [key, emoji] of Object.entries(emojiMap)) {
+          if (type.includes(key)) {
+            return emoji;
+          }
         }
         
-        // Add footer with links exactly as shown in image
-        embed.setFooter({ text: `Web View | Comp | Gcat | Premium` });
+        return ''; // No matching emoji found
+      }
+      
+      // Determine team color based on event or team type
+      let teamColor = '#1a64f3'; // Default blue
+      if (team.type === 'PVP') {
+        teamColor = '#f44336'; // Red for PVP
+      } else if (team.type === 'RAID') {
+        teamColor = '#9c27b0'; // Purple for raid
+      } else if (team.name && team.name.toLowerCase().includes('conflict')) {
+        teamColor = '#DC143C'; // Crimson for conflict teams
+      }
+      
+      // Create the embed with modern styling
+      const embed = new EmbedBuilder()
+        .setTitle(`📋 ${team.name || 'Team'}`)
+        .setColor(teamColor)
+        .setDescription(
+          `👥 **Total Members: ${totalDisplay}**\n` +
+          `📅 ${dateString} • ⏰ ${timeString}\n` +
+          `${team.event_title ? `**Event: ${team.event_title}**\n` : ''}` +
+          `${team.description ? `**Notes:** ${team.description}\n` : ''}`
+        );
+      
+      // Create role distribution bar if we have role limits
+      if (team.max_tanks || team.max_healers || team.max_dps) {
+        const roleBar = [
+          `🛡️ \`${tanks.length}/${team.max_tanks || '∞'}\` | ` +
+          `💚 \`${healers.length}/${team.max_healers || '∞'}\` | ` +
+          `⚔️ \`${dps.length}/${team.max_dps || '∞'}\``
+        ];
         
-        return embed;
+        embed.addFields({
+          name: 'Role Distribution',
+          value: roleBar.join('\n'),
+          inline: false
+        });
+      }
+      
+      // Add role fields with enhanced styling
+      embed.addFields(
+        { 
+          name: `🛡️ Tanks (${tanks.length})`, 
+          value: formatPlayers(tanks), 
+          inline: true 
+        },
+        { 
+          name: `💚 Healers (${healers.length})`, 
+          value: formatPlayers(healers), 
+          inline: true 
+        },
+        { 
+          name: `⚔️ DPS (${dps.length})`, 
+          value: formatPlayers(dps), 
+          inline: true 
+        }
+      );
+      
+      // Add late and tentative sections if members exist
+      if (late.length > 0) {
+        embed.addFields({
+          name: `⏲️ Coming Late (${late.length})`,
+          value: formatPlayers(late),
+          inline: true
+        });
+      }
+      
+      if (tentative.length > 0) {
+        embed.addFields({
+          name: `⏳ Tentative (${tentative.length})`,
+          value: formatPlayers(tentative),
+          inline: true
+        });
+      }
+      
+      // Add footer with useful information
+      embed.setFooter({ 
+        text: `Team ID: ${team.id} • Created ${timeAgoString.replace(/`/g, '')}` 
+      });
+      
+      return embed;
     } catch (error) {
-        console.error('Error creating team embed:', error);
-        // Return a simple fallback embed if there's an error
-        return new EmbedBuilder()
-            .setTitle('Team Details')
-            .setDescription('Error creating detailed team information')
-            .setColor('#ff0000');
+      console.error('Error creating team embed:', error);
+      return new EmbedBuilder()
+        .setTitle('Team Details')
+        .setDescription('Error creating detailed team information')
+        .setColor('#ff0000');
     }
-},
+  },
   
   /**
    * Create an embed for attendance statistics

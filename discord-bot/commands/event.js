@@ -112,23 +112,28 @@ module.exports = {
           const row = new ActionRowBuilder()
             .addComponents(
               new ButtonBuilder()
-                .setCustomId(`signup_${events[0].id}_TANK`)
-                .setLabel('Sign up as Tank')
+                .setCustomId(`signup_${eventId}_TANK`)
+                .setLabel('Tank')
                 .setEmoji('🛡️')
                 .setStyle(ButtonStyle.Primary),
               new ButtonBuilder()
-                .setCustomId(`signup_${events[0].id}_HEALER`)
-                .setLabel('Sign up as Healer')
+                .setCustomId(`signup_${eventId}_HEALER`)
+                .setLabel('Healer')
                 .setEmoji('💚')
                 .setStyle(ButtonStyle.Success),
               new ButtonBuilder()
-                .setCustomId(`signup_${events[0].id}_DPS`)
-                .setLabel('Sign up as DPS')
+                .setCustomId(`signup_${eventId}_DPS`)
+                .setLabel('DPS')
                 .setEmoji('⚔️')
                 .setStyle(ButtonStyle.Danger),
               new ButtonBuilder()
-                .setCustomId(`signup_${events[0].id}_ABSENT`)
-                .setLabel('Mark as Absent')
+                .setCustomId(`signup_${eventId}_TENTATIVE`)
+                .setLabel('Tentative')
+                .setEmoji('⏳')
+                .setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder()
+                .setCustomId(`signup_${eventId}_ABSENT`)
+                .setLabel('Absent')
                 .setEmoji('❌')
                 .setStyle(ButtonStyle.Secondary)
             );
