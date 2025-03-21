@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const crypto = require('crypto');
 const db = require('../models');
 const schemaManager = require('../utils/schemaManager');
+const { updateUserRoleAfterGuildLeave } = require('../utils/roleManager');
 
 const generateRandomCode = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -53,67 +54,82 @@ const regenerateJoinCode = async (req, res) => {
 
 const createGuild = async (req, res) => {
   const t = await sequelize.transaction();
-  
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { name } = req.body;
+    const { name, description, isPrivate, joinCode } = req.body;
+    const userId = req.user.id;
     
-    // Validate guild name
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      return res.status(400).json({ error: 'Guild name is required' });
+    // Validate inputs
+    if (!name || name.length < 3 || name.length > 50) {
+      return res.status(400).json({ error: 'Guild name must be between 3 and 50 characters' });
     }
     
-    // Additional validation for guild name
-    if (name.length < 3 || name.length > 50) {
-      return res.status(400).json({ 
-        error: 'Guild name must be between 3 and 50 characters' 
-      });
-    }
+    // Generate a unique join code if not provided
+    const finalJoinCode = joinCode || generateUniqueJoinCode();
     
-    
-    // Create guild record with status field
+    // Create the guild
     const guild = await db.Guild.create({
-      name: name.trim(),
-      owner_id: req.user.id,
-      status: 'ACTIVE',
-      join_code: generateRandomCode()
+      name,
+      description,
+      private_guild: isPrivate || false,
+      owner_id: userId,
+      join_code: finalJoinCode,
+      status: 'ACTIVE'
     }, { transaction: t });
     
-    
-    // Add creator as guild master
+    // Add user as Guild Master in guild_members
     await db.GuildMember.create({
       guild_id: guild.id,
-      user_id: req.user.id,
-      role: 'Guild Master',
-      joined_via_invite: false
+      user_id: userId,
+      role: 'Guild Master'
+    }, { transaction: t });
+    
+    // IMPORTANT: Also update the user's global role in the users table
+    // This ensures consistency between the two tables
+    await db.User.update(
+      { role: 'Guild Master' },
+      { 
+        where: { id: userId },
+        transaction: t 
+      }
+    );
+    
+    // Log the guild creation
+    await db.AdminLog.create({
+      admin_id: userId,
+      action: 'CREATE_GUILD',
+      details: { guildName: name },
+      target_type: 'guild',
+      target_id: guild.id
     }, { transaction: t });
     
     await t.commit();
     
+    // Update the session user object with new role
+    req.user.role = 'Guild Master';
+    
     res.status(201).json({
-      id: guild.id,
-      name: guild.name,
-      status: guild.status,
-      createdAt: guild.created_at || guild.createdAt,
-      inviteLink: `${process.env.FRONTEND_URL}/guilds/join/${guild.id}`
+      success: true,
+      guild: {
+        id: guild.id,
+        name: guild.name,
+        joinCode: guild.join_code
+      }
     });
   } catch (error) {
     await t.rollback();
     console.error('Guild creation error:', error);
-    
-    // Provide more specific error messages based on error type
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({ error: 'A guild with this name already exists' });
-    }
-    
-    res.status(500).json({ 
-      error: 'Failed to create guild', 
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ error: 'Failed to create guild', details: error.message });
   }
+};
+
+const generateUniqueJoinCode = () => {
+  // Generate a random 8-character alphanumeric code
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 };
 
 /**
@@ -210,9 +226,6 @@ const joinGuild = async (req, res) => {
   }
 };
 
-/**
- * Leave a guild
- */
 const leaveGuild = async (req, res) => {
   const t = await sequelize.transaction();
   
@@ -223,10 +236,10 @@ const leaveGuild = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    
     // Check if guild exists
     const guild = await Guild.findByPk(guildId);
     if (!guild) {
+      await t.rollback();
       return res.status(404).json({ error: 'Guild not found' });
     }
     
@@ -239,6 +252,7 @@ const leaveGuild = async (req, res) => {
     });
     
     if (!membership) {
+      await t.rollback();
       return res.status(404).json({ error: 'Not a member of this guild' });
     }
     
@@ -275,16 +289,79 @@ const leaveGuild = async (req, res) => {
           }, { transaction: t });
         }
       } else {
+        // No other members to transfer to
       }
     }
     
     // Remove the user from the guild
     await membership.destroy({ transaction: t });
     
-    // Delete user data from this guild
-    try {
+    // Check for remaining guild memberships
+    const remainingMemberships = await GuildMember.findAll({
+      where: { user_id: req.user.id },
+      transaction: t
+    });
+    
+    // Log the number of remaining memberships
+    console.log(`User ${req.user.id} has ${remainingMemberships.length} remaining guild memberships`);
+    
+    // If no remaining guild memberships, DELETE the user from the users table to ensure
+    // they don't retain elevated permissions
+    if (remainingMemberships.length === 0) {
+      console.log(`User ${req.user.id} has no remaining guild memberships - deleting from users table`);
       
-      // Delete by guild_id filter
+      // CRITICAL SECURITY FIX: Delete the user record to remove all roles
+      await db.User.destroy({
+        where: { 
+          id: req.user.id,
+          // Only delete global records with no guild_id or with this specific guild_id
+          [Op.or]: [
+            { guild_id: null },
+            { guild_id: guildId }
+          ]
+        },
+        transaction: t
+      });
+      
+      console.log(`User ${req.user.id} deleted from users table`);
+    } else {
+      // User still has other guild memberships
+      // Find the highest remaining role
+      let highestRole = 'Member'; // Default if no memberships remain
+      
+      const roleHierarchy = {
+        'Guild Master': 4,
+        'Guild Advisor': 3,
+        'Guild Guardian': 2,
+        'Guild Member': 1,
+        'Member': 1
+      };
+      
+      for (const m of remainingMemberships) {
+        const roleRank = roleHierarchy[m.role] || 0;
+        if (roleRank > roleHierarchy[highestRole]) {
+          highestRole = m.role;
+        }
+      }
+      
+      // Update the user's role based on their remaining guild memberships
+      console.log(`Updating user ${req.user.id} role to ${highestRole} based on remaining memberships`);
+      
+      await db.User.update(
+        { role: highestRole },
+        { 
+          where: { 
+            id: req.user.id,
+            guild_id: null // Only update the global record
+          },
+          transaction: t 
+        }
+      );
+    }
+    
+    // Delete guild-specific user data
+    try {
+      // Delete guild-specific user record
       await db.User.destroy({
         where: { 
           id: req.user.id,
@@ -321,8 +398,8 @@ const leaveGuild = async (req, res) => {
       }
       
     } catch (userDeleteError) {
-      // Log but continue - we don't want to prevent leaving if this fails
       console.error(`Failed to delete user data for guild:`, userDeleteError);
+      throw userDeleteError; // Rethrow to force transaction rollback
     }
     
     // Check if guild is now empty
@@ -331,15 +408,26 @@ const leaveGuild = async (req, res) => {
       transaction: t  // Use the same transaction to see the updated state
     });
 
-    
     if (remainingMembers === 0) {
-
       await deleteEmptyGuild(guildId, t);
     }
     
     await t.commit();
     
-    res.status(200).json({ message: 'Successfully left guild' });
+    // Force user logout if they were deleted from the users table
+    if (remainingMemberships.length === 0) {
+      // Clear session
+      req.logout(err => {
+        if (err) {
+          console.error('Logout error after user deletion:', err);
+        }
+      });
+    }
+    
+    res.status(200).json({ 
+      message: 'Successfully left guild',
+      userDeleted: remainingMemberships.length === 0
+    });
   } catch (error) {
     await t.rollback();
     console.error('Leave guild error:', error);
@@ -419,6 +507,9 @@ const deleteEmptyGuild = async (guildId, transaction) => {
 /**
  * Transfer guild master role to another member
  */
+/**
+ * Transfer guild master role to another member
+ */
 const transferGuildMaster = async (req, res) => {
   const t = await sequelize.transaction();
   
@@ -454,9 +545,22 @@ const transferGuildMaster = async (req, res) => {
       return res.status(404).json({ error: 'New master not found in guild' });
     }
     
-    // Update roles
+    // Update roles in guild_members table
     await currentMaster.update({ role: 'Guild Advisor' }, { transaction: t });
     await newMaster.update({ role: 'Guild Master' }, { transaction: t });
+    
+    // Update roles in main users table
+    try {
+      // Import the role manager utility
+      const { updateUserRoleAfterGuildLeave } = require('../utils/roleManager');
+      
+      // Update roles in main user table for both users
+      await updateUserRoleAfterGuildLeave(req.user.id);
+      await updateUserRoleAfterGuildLeave(newMasterId);
+    } catch (roleUpdateError) {
+      console.error('Failed to update user roles after transfer:', roleUpdateError);
+      // Continue despite error to ensure the transfer still works
+    }
     
     // Log the transfer
     if (db.GuildMasterTransfer) {

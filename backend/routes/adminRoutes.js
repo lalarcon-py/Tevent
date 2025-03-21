@@ -543,6 +543,25 @@ router.delete('/fake-users/:userId', async (req, res) => {
   }
 });
 
+// Add to backend/routes/adminRoutes.js
+const { fixRoleInconsistencies } = require('../utils/roleMigration');
+
+// Add this endpoint to your router
+router.post('/fix-roles', async (req, res) => {
+  try {
+    // Ensure only admins can call this
+    if (!req.isAuthenticated() || req.user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const result = await fixRoleInconsistencies();
+    res.json(result);
+  } catch (error) {
+    console.error('Role fix error:', error);
+    res.status(500).json({ error: 'Failed to fix roles' });
+  }
+});
+
 // Delete guild storage item
 router.delete('/guilds/:guildId/storage/:id', async (req, res) => {
   try {

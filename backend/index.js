@@ -24,6 +24,7 @@ const schemaMiddleware = require('./middleware/schemaMiddleware');
 const validateGuildMembership = require('./middleware/guildMembershipMiddleware');
 const guildScopeMiddleware = require('./middleware/guildScopeMiddleware');
 const guildActivityMiddleware = require('./middleware/guildActivityMiddleware');
+const guildContextMiddleware = require('./middleware/guildContextMiddleware');
 
 // Route imports
 const itemsRouter = require('./routes/items');
@@ -215,6 +216,7 @@ app.use((err, req, res, next) => {
 // Authentication middlewares
 app.use(passport.initialize());
 app.use(passport.session());
+app.use(guildContextMiddleware);
 
 // Parse JSON bodies
 app.use(express.json());
@@ -681,15 +683,59 @@ passport.deserializeUser(async (id, done) => {
       return done(null, cachedUser.user);
     }
     
+    // Get base user from database
     const user = await db.User.findByPk(id);
     
+    if (!user) {
+      return done(null, null);
+    }
+    
+    // Find the user's highest role across all guilds
+    const guildMemberships = await db.GuildMember.findAll({
+      where: { user_id: id }
+    });
+    
+    // Role hierarchy for comparison
+    const roleHierarchy = {
+      'Guild Master': 4,
+      'Guild Advisor': 3,
+      'Guild Guardian': 2,
+      'Guild Member': 1,
+      'Member': 1
+    };
+    
+    let highestRole = user.role;
+    let highestRoleRank = roleHierarchy[user.role] || 0;
+    
+    // Find highest role across all guild memberships
+    for (const membership of guildMemberships) {
+      const membershipRoleRank = roleHierarchy[membership.role] || 0;
+      if (membershipRoleRank > highestRoleRank) {
+        highestRole = membership.role;
+        highestRoleRank = membershipRoleRank;
+      }
+    }
+    
+    // Create enhanced user object
+    const enhancedUser = {
+      ...user.toJSON(),
+      guildMemberships: guildMemberships.map(m => ({
+        guild_id: m.guild_id,
+        role: m.role
+      })),
+      // If highest role from guilds is higher than global role, use it as effective role
+      effectiveRole: highestRole
+    };
+    
+    // Cache the enhanced user
     userCache.set(id, {
-      user,
+      user: enhancedUser,
       timestamp: Date.now()
     });
     
-    done(null, user);
+    done(null, enhancedUser);
   } catch (error) {
+    console.error('User deserialization error:', error);
     done(error, null);
   }
 });
