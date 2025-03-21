@@ -6,7 +6,7 @@ import WaitListTab from './WaitListTab';
 import LootRequestForm from './LootRequestForm';
 import LootWaitlist from './LootWaitlist';
 import WishlistTab from './WishlistTab';
-import RollHistoryTab from './RollHistoryTab'; // Import the new component
+import RollHistoryTab from './RollHistoryTab'; 
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import axiosInstance from '../../config/axios';
@@ -19,18 +19,41 @@ const LootManagement = () => {
   const { simulatedRole } = useSimulatedRole();
   const [directDkpCheck, setDirectDkpCheck] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [debugInfo, setDebugInfo] = useState(null);
   
-  // Get effective role (simulated or actual)
-  const effectiveRole = simulatedRole || (user ? user.role : null);
-  
-  // Create a new isItemAdmin function to separate item storage admins from other admins
-  // Updated to use effective role
-  const isItemAdmin = effectiveRole && ['Guild Master', 'Guild Advisor'].includes(effectiveRole);
-  const isAdmin = effectiveRole && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
-
   // Create a refresh function that updates the trigger state
   const refreshData = () => {
     setRefreshKey(prevKey => prevKey + 1);
+  };
+
+  // Debug logging for role issues
+  useEffect(() => {
+    // Log role information to help diagnose issues
+    const roleInfo = {
+      userObj: user,
+      userRole: user?.role,
+      simulatedRole: simulatedRole,
+      effectiveRole: simulatedRole || (user ? user.role : null),
+      isAdmin: (simulatedRole || (user ? user.role : null)) && 
+              ['Guild Master', 'Guild Advisor'].includes(simulatedRole || (user ? user.role : null))
+    };
+    
+    console.log('LootManagement Role Debug:', roleInfo);
+    setDebugInfo(roleInfo);
+  }, [user, simulatedRole]);
+
+  // Check if user can manage items (Guild Master or Guild Advisor)
+  const isItemAdmin = () => {
+    if (!user) return false;
+    
+    // Get the effective role (considering any simulation)
+    const effectiveRole = simulatedRole || user.role;
+    
+    // Normalize role strings for case-insensitive comparison
+    const normalizedRole = effectiveRole ? effectiveRole.toLowerCase().trim() : '';
+    
+    // Check against normalized role values
+    return ['guild master', 'guild advisor'].includes(normalizedRole);
   };
 
   useEffect(() => {
@@ -81,6 +104,17 @@ const LootManagement = () => {
     });
   }, [dkpEnabled, settings, directDkpCheck]);
 
+  // Check permissions to show AdminLootPanel vs LootRequestForm
+  const showAdminPanel = isItemAdmin();
+
+  // Add this debug logging inside the component
+  console.log('LootManagement render:', {
+    showAdminPanel,
+    userRole: user?.role,
+    simulatedRole,
+    effectiveRole: simulatedRole || user?.role
+  });
+
   return (
     <Box sx={{ width: '100%' }}>
       <Tabs 
@@ -99,11 +133,11 @@ const LootManagement = () => {
         <Tab label="Item Storage" />
         <Tab label="Requests" />
         <Tab label="Wishlist" />
-        <Tab label="Roll History" /> {/* New tab */}
+        <Tab label="Roll History" />
       </Tabs>
 
       <Box sx={{ display: currentTab !== 0 ? 'none' : 'block' }}>
-        {isItemAdmin ? (
+        {showAdminPanel ? (
           <AdminLootPanel 
             key={`admin-panel-${String(dkpEnabled)}-${refreshKey}`} 
             dkpEnabled={dkpEnabled} 
@@ -120,7 +154,7 @@ const LootManagement = () => {
       </Box>
 
       <Box sx={{ display: currentTab !== 1 ? 'none' : 'block' }}>
-        {isAdmin ? (
+        {isItemAdmin() || (simulatedRole || user?.role) === 'Guild Guardian' ? (
           <WaitListTab 
             key={`waitlist-tab-${String(dkpEnabled)}-${refreshKey}`} 
             dkpEnabled={dkpEnabled}
@@ -143,7 +177,6 @@ const LootManagement = () => {
         />
       </Box>
 
-      {/* New Roll History Tab */}
       <Box sx={{ display: currentTab !== 3 ? 'none' : 'block' }}>
         <RollHistoryTab 
           key={`roll-history-tab-${String(dkpEnabled)}-${refreshKey}`} 
