@@ -881,6 +881,10 @@ app.post('/webhook/new-event', async (req, res) => {
       date = new Date(date);
       return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     };
+
+    const tankEmoji = '<:Tank:1352736996405022780>';
+    const healerEmoji = '<:Healer:1352737011479482468>';
+    const dpsEmoji = '<:DPS:1352737043972624518>';
     
     const formatTime = (date) => {
       if (!date) return "Time not set";
