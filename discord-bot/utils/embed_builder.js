@@ -39,7 +39,7 @@ module.exports = {
         statusColor = '#f44336'; // Red for today
       }
       
-      // Custom role emojis
+      // HARDCODED emoji strings - do not use template literals
       const tankEmoji = '<:Tank:1352736996405022780>';
       const healerEmoji = '<:Healer:1352737011479482468>';
       const dpsEmoji = '<:DPS:1352737043972624518>';
@@ -153,27 +153,27 @@ module.exports = {
         }).join('\n');
       };
       
-      // Create embed with simplified description - no progress bars
+      // Create embed with simplified title and description - no duplicate role info
       const embed = new EmbedBuilder()
         .setTitle(`${statusEmoji} ${event.title || 'Event'}`)
         .setColor(statusColor)
-        .setDescription(`${statusEmoji} **${event.title || 'Event'}** ${countdownText}\n\n${event.description || ''}`);
+        .setDescription(`${countdownText}${event.description ? `\n\n${event.description}` : ''}`);
       
-      // Add date/time and location as inline fields
+      // Add date/time and location as inline fields on the same line
       embed.addFields(
         { 
-          name: 'Time: ', 
+          name: '⏰ Time', 
           value: `📅 ${dateFormatted} at **${timeFormatted}**`, 
           inline: true 
         },
         { 
-          name: 'Location: ', 
+          name: '📍 Location', 
           value: event.location || 'Not specified', 
           inline: true 
         }
       );
       
-      // Add fields for current signups - with player names
+      // Add fields for current signups with hardcoded emoji strings
       embed.addFields(
         { 
           name: `${tankEmoji} Tanks (${tanks.length}/${event.tanks || 0})`, 
@@ -192,6 +192,7 @@ module.exports = {
         }
       );
       
+      // Add absentees and tentative stacked vertically
       embed.addFields(
         { 
           name: `❌ Absent (${absentees.length || 0})`, 
@@ -213,6 +214,7 @@ module.exports = {
         });
       }
       
+      // Add footer
       embed.setFooter({ 
         text: `Use buttons below to sign up • Event ID: ${event.id}` 
       });
