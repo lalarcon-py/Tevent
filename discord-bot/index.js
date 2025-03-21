@@ -2991,13 +2991,13 @@ client.on('interactionCreate', async (interaction) => {
                 
                 if (eventTime < now) {
                   statusEmoji = '✓'; 
-                  statusColor = '#808080'; // Gray for past events
-                } else if (timeUntil < 3600000) { // Less than 1 hour
+                  statusColor = '#808080';
+                } else if (timeUntil < 3600000) {
                   statusEmoji = '⚠️';
-                  statusColor = '#ff9900'; // Orange for imminent
-                } else if (daysUntil === 0) { // Today
+                  statusColor = '#ff9900';
+                } else if (daysUntil === 0) {
                   statusEmoji = '🔴';
-                  statusColor = '#f44336'; // Red for today
+                  statusColor = '#f44336';
                 }
                 
                 // Format the date for display
