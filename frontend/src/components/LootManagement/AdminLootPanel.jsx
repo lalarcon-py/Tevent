@@ -66,20 +66,33 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
     { value: 4320, label: '72 Hours' }
   ];
 
-  // Add permission check helper function - updated to use effective role
-  const hasStoragePermission = () => {
-    if (!user) return false;
-    
-    // Use simulated role if available, otherwise use actual role
-    const effectiveRole = simulatedRole || user.role;
-    return ['Guild Master', 'Guild Advisor'].includes(effectiveRole);
-  };
-
   // Move all useEffect hooks here, before any conditional returns
   useEffect(() => {
     fetchAddedItems();
     fetchTemplateItems();
   }, []);
+
+  const hasStoragePermission = () => {
+    if (!user) return false;
+    const effectiveRole = simulatedRole || user.role;
+    return ['Guild Master', 'Guild Advisor'].includes(effectiveRole);
+  };
+
+  // Conditional render (this is fine)
+  if (!hasStoragePermission()) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h6" color="error">
+          You don't have permission to manage guild storage.
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Only Guild Masters and Guild Advisors can manage guild storage.
+        </Typography>
+      </Box>
+    );
+  }
+
+  
 
   const triggerRollCheck = async () => {
     try {
