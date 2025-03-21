@@ -1331,6 +1331,7 @@ async function getItemType(dbClient, storageItemId) {
 }
 
 // Button interaction handler
+// Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
   try {
     // Handle slash commands
@@ -2053,493 +2054,6 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 });
-
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-  
-  const customId = interaction.customId;
-  if (customId.startsWith('signup_')) {
-    const [_, eventId, role] = customId.split('_');
-    
-    // If the role is "ABSENT", handle it directly without build selection
-    if (role === 'ABSENT') {
-      await handleAbsentSignup(interaction, eventId);
-      return;
-    }
-    
-    // Create the class selection menu
-    const WEAPON_SPECS = {
-      'Crossbow|Dagger': 'Scorpion',
-      'Crossbow|Greatsword': 'Outrider',
-      'Crossbow|Sword and Shield': 'Raider',
-      'Crossbow|Bow': 'Scout',
-      'Crossbow|Staff': 'Battleweaver',
-      'Crossbow|Wand': 'Fury',
-      'Greatsword|Wand': 'Paladin',
-      'Greatsword|Dagger': 'Ravager',
-      'Greatsword|Sword and Shield': 'Crusader',
-      'Greatsword|Bow': 'Ranger',
-      'Greatsword|Staff': 'Sentinel',
-      'Sword and Shield|Dagger': 'Berserker',
-      'Sword and Shield|Bow': 'Warden',
-      'Sword and Shield|Staff': 'Disciple',
-      'Sword and Shield|Wand': 'Templar',
-      'Bow|Dagger': 'Infiltrator',
-      'Bow|Staff': 'Liberator',
-      'Bow|Wand': 'Seeker',
-      'Staff|Dagger': 'Spellblade',
-      'Staff|Wand': 'Invocator',
-      'Wand|Dagger': 'Darkblighter',
-      'Spear|Greatsword': 'Gladiator',
-      'Spear|Sword and Shield': 'Steelheart',
-      'Spear|Staff': 'Eradicator',
-      'Spear|Dagger': 'Shadowdancer',
-      'Spear|Crossbow': 'Cavalier',
-      'Spear|Wand': 'Voidlance',
-      'Spear|Bow': 'Impaler'
-    };
-    
-    // Create select menu options from the weapon specs
-    const options = Object.entries(WEAPON_SPECS).map(([weapons, spec]) => {
-      return {
-        label: spec,
-        description: weapons.replace('|', ' + '),
-        value: spec
-      };
-    });
-    
-    // Create the selection menu using SelectMenu component
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new SelectMenuBuilder()
-          .setCustomId(`select_build_${eventId}_${role}`)
-          .setPlaceholder('Select your class/build')
-          .addOptions(options)
-      );
-    
-    // Show class selection as ephemeral message
-    await interaction.reply({
-      content: `Select your class for signing up as ${role}:`,
-      components: [row],
-      ephemeral: true
-    });
-  }
-});
-
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isStringSelectMenu()) return;  // Updated to use non-deprecated method
-  
-  const customId = interaction.customId;
-  if (customId.startsWith('select_build_')) {
-    await interaction.deferReply({ ephemeral: true });
-    
-    const [_, __, eventId, role] = customId.split('_');
-    const selectedBuild = interaction.values[0];
-    const discordUserId = interaction.user.id;
-    
-    try {
-      // Get Discord guild ID and app guild ID
-      const discordGuildId = interaction.guild?.id;
-      if (!discordGuildId) {
-        return await interaction.editReply({
-          content: 'This must be used in a Discord server.',
-          ephemeral: true
-        });
-      }
-      
-      const appGuildId = await getGuildMapping(discordGuildId);
-      if (!appGuildId) {
-        return await interaction.editReply({
-          content: 'This Discord server is not linked to an application guild.',
-          ephemeral: true
-        });
-      }
-      
-      // Get user ID from Discord ID
-      const userResult = await pool.query(
-        'SELECT id, username FROM users WHERE discord_id = $1',
-        [discordUserId]
-      );
-      
-      if (!userResult.rows || userResult.rows.length === 0) {
-        return await interaction.editReply('You need to register on the website first before signing up for events.');
-      }
-      
-      const userId = userResult.rows[0].id;
-      
-      // Get the event details
-      const eventResult = await pool.query(
-        'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
-        [eventId, appGuildId]
-      );
-      
-      if (!eventResult.rows || eventResult.rows.length === 0) {
-        return await interaction.editReply('Event not found.');
-      }
-      
-      const event = eventResult.rows[0];
-      
-      // Check if already signed up
-      const existingSignup = await pool.query(
-        'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
-        [eventId, userId]
-      );
-      
-      if (existingSignup.rows && existingSignup.rows.length > 0) {
-        // Update existing signup
-        await pool.query(
-          'UPDATE event_participants SET role = $1, build = $2, updated_at = NOW() WHERE id = $3',
-          [role, selectedBuild, existingSignup.rows[0].id]
-        );
-        
-        await interaction.editReply(`Your role for "${event.title}" has been updated to ${role} (${selectedBuild}).`);
-      } else {
-        // Check role capacity
-        const roleCountsResult = await pool.query(
-          `SELECT 
-            COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-            COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-            COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-          FROM event_participants
-          WHERE event_id = $1`,
-          [eventId]
-        );
-        
-        const roleCounts = roleCountsResult.rows[0];
-        
-        // Verify there's room for this role
-        const roleLimits = {
-          'TANK': event.tanks || 0,
-          'HEALER': event.healers || 0,
-          'DPS': event.dps || 0
-        };
-        
-        const currentCounts = {
-          'TANK': parseInt(roleCounts?.tank_count || 0),
-          'HEALER': parseInt(roleCounts?.healer_count || 0),
-          'DPS': parseInt(roleCounts?.dps_count || 0)
-        };
-        
-        if (currentCounts[role] >= roleLimits[role]) {
-          return await interaction.editReply(`Sorry, the ${role} spots are full for this event.`);
-        }
-        
-        // Remove from absentees if marked before
-        await pool.query(
-          'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-          [eventId, userId]
-        );
-        
-        // Create new signup with build information
-        await pool.query(
-          `INSERT INTO event_participants 
-            (id, guild_id, event_id, user_id, role, build, created_at, updated_at)
-          VALUES
-            (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
-          [appGuildId, eventId, userId, role, selectedBuild]
-        );
-        
-        await interaction.editReply(`You've been signed up for "${event.title}" as ${role} (${selectedBuild}).`);
-      }
-      
-      // Update the event message with the new signup
-      await updateEventMessage(client, eventId);
-      
-      // Send a quiet notification (no @ mention) to the channel
-      try {
-        const messageResult = await pool.query(
-          `SELECT channel_id FROM discord_event_messages WHERE event_id = $1`,
-          [eventId]
-        );
-        
-        if (messageResult.rows.length > 0) {
-          const channelId = messageResult.rows[0].channel_id;
-          const channel = await client.channels.fetch(channelId).catch(() => null);
-          
-          if (channel) {
-            // Send a minimal notification with no mentions
-            await channel.send({
-              content: `**${interaction.user.username}** signed up as ${role} (${selectedBuild})`,
-              allowedMentions: { parse: [] } // This prevents any mentions from triggering
-            }).catch(console.error);
-          }
-        }
-      } catch (notifyError) {
-        console.error('Error sending notification:', notifyError);
-      }
-    } catch (error) {
-      console.error('Error processing build selection:', error);
-      await interaction.editReply('An error occurred while processing your selection.');
-    }
-  }
-});
-
-async function handleAbsentSignup(interaction, eventId) {
-  await interaction.deferReply({ ephemeral: true });
-  
-  try {
-    const discordUserId = interaction.user.id;
-    const discordGuildId = interaction.guild?.id;
-    
-    if (!discordGuildId) {
-      return await interaction.editReply('This must be used in a Discord server.');
-    }
-    
-    const appGuildId = await getGuildMapping(discordGuildId);
-    if (!appGuildId) {
-      return await interaction.editReply('This Discord server is not linked to an application guild.');
-    }
-    
-    // Get user ID from Discord ID
-    const userResult = await pool.query(
-      'SELECT id, username FROM users WHERE discord_id = $1',
-      [discordUserId]
-    );
-    
-    if (!userResult.rows || userResult.rows.length === 0) {
-      return await interaction.editReply('You need to register on the website first.');
-    }
-    
-    const userId = userResult.rows[0].id;
-    
-    // Get the event details
-    const eventResult = await pool.query(
-      'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
-      [eventId, appGuildId]
-    );
-    
-    if (!eventResult.rows || eventResult.rows.length === 0) {
-      return await interaction.editReply('Event not found.');
-    }
-    
-    const event = eventResult.rows[0];
-    
-    // Remove from participants
-    await pool.query(
-      'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-      [eventId, userId]
-    );
-    
-    // Add to absentees
-    await pool.query(
-      `INSERT INTO event_absentees 
-        (id, guild_id, event_id, user_id, created_at, updated_at)
-      VALUES 
-        (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-      ON CONFLICT (event_id, user_id) DO NOTHING`,
-      [appGuildId, eventId, userId]
-    );
-    
-    await interaction.editReply(`You have been marked as absent for "${event.title}".`);
-    
-    // Update the event message
-    await updateEventMessage(client, eventId);
-    
-    // Send a quiet notification (no @ mention) to the channel
-    try {
-      const messageResult = await pool.query(
-        `SELECT channel_id FROM discord_event_messages WHERE event_id = $1`,
-        [eventId]
-      );
-      
-      if (messageResult.rows.length > 0) {
-        const channelId = messageResult.rows[0].channel_id;
-        const channel = await client.channels.fetch(channelId).catch(() => null);
-        
-        if (channel) {
-          // Send a minimal notification with no mentions
-          await channel.send({
-            content: `**${interaction.user.username}** marked absent`,
-            allowedMentions: { parse: [] }
-          }).catch(console.error);
-        }
-      }
-    } catch (notifyError) {
-      console.error('Error sending notification:', notifyError);
-    }
-  } catch (error) {
-    console.error('Error processing absent signup:', error);
-    await interaction.editReply('An error occurred while processing your request.');
-  }
-}
-
-async function updateEventMessage(client, eventId) {
-  try {
-    // Get the message information
-    const messageResult = await pool.query(
-      `SELECT channel_id, message_id FROM discord_event_messages WHERE event_id = $1`,
-      [eventId]
-    );
-    
-    if (!messageResult.rows.length) return;
-    
-    const { channel_id, message_id } = messageResult.rows[0];
-    
-    const channel = await client.channels.fetch(channel_id).catch(() => null);
-    if (!channel) return;
-    
-    const message = await channel.messages.fetch(message_id).catch(() => null);
-    if (!message) return;
-    
-    // Get event data
-    const eventResult = await pool.query(
-      `SELECT * FROM events WHERE id = $1`,
-      [eventId]
-    );
-    
-    if (!eventResult.rows.length) return;
-    
-    const event = eventResult.rows[0];
-    
-    // Format date and time
-    const eventTime = new Date(event.event_time);
-    const dateFormatted = eventTime.toLocaleDateString('en-US', { 
-      month: 'long', day: 'numeric', year: 'numeric' 
-    });
-    const timeFormatted = eventTime.toLocaleTimeString('en-US', { 
-      hour: 'numeric', minute: '2-digit', hour12: true 
-    });
-    
-    // Get participants with their builds
-    const participantsResult = await pool.query(
-      `SELECT ep.role, ep.build, u.username, u.discord_id, u.builds
-       FROM event_participants ep
-       JOIN users u ON ep.user_id = u.id
-       WHERE ep.event_id = $1
-       ORDER BY ep.created_at ASC`,
-      [eventId]
-    );
-    
-    // Get absentees
-    const absenteesResult = await pool.query(
-      `SELECT ea.user_id, u.username
-       FROM event_absentees ea
-       JOIN users u ON ea.user_id = u.id
-       WHERE ea.event_id = $1
-       ORDER BY ea.created_at ASC`,
-      [eventId]
-    );
-    
-    // Group participants by role
-    const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
-    const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
-    const dps = participantsResult.rows.filter(p => p.role === 'DPS');
-    const absentees = absenteesResult.rows;
-    
-    // Format players for each role
-    const formatPlayerList = (players) => {
-      if (players.length === 0) return '—';
-      
-      return players.map((player, index) => {
-        // Get build info - first try the saved build from the signup
-        let buildDisplay = player.build ? ` (${player.build})` : '';
-        
-        // If no build was selected during signup, try to get weapon emoji
-        if (!buildDisplay) {
-          const weaponEmoji = getPlayerWeaponEmoji(player);
-          buildDisplay = weaponEmoji ? ` ${weaponEmoji}` : '';
-        }
-        
-        return `${index + 1}. ${player.username}${buildDisplay}`;
-      }).join('\n');
-    };
-    
-    // Create updated embed
-    const updatedEmbed = new EmbedBuilder()
-      .setTitle(event.title || 'Event')
-      .setColor('#1a64f3')
-      .setDescription(event.description || 'No description provided')
-      .addFields(
-        {
-          name: '⏰ Time',
-          value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
-          inline: false
-        },
-        {
-          name: '📍 Location',
-          value: event.location || 'Not specified',
-          inline: false
-        },
-        {
-          name: `🛡️ Tanks (${tanks.length}/${event.tanks || 0})`,
-          value: formatPlayerList(tanks),
-          inline: true
-        },
-        {
-          name: `💚 Healers (${healers.length}/${event.healers || 0})`,
-          value: formatPlayerList(healers),
-          inline: true
-        },
-        {
-          name: `⚔️ DPS (${dps.length}/${event.dps || 0})`,
-          value: formatPlayerList(dps),
-          inline: true
-        },
-        {
-          name: `❌ Absent (${absentees.length})`,
-          value: absentees.length > 0 ? 
-            absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
-            '—',
-          inline: true
-        },
-        {
-          name: '⏳ Tentative (0)',
-          value: '—',
-          inline: true
-        }
-      )
-      .setFooter({ text: `Event ID: ${eventId}` });
-
-    // Update the message
-    await message.edit({ embeds: [updatedEmbed] });
-  } catch (error) {
-    console.error('Error updating event message:', error);
-  }
-}
-
-function getPlayerWeaponEmoji(player) {
-  if (!player.builds) return '';
-  
-  try {
-    // Handle builds regardless of whether it's a string or object
-    let buildsData = player.builds;
-    
-    // If it's a string (regular JSON), parse it
-    if (typeof player.builds === 'string') {
-      buildsData = JSON.parse(player.builds);
-    }
-    
-    // More robust structure checking
-    if (buildsData) {
-      if (Array.isArray(buildsData)) {
-        // Handle array format
-        if (buildsData.length > 0) {
-          const primaryBuild = buildsData[0];
-          // Check all possible property paths
-          const weaponType = primaryBuild.weapon || 
-                           primaryBuild.primary_weapon || 
-                           primaryBuild.weaponType ||
-                           (primaryBuild.equipment && primaryBuild.equipment.weapon);
-          
-          if (weaponType) return getWeaponEmoji(weaponType);
-        }
-      } else {
-        // Handle object format (could be from JSONB)
-        const weaponType = buildsData.weapon || 
-                         buildsData.primary_weapon || 
-                         buildsData.weaponType ||
-                         (buildsData.equipment && buildsData.equipment.weapon);
-        
-        if (weaponType) return getWeaponEmoji(weaponType);
-      }
-    }
-  } catch (e) {
-    console.error(`Error processing builds for ${player.username}:`, e);
-  }
-  
-  return '';
-}
-
 
 // Register slash commands
 const registerCommands = async () => {
@@ -3301,41 +2815,33 @@ client.on('interactionCreate', async (interaction) => {
               
               if (player.builds) {
                 try {
-                  // Handle builds regardless of whether it's a string or object
+                  // Parse builds data if it's a string
                   let buildsData = player.builds;
-                  
-                  // If it's a string (regular JSON), parse it
                   if (typeof player.builds === 'string') {
                     buildsData = JSON.parse(player.builds);
                   }
                   
-                  // Add debugging to see the actual data structure
-                  console.log(`DEBUG: Builds data type: ${typeof buildsData}`);
-                  console.log(`DEBUG: Builds data structure:`, JSON.stringify(buildsData));
-                  
-                  // More robust structure checking
-                  if (buildsData) {
-                    if (Array.isArray(buildsData)) {
-                      // Handle array format
-                      if (buildsData.length > 0) {
-                        const primaryBuild = buildsData[0];
-                        // Check all possible property paths
-                        const weaponType = primaryBuild.weapon || 
-                                           primaryBuild.primary_weapon || 
-                                           primaryBuild.weaponType ||
-                                           (primaryBuild.equipment && primaryBuild.equipment.weapon);
-                        
-                        if (weaponType) weaponEmoji = getWeaponEmoji(weaponType);
-                      }
-                    } else {
-                      // Handle object format (could be from JSONB)
-                      const weaponType = buildsData.weapon || 
-                                         buildsData.primary_weapon || 
-                                         buildsData.weaponType ||
-                                         (buildsData.equipment && buildsData.equipment.weapon);
-                      
-                      if (weaponType) weaponEmoji = getWeaponEmoji(weaponType);
+                  // Handle different builds structures
+                  if (Array.isArray(buildsData) && buildsData.length > 0) {
+                    // If builds is an array, use the first (primary) build
+                    const primaryBuild = buildsData[0];
+                    
+                    if (primaryBuild.weapon) {
+                      weaponEmoji = getWeaponEmoji(primaryBuild.weapon);
+                    } else if (primaryBuild.primary_weapon) {
+                      weaponEmoji = getWeaponEmoji(primaryBuild.primary_weapon);
+                    } else if (primaryBuild.weaponType) {
+                      weaponEmoji = getWeaponEmoji(primaryBuild.weaponType);
                     }
+                  } else if (buildsData.weapon) {
+                    // If builds is an object with weapon property
+                    weaponEmoji = getWeaponEmoji(buildsData.weapon);
+                  } else if (buildsData.primary_weapon) {
+                    // If builds is an object with primary_weapon property
+                    weaponEmoji = getWeaponEmoji(buildsData.primary_weapon);
+                  } else if (buildsData.weaponType) {
+                    // If builds is an object with weaponType property
+                    weaponEmoji = getWeaponEmoji(buildsData.weaponType);
                   }
                   
                   console.log(`DEBUG: Weapon emoji for ${username}: ${weaponEmoji}`);
@@ -3353,6 +2859,7 @@ client.on('interactionCreate', async (interaction) => {
               
               // Convert to string and lowercase for consistent matching
               const type = String(weaponType).toLowerCase();
+              console.log(`DEBUG: Looking up emoji for weapon type: ${type}`);
               
               const emojiMap = {
                 'dagger': '<:Dagger:1352127620761784321>',
@@ -3360,7 +2867,6 @@ client.on('interactionCreate', async (interaction) => {
                 'wand': '<:Wand:1352127712180830249>',
                 'sword': '<:SwordandShield:1352127689183592459>',
                 'swordandshield': '<:SwordandShield:1352127689183592459>',
-                'sword and shield': '<:SwordandShield:1352127689183592459>',
                 'crossbow': '<:Crossbow:1352127594597978112>',
                 'greatsword': '<:Greatsword:1352127640227549265>',
                 'staff': '<:Staff:1352127671831887923>',
