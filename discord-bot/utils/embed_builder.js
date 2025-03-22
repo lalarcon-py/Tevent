@@ -32,7 +32,41 @@ const WEAPON_SPECS = {
   'Spear|Bow': 'Impaler'
 };
 
+function getWeaponEmoji(weaponType) {
+  if (!weaponType) return '';
+  
+  // Convert to string and lowercase for consistent matching
+  const type = String(weaponType).toLowerCase();
+  
+  const emojiMap = {
+    'dagger': '<:Dagger:1352127620761784321>',
+    'spear': '<:Spear:1352127656748908636>',
+    'wand': '<:Wand:1352127712180830249>',
+    'sword': '<:SwordandShield:1352127689183592459>',
+    'swordandshield': '<:SwordandShield:1352127689183592459>',
+    'crossbow': '<:Crossbow:1352127594597978112>',
+    'greatsword': '<:Greatsword:1352127640227549265>',
+    'staff': '<:Staff:1352127671831887923>',
+    'bow': '<:Bow:1352127546308825170>'
+  };
+  
+  // Try direct match first
+  if (emojiMap[type]) {
+    return emojiMap[type];
+  }
+  
+  // If no direct match, try partial match
+  for (const [key, emoji] of Object.entries(emojiMap)) {
+    if (type.includes(key)) {
+      return emoji;
+    }
+  }
+  
+  return ''; // No matching emoji found
+}
+
 module.exports = {
+  
   /**
    * Create an embed for an event
    */
