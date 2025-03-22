@@ -418,54 +418,67 @@ module.exports = {
         
         return players.map((p, idx) => {
           const name = p.User?.username || p.username || 'Unknown';
+          const role = p.role; // The role the player signed up with
           let primaryEmoji = '';
           let secondaryEmoji = '';
           let className = '';
           
           try {
-            // Get the user's builds
-            let userBuilds = [];
-            if (p.User?.builds) {
-              userBuilds = typeof p.User.builds === 'string' 
-                ? JSON.parse(p.User.builds) 
-                : p.User.builds;
-            } else if (p.builds) {
-              userBuilds = typeof p.builds === 'string' 
-                ? JSON.parse(p.builds) 
-                : p.builds;
+            // Get the player's builds
+            let builds = [];
+            
+            // Try to get builds from various properties
+            if (p.builds) {
+              builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+            } else if (p.User?.builds) {
+              builds = typeof p.User.builds === 'string' ? JSON.parse(p.User.builds) : p.User.builds;
             }
             
-            if (Array.isArray(userBuilds) && userBuilds.length > 0) {
-              // Find a build that matches the role
-              const role = p.role;
-              let matchingBuild = null;
+            // Make sure builds is an array
+            if (!Array.isArray(builds)) {
+              builds = [];
+            }
+            
+            // Find a build matching the player's role
+            let matchingBuild = null;
+            
+            if (role && builds.length > 0) {
+              // Look for a build with matching spec
+              matchingBuild = builds.find(build => 
+                build.spec && build.spec.toUpperCase() === role.toUpperCase()
+              );
               
-              // First try to find a build that specifically matches this role
-              if (role) {
-                matchingBuild = userBuilds.find(b => 
-                  b.spec && b.spec.toUpperCase() === role.toUpperCase()
-                );
+              // If no matching build, use the first one
+              if (!matchingBuild) {
+                matchingBuild = builds[0];
               }
-              
-              // If no role-specific build, use the first one
-              if (!matchingBuild && userBuilds.length > 0) {
-                matchingBuild = userBuilds[0];
-              }
-              
-              if (matchingBuild) {
-                primaryEmoji = getWeaponEmoji(matchingBuild.primary);
-                secondaryEmoji = getWeaponEmoji(matchingBuild.secondary);
-                className = matchingBuild.weapon_spec;
+            }
+            
+            // Extract display information from the matching build
+            if (matchingBuild) {
+              primaryEmoji = getWeaponEmoji(matchingBuild.primary || '');
+              secondaryEmoji = getWeaponEmoji(matchingBuild.secondary || '');
+              className = matchingBuild.weapon_spec || '';
+            }
+            // Fallback to weapon_spec column if available (for backward compatibility)
+            else if (p.weapon_spec) {
+              className = WEAPON_SPECS[p.weapon_spec] || '';
+              const weapons = p.weapon_spec.split('|');
+              if (weapons.length >= 2) {
+                primaryEmoji = getWeaponEmoji(weapons[0]);
+                secondaryEmoji = getWeaponEmoji(weapons[1]);
+              } else if (weapons.length === 1) {
+                primaryEmoji = getWeaponEmoji(weapons[0]);
               }
             }
           } catch (e) {
             console.error(`Error processing builds for player ${name}:`, e);
           }
           
-          // Create display with both weapon emojis and class name
-          const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji} ` : primaryEmoji ? `${primaryEmoji} ` : '';
+          // Create display with weapon emojis and class name
+          const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
           const classDisplay = className ? ` (${className})` : '';
-          return `${idx + 1}. ${weaponDisplay}**${name}**${classDisplay}`;
+          return `${idx + 1}. ${weaponDisplay} **${name}**${classDisplay}`;
         }).join('\n');
       };
       
