@@ -1169,6 +1169,7 @@ client.on('guildCreate', async (guild) => {
   }
 });
 
+
 // Member join handler
 client.on('guildMemberAdd', async (member) => {
   try {
@@ -5598,7 +5599,6 @@ const itemRequestMessages = new Map();
 
 client.on('ready', async () => {
   console.log(`Logged in as ${client.user.tag}!`);
-  updateDatabaseSchema();
   
   // Create required database tables if they don't exist
   try {
