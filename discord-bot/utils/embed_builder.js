@@ -42,8 +42,9 @@ function getWeaponEmoji(weaponType) {
     'dagger': '<:Dagger:1352127620761784321>',
     'spear': '<:Spear:1352127656748908636>',
     'wand': '<:Wand:1352127712180830249>',
-    'sword': '<:SwordandShield:1352127689183592459>',
+    'sword and shield': '<:SwordandShield:1352127689183592459>',
     'swordandshield': '<:SwordandShield:1352127689183592459>',
+    'sword': '<:SwordandShield:1352127689183592459>',
     'crossbow': '<:Crossbow:1352127594597978112>',
     'greatsword': '<:Greatsword:1352127640227549265>',
     'staff': '<:Staff:1352127671831887923>',
@@ -168,23 +169,28 @@ module.exports = {
       }
       
       // Format players with weapon information
+      // Updated formatPlayers function to display both weapon emojis
       const formatPlayers = (players) => {
         if (players.length === 0) return '—';
         
         return players.map((p, idx) => {
           const name = p.User?.username || p.username || 'Unknown';
-          let buildEmoji = '';
+          let primaryEmoji = '';
+          let secondaryEmoji = '';
           let className = '';
           
           // Check for weapon_spec from our class system
           if (p.weapon_spec) {
             className = WEAPON_SPECS[p.weapon_spec] || '';
             const weapons = p.weapon_spec.split('|');
-            if (weapons.length > 0) {
-              buildEmoji = getWeaponEmoji(weapons[0]);
+            if (weapons.length >= 2) {
+              primaryEmoji = getWeaponEmoji(weapons[0]);
+              secondaryEmoji = getWeaponEmoji(weapons[1]);
+            } else if (weapons.length === 1) {
+              primaryEmoji = getWeaponEmoji(weapons[0]);
             }
           } 
-          // If no weapon_spec, try to get weapon from builds
+          // If no weapon_spec, try to get weapons from builds
           else {
             try {
               // First check if there's a selected_build
@@ -200,8 +206,9 @@ module.exports = {
                   selectedBuild = p.selected_build;
                 }
                 
-                if (selectedBuild && selectedBuild.primary) {
-                  buildEmoji = getWeaponEmoji(selectedBuild.primary);
+                if (selectedBuild) {
+                  if (selectedBuild.primary) primaryEmoji = getWeaponEmoji(selectedBuild.primary);
+                  if (selectedBuild.secondary) secondaryEmoji = getWeaponEmoji(selectedBuild.secondary);
                 }
               }
               // Try direct builds property
@@ -219,9 +226,8 @@ module.exports = {
                 
                 if (Array.isArray(builds) && builds.length > 0) {
                   const primaryBuild = builds[0];
-                  const weaponType = primaryBuild.primary || primaryBuild.weaponType || 
-                                    primaryBuild.primary_weapon || '';
-                  buildEmoji = getWeaponEmoji(weaponType);
+                  if (primaryBuild.primary) primaryEmoji = getWeaponEmoji(primaryBuild.primary);
+                  if (primaryBuild.secondary) secondaryEmoji = getWeaponEmoji(primaryBuild.secondary);
                 }
               }
               // If no selected build, look for builds in User
@@ -239,9 +245,8 @@ module.exports = {
                 
                 if (Array.isArray(builds) && builds.length > 0) {
                   const primaryBuild = builds[0];
-                  const weaponType = primaryBuild.primary || primaryBuild.weaponType || 
-                                   primaryBuild.primary_weapon || '';
-                  buildEmoji = getWeaponEmoji(weaponType);
+                  if (primaryBuild.primary) primaryEmoji = getWeaponEmoji(primaryBuild.primary);
+                  if (primaryBuild.secondary) secondaryEmoji = getWeaponEmoji(primaryBuild.secondary);
                 }
               }
             } catch (e) {
@@ -249,9 +254,10 @@ module.exports = {
             }
           }
           
-          // Include class name in the display
+          // Create display with both weapon emojis
+          const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
           const classDisplay = className ? ` (${className})` : '';
-          return `${idx + 1}. ${buildEmoji} **${name}**${classDisplay}`;
+          return `${idx + 1}. ${weaponDisplay} **${name}**${classDisplay}`;
         }).join('\n');
       };
       

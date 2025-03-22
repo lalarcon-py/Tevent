@@ -57,66 +57,97 @@ async function ensureUserPreferencesTable() {
 
 // Helper function to get available classes for a user based on their builds
 async function getAvailableClasses(userId) {
-  try {
-    // Get user builds from database
-    const userResult = await sequelize.query(
-      `SELECT builds FROM users WHERE id = $1`,
-      { 
-        bind: [userId],
-        type: sequelize.QueryTypes.SELECT
-      }
-    );
-    
-    if (!userResult.length || !userResult[0].builds) {
-      return [];
-    }
-    
-    // Parse builds data
-    let builds;
     try {
-      builds = typeof userResult[0].builds === 'string' 
-        ? JSON.parse(userResult[0].builds) 
-        : userResult[0].builds;
-    } catch (e) {
-      console.error('Error parsing builds:', e);
-      return [];
-    }
-    
-    if (!Array.isArray(builds) || builds.length === 0) {
-      return [];
-    }
-    
-    // Extract weapon types from builds
-    const userWeaponTypes = new Set();
-    builds.forEach(build => {
-      // Handle various property names that might contain weapon types
-      const primary = build.primary || build.primary_weapon || build.weaponType || '';
-      const secondary = build.secondary || build.secondary_weapon || '';
+      // Get user builds from database
+      const userResult = await sequelize.query(
+        `SELECT builds FROM users WHERE id = $1`,
+        { 
+          bind: [userId],
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
       
-      if (primary) userWeaponTypes.add(primary);
-      if (secondary) userWeaponTypes.add(secondary);
-    });
-    
-    console.log(`[DEBUG] User weapons: ${Array.from(userWeaponTypes).join(', ')}`);
-    
-    // Determine available classes based on weapon combinations
-    const availableClasses = [];
-    for (const [weaponCombo, className] of Object.entries(WEAPON_SPECS)) {
-      const weapons = weaponCombo.split('|');
-      if (userWeaponTypes.has(weapons[0]) && userWeaponTypes.has(weapons[1])) {
-        availableClasses.push({ 
-          weaponCombo,
-          className
-        });
+      if (!userResult.length || !userResult[0].builds) {
+        return [];
       }
+      
+      // Parse builds data
+      let builds;
+      try {
+        builds = typeof userResult[0].builds === 'string' 
+          ? JSON.parse(userResult[0].builds) 
+          : userResult[0].builds;
+      } catch (e) {
+        console.error('Error parsing builds:', e);
+        return [];
+      }
+      
+      if (!Array.isArray(builds) || builds.length === 0) {
+        return [];
+      }
+      
+      console.log(`[DEBUG] User builds: ${JSON.stringify(builds)}`);
+      
+      // Extract available classes from builds
+      const availableClasses = [];
+      const seenClasses = new Set();
+      
+      builds.forEach(build => {
+        // Check if build has weapon_spec directly
+        if (build.weapon_spec && WEAPON_SPECS[`${build.primary}|${build.secondary}`] === build.weapon_spec) {
+          const weaponCombo = `${build.primary}|${build.secondary}`;
+          if (!seenClasses.has(build.weapon_spec)) {
+            availableClasses.push({
+              weaponCombo: weaponCombo,
+              className: build.weapon_spec,
+              spec: build.spec || 'Any'
+            });
+            seenClasses.add(build.weapon_spec);
+          }
+        }
+        // Try reverse order of weapons too
+        else if (build.weapon_spec && WEAPON_SPECS[`${build.secondary}|${build.primary}`] === build.weapon_spec) {
+          const weaponCombo = `${build.secondary}|${build.primary}`;
+          if (!seenClasses.has(build.weapon_spec)) {
+            availableClasses.push({
+              weaponCombo: weaponCombo,
+              className: build.weapon_spec,
+              spec: build.spec || 'Any'
+            });
+            seenClasses.add(build.weapon_spec);
+          }
+        }
+        // Fallback to checking weapon combinations
+        else if (build.primary && build.secondary) {
+          const combo1 = `${build.primary}|${build.secondary}`;
+          const combo2 = `${build.secondary}|${build.primary}`;
+          
+          if (WEAPON_SPECS[combo1] && !seenClasses.has(WEAPON_SPECS[combo1])) {
+            availableClasses.push({
+              weaponCombo: combo1,
+              className: WEAPON_SPECS[combo1],
+              spec: build.spec || 'Any'
+            });
+            seenClasses.add(WEAPON_SPECS[combo1]);
+          }
+          else if (WEAPON_SPECS[combo2] && !seenClasses.has(WEAPON_SPECS[combo2])) {
+            availableClasses.push({
+              weaponCombo: combo2,
+              className: WEAPON_SPECS[combo2],
+              spec: build.spec || 'Any'
+            });
+            seenClasses.add(WEAPON_SPECS[combo2]);
+          }
+        }
+      });
+      
+      console.log(`[DEBUG] Available classes: ${JSON.stringify(availableClasses)}`);
+      return availableClasses;
+    } catch (error) {
+      console.error('Error getting available classes:', error);
+      return [];
     }
-    
-    return availableClasses;
-  } catch (error) {
-    console.error('Error getting available classes:', error);
-    return [];
   }
-}
 
 module.exports = {
   data: new SlashCommandBuilder()

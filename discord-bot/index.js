@@ -3128,7 +3128,19 @@ client.on('interactionCreate', async (interaction) => {
             
             const userId = userResult.rows[0].id;
             const username = userResult.rows[0].username;
-            const userBuilds = userResult.rows[0].builds;
+            const userBuildsStr = userResult.rows[0].builds;
+            
+            // Parse user builds
+            let userBuilds = [];
+            try {
+              userBuilds = typeof userBuildsStr === 'string' ? JSON.parse(userBuildsStr) : userBuildsStr;
+              if (!Array.isArray(userBuilds)) userBuilds = [];
+            } catch (e) {
+              console.error(`Error parsing builds for user ${username}:`, e);
+              userBuilds = [];
+            }
+            
+            console.log(`[DEBUG] User builds: ${JSON.stringify(userBuilds)}`);
             
             // Get event details
             const eventResult = await pool.query(
@@ -3242,6 +3254,28 @@ client.on('interactionCreate', async (interaction) => {
               const weaponSpec = prefResult.rows[0].preferred_weapon_spec;
               const className = WEAPON_SPECS[weaponSpec] || 'Unknown Class';
               
+              // Verify the stored preference is valid for this user's builds
+              let isValidBuild = false;
+              for (const build of userBuilds) {
+                if (build.weapon_spec === className) {
+                  isValidBuild = true;
+                  break;
+                }
+              }
+              
+              if (!isValidBuild) {
+                console.log(`[DEBUG] Stored preference ${className} is no longer valid for user ${username}`);
+                
+                // Invalid preference - prompt for a new selection
+                await pool.query(
+                  `DELETE FROM user_preferences WHERE user_id = $1`,
+                  [userId]
+                );
+                
+                await showClassSelectionMenu(interaction, userId, username, userBuilds, eventId, role, eventDetails, appGuildId);
+                return;
+              }
+              
               // Check if user is already signed up
               const existingSignup = await pool.query(
                 'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
@@ -3314,66 +3348,7 @@ client.on('interactionCreate', async (interaction) => {
             } 
             // User doesn't have a preference stored, prompt to select a class
             else {
-              // Parse user builds
-              let builds = [];
-              try {
-                builds = typeof userBuilds === 'string' ? JSON.parse(userBuilds) : userBuilds;
-                if (!Array.isArray(builds)) builds = [];
-              } catch (e) {
-                console.error(`Error parsing builds for user ${username}:`, e);
-                builds = [];
-              }
-              
-              // Extract weapon types from builds
-              const userWeaponTypes = new Set();
-              builds.forEach(build => {
-                const primary = build.primary || build.primary_weapon || build.weaponType || '';
-                const secondary = build.secondary || build.secondary_weapon || '';
-                
-                if (primary) userWeaponTypes.add(primary);
-                if (secondary) userWeaponTypes.add(secondary);
-              });
-              
-              // Determine available classes based on weapon combinations
-              const availableClasses = [];
-              for (const [weaponCombo, className] of Object.entries(WEAPON_SPECS)) {
-                const weapons = weaponCombo.split('|');
-                if (userWeaponTypes.has(weapons[0]) && userWeaponTypes.has(weapons[1])) {
-                  availableClasses.push({ 
-                    weaponCombo,
-                    className
-                  });
-                }
-              }
-              
-              if (availableClasses.length === 0) {
-                await safeReply(interaction, {
-                  content: `No available classes found for you. Please make sure you have builds configured on the website.`,
-                  ephemeral: true
-                });
-                return;
-              }
-              
-              // Create selection menu
-              const options = availableClasses.map(c => ({
-                label: c.className,
-                description: `${c.weaponCombo.replace('|', ' + ')}`,
-                value: c.weaponCombo
-              }));
-              
-              const row = new ActionRowBuilder()
-                .addComponents(
-                  new StringSelectMenuBuilder()
-                    .setCustomId(`class_select_signup_${userId}_${eventId}_${role}`)
-                    .setPlaceholder('Select your class')
-                    .addOptions(options)
-                );
-              
-              await safeReply(interaction, {
-                content: `To sign up for "${eventDetails.title}" as ${role}, please select your class:`,
-                components: [row],
-                ephemeral: true
-              });
+              await showClassSelectionMenu(interaction, userId, username, userBuilds, eventId, role, eventDetails, appGuildId);
             }
           } catch (error) {
             console.error(`Error processing signup button:`, error);
@@ -3398,6 +3373,49 @@ client.on('interactionCreate', async (interaction) => {
             if (!appGuildId) {
               await interaction.update({
                 content: 'Error: Could not find guild mapping.',
+                components: []
+              });
+              return;
+            }
+            
+            // Get user builds to verify selection is valid
+            const userResult = await pool.query(
+              'SELECT builds FROM users WHERE id = $1',
+              [userId]
+            );
+            
+            if (!userResult.rows?.length) {
+              await interaction.update({
+                content: 'Error: User not found.',
+                components: []
+              });
+              return;
+            }
+            
+            // Verify the selection is valid for this user
+            let userBuilds = [];
+            try {
+              userBuilds = typeof userResult.rows[0].builds === 'string' 
+                ? JSON.parse(userResult.rows[0].builds) 
+                : userResult.rows[0].builds;
+            } catch (e) {
+              console.error('Error parsing builds:', e);
+            }
+            
+            let isValidSelection = false;
+            for (const build of userBuilds) {
+              // Check if this build matches the selected weapon combo (either way)
+              const combo1 = `${build.primary}|${build.secondary}`;
+              const combo2 = `${build.secondary}|${build.primary}`;
+              if (combo1 === selectedWeaponCombo || combo2 === selectedWeaponCombo) {
+                isValidSelection = true;
+                break;
+              }
+            }
+            
+            if (!isValidSelection) {
+              await interaction.update({
+                content: 'Error: The selected class is not available for your character.',
                 components: []
               });
               return;
@@ -3587,6 +3605,71 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 });
+
+async function showClassSelectionMenu(interaction, userId, username, userBuilds, eventId, role, eventDetails, appGuildId) {
+  // Extract available classes from builds
+  const availableClasses = [];
+  const seenClasses = new Set();
+  
+  userBuilds.forEach(build => {
+    if (!build.weapon_spec || !build.primary || !build.secondary) return;
+    
+    // Check if role matches
+    if (build.spec && build.spec !== role) return;
+    
+    // Check if build has weapon_spec directly
+    const combo1 = `${build.primary}|${build.secondary}`;
+    const combo2 = `${build.secondary}|${build.primary}`;
+    
+    if (WEAPON_SPECS[combo1] === build.weapon_spec && !seenClasses.has(build.weapon_spec)) {
+      availableClasses.push({
+        weaponCombo: combo1,
+        className: build.weapon_spec,
+        spec: build.spec || 'Any'
+      });
+      seenClasses.add(build.weapon_spec);
+    }
+    else if (WEAPON_SPECS[combo2] === build.weapon_spec && !seenClasses.has(build.weapon_spec)) {
+      availableClasses.push({
+        weaponCombo: combo2,
+        className: build.weapon_spec,
+        spec: build.spec || 'Any'
+      });
+      seenClasses.add(build.weapon_spec);
+    }
+  });
+  
+  console.log(`[DEBUG] Available classes for ${username}: ${JSON.stringify(availableClasses)}`);
+  
+  if (availableClasses.length === 0) {
+    await safeReply(interaction, {
+      content: `No available classes found for you as ${role}. Please set up your builds on the website.`,
+      ephemeral: true
+    });
+    return;
+  }
+  
+  // Create selection menu with appropriate class options
+  const options = availableClasses.map(c => ({
+    label: c.className,
+    description: `${c.weaponCombo.replace('|', ' + ')}${c.spec !== 'Any' ? ` (${c.spec})` : ''}`,
+    value: c.weaponCombo
+  }));
+  
+  const row = new ActionRowBuilder()
+    .addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`class_select_signup_${userId}_${eventId}_${role}`)
+        .setPlaceholder('Select your class')
+        .addOptions(options)
+    );
+  
+  await safeReply(interaction, {
+    content: `To sign up for "${eventDetails.title}" as ${role}, please select your class:`,
+    components: [row],
+    ephemeral: true
+  });
+}
 
 async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId) {
   try {
@@ -5098,8 +5181,9 @@ app.post('/webhook/announce-teams', async (req, res) => {
           'dagger': '<:Dagger:1352127620761784321>',
           'spear': '<:Spear:1352127656748908636>',
           'wand': '<:Wand:1352127712180830249>',
-          'sword': '<:SwordandShield:1352127689183592459>',
+          'sword and shield': '<:SwordandShield:1352127689183592459>',
           'swordandshield': '<:SwordandShield:1352127689183592459>',
+          'sword': '<:SwordandShield:1352127689183592459>',
           'crossbow': '<:Crossbow:1352127594597978112>',
           'greatsword': '<:Greatsword:1352127640227549265>',
           'staff': '<:Staff:1352127671831887923>',
