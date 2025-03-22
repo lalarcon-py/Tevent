@@ -74,34 +74,6 @@ module.exports = {
       const healers = participants.filter(p => p.role === 'HEALER');
       const dps = participants.filter(p => p.role === 'DPS');
       
-      // Format players with class/build icons
-      const formatPlayers = (players) => {
-        if (players.length === 0) return '—';
-        
-        return players.map((p, idx) => {
-          const name = p.User?.username || p.username || 'Unknown';
-          // Try to get build info if available
-          let buildEmoji = '';
-          
-          try {
-            if (p.User?.builds) {
-              const builds = typeof p.User.builds === 'string' 
-                ? JSON.parse(p.User.builds) 
-                : p.User.builds;
-              
-              if (builds && builds.length > 0) {
-                const primaryBuild = builds[0];
-                buildEmoji = getWeaponEmoji(primaryBuild.weapon || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
-              }
-            }
-          } catch (e) {
-            console.error('Error parsing builds:', e);
-          }
-          
-          return `${idx + 1}. ${buildEmoji} **${name}**`;
-        }).join('\n');
-      };
-      
       // Helper function to get emoji for weapon types
       function getWeaponEmoji(weaponType) {
         if (!weaponType) return '';
@@ -136,6 +108,59 @@ module.exports = {
         return ''; // No matching emoji found
       }
       
+      // Format players with weapon information
+      const formatPlayers = (players) => {
+        if (players.length === 0) return '—';
+        
+        return players.map((p, idx) => {
+          const name = p.User?.username || p.username || 'Unknown';
+          let buildEmoji = '';
+          
+          // Process builds data from different possible formats
+          try {
+            // First check if there's a selected_build
+            if (p.selected_build) {
+              let selectedBuild;
+              if (typeof p.selected_build === 'string') {
+                try {
+                  selectedBuild = JSON.parse(p.selected_build);
+                } catch (e) {
+                  selectedBuild = null;
+                }
+              } else {
+                selectedBuild = p.selected_build;
+              }
+              
+              if (selectedBuild && selectedBuild.primary) {
+                buildEmoji = getWeaponEmoji(selectedBuild.primary);
+              }
+            }
+            // If no selected build, look for builds in User
+            else if (p.User?.builds) {
+              let builds;
+              if (typeof p.User.builds === 'string') {
+                try {
+                  builds = JSON.parse(p.User.builds);
+                } catch (e) {
+                  builds = [];
+                }
+              } else {
+                builds = p.User.builds;
+              }
+              
+              if (Array.isArray(builds) && builds.length > 0) {
+                const primaryBuild = builds[0];
+                buildEmoji = getWeaponEmoji(primaryBuild.primary || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
+              }
+            }
+          } catch (e) {
+            console.error('Error processing builds for player:', e);
+          }
+          
+          return `${idx + 1}. ${buildEmoji} **${name}**`;
+        }).join('\n');
+      };
+      
       // Get absentees
       let absentees = [];
       if (Array.isArray(event.absentees)) {
@@ -150,6 +175,23 @@ module.exports = {
         return absentees.map((a, idx) => {
           const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
           return `${idx + 1}. ~~**${username}**~~`;
+        }).join('\n');
+      };
+      
+      // Get tentative members
+      let tentative = [];
+      if (Array.isArray(event.tentative)) {
+        tentative = event.tentative;
+      } else if (event.EventTentative && Array.isArray(event.EventTentative)) {
+        tentative = event.EventTentative;
+      }
+      
+      // Format tentative
+      const formatTentative = () => {
+        if (tentative.length === 0) return '—';
+        return tentative.map((t, idx) => {
+          const username = typeof t === 'string' ? t : (t.username || t.User?.username || 'Unknown');
+          return `${idx + 1}. **${username}**`;
         }).join('\n');
       };
       
@@ -195,8 +237,8 @@ module.exports = {
           inline: false
         },
         { 
-          name: `⏳ Tentative (0)`, 
-          value: '—', 
+          name: `⏳ Tentative (${tentative.length || 0})`, 
+          value: formatTentative(), 
           inline: false
         }
       );
@@ -216,7 +258,7 @@ module.exports = {
       
       return embed;
     } catch (error) {
-      console.error('Error creating event embed:', error);
+      console.error('Error creating event embed:', error, error.stack);
       return new EmbedBuilder()
         .setTitle('Event Details')
         .setDescription('Error creating detailed event information')
