@@ -5152,8 +5152,9 @@ app.post('/webhook/announce-teams', async (req, res) => {
         teamBatch.forEach((team, idx) => {
           // Format members with weapon emojis
           const membersList = team.members.map(member => {
-            // Extract weapon emojis from builds
+            // Extract weapon emojis and class information from builds
             let weaponEmojis = '';
+            let className = '';
             try {
               if (member.builds) {
                 const builds = typeof member.builds === 'string' ? 
@@ -5167,13 +5168,17 @@ app.post('/webhook/announce-teams', async (req, res) => {
                   if (build.secondary) {
                     weaponEmojis += getWeaponEmoji(build.secondary);
                   }
+                  // Extract class name
+                  className = build.weapon_spec || '';
                 }
               }
             } catch (e) {
               console.error(`Error parsing builds for ${member.username}:`, e);
             }
             
-            return `${weaponEmojis} **${member.username || 'Unknown'}**`;
+            // Include class name in display
+            const classDisplay = className ? ` (${className})` : '';
+            return `${weaponEmojis} **${member.username || 'Unknown'}**${classDisplay}`;
           }).join('\n');
           
           // Add a field for this team
