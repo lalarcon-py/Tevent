@@ -2422,7 +2422,6 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     
     const roleCounts = roleCountsResult.rows[0];
     
-    // Verify there's room for this role
     const roleLimits = {
       'TANK': eventDetails.tanks || 0,
       'HEALER': eventDetails.healers || 0,
@@ -3227,7 +3226,7 @@ client.on('interactionCreate', async (interaction) => {
             
             // Special handling for ABSENT and TENTATIVE roles
             if (role === 'ABSENT') {
-              // Regular handling for absent status
+              // Remove from participants
               await pool.query(
                 'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
                 [eventId, userId]
@@ -3252,7 +3251,7 @@ client.on('interactionCreate', async (interaction) => {
               return;
             } 
             else if (role === 'TENTATIVE') {
-              // Regular handling for tentative status
+              // Handle tentative signup
               try {
                 // Check if we have a tentative table, if not create one
                 await pool.query(`
@@ -3308,10 +3307,20 @@ client.on('interactionCreate', async (interaction) => {
             
             // For regular signup roles (TANK, HEALER, DPS):
             
-            // Filter builds by the selected role
-            const compatibleBuilds = userBuilds.filter(build => 
-              !build.spec || build.spec === role || build.spec === 'Any'
+            // Filter builds by the selected role specifically
+            const roleSpecificBuilds = userBuilds.filter(build => 
+              build.spec === role
             );
+            
+            // Also get builds with no spec or "Any" spec as fallbacks
+            const genericBuilds = userBuilds.filter(build => 
+              !build.spec || build.spec === 'Any'
+            );
+            
+            // Combine role-specific builds first, then generic builds
+            const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
+            
+            console.log(`[DEBUG] Compatible builds for ${role}: ${JSON.stringify(compatibleBuilds)}`);
             
             if (compatibleBuilds.length === 0) {
               return await safeReply(interaction, {
@@ -3320,11 +3329,11 @@ client.on('interactionCreate', async (interaction) => {
               });
             }
             
-            // If there's only one compatible build, use it directly
+            // If there's exactly one compatible build, use it automatically
             if (compatibleBuilds.length === 1) {
               await handleEventSignup(interaction, compatibleBuilds[0], userId, eventId, role, eventDetails, appGuildId);
             }
-            // If there are multiple builds, show a selection menu
+            // Only show selection menu if there are multiple compatible builds
             else {
               // Create selection menu for builds
               const options = compatibleBuilds.map((build, index) => ({
@@ -3342,7 +3351,7 @@ client.on('interactionCreate', async (interaction) => {
                 );
               
               await safeReply(interaction, {
-                content: `You have multiple compatible builds for ${role}. Please select which one to use:`,
+                content: `Please select which build to use for ${role}:`,
                 components: [row],
                 ephemeral: true
               });
@@ -3398,10 +3407,18 @@ client.on('interactionCreate', async (interaction) => {
               console.error('Error parsing builds:', e);
             }
             
-            // Filter builds by the selected role
-            const compatibleBuilds = userBuilds.filter(build => 
-              !build.spec || build.spec === role || build.spec === 'Any'
+            // Filter builds by the selected role specifically
+            const roleSpecificBuilds = userBuilds.filter(build => 
+              build.spec === role
             );
+            
+            // Also get builds with no spec or "Any" spec as fallbacks
+            const genericBuilds = userBuilds.filter(build => 
+              !build.spec || build.spec === 'Any'
+            );
+            
+            // Combine role-specific builds first, then generic builds
+            const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
             
             if (selectedBuildIndex < 0 || selectedBuildIndex >= compatibleBuilds.length) {
               await interaction.update({
@@ -4706,62 +4723,40 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
   }
 }
 
-async function handleEventSignupCommand(interaction, appGuildId) {
-  await interaction.deferReply({ ephemeral: true });
-  
+async function handleEventSignup(interaction, build, userId, eventId, role, eventDetails, appGuildId, isUpdate = false) {
   try {
-    const eventId = interaction.options.getString('event_id');
-    const role = interaction.options.getString('role');
-    const discordUserId = interaction.user.id;
-    
-    // Check if event exists
-    const eventResult = await pool.query(
-      'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
-      [eventId, appGuildId]
-    );
-    
-    if (!eventResult.rows || eventResult.rows.length === 0) {
-      return await interaction.editReply(`Event with ID ${eventId} not found.`);
+    // Verify the build has the required fields
+    if (!build || !build.primary || !build.secondary || !build.weapon_spec) {
+      const method = isUpdate ? 'update' : 'reply';
+      await interaction[method]({
+        content: 'Invalid build data. Please ensure your build has primary and secondary weapons and a class specified.',
+        components: []
+      });
+      return;
     }
     
-    const event = eventResult.rows[0];
-    
-    // Get user ID from discord ID - NOW INCLUDES BUILDS
-    const userResult = await pool.query(
-      'SELECT id, username, builds FROM users WHERE discord_id = $1',
-      [discordUserId]
+    // Check if user is already signed up
+    const existingSignup = await pool.query(
+      'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
+      [eventId, userId]
     );
     
-    if (!userResult.rows || userResult.rows.length === 0) {
-      return await interaction.editReply('Your user account was not found. Please log in to the website first.');
-    }
+    // Determine weapon_spec to use (the format the database expects)
+    const weaponCombo = `${build.primary}|${build.secondary}`;
+    const reverseWeaponCombo = `${build.secondary}|${build.primary}`;
     
-    const user = userResult.rows[0];
-    
-    // Check if already signed up
-    const existingSignupResult = await pool.query(
-      'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2 AND guild_id = $3',
-      [eventId, user.id, appGuildId]
-    );
-    
-    if (existingSignupResult.rows && existingSignupResult.rows.length > 0) {
-      const existingSignup = existingSignupResult.rows[0];
-      
-      // Update existing signup
-      await pool.query(
-        'UPDATE event_participants SET role = $1 WHERE id = $2',
-        [role, existingSignup.id]
-      );
-      
-      return await interaction.editReply(`You've updated your role for "${event.title}" to ${role}.`);
+    // Check which weapon combo matches the weapon_spec in WEAPON_SPECS
+    let dbWeaponSpec = weaponCombo;
+    if (WEAPON_SPECS[reverseWeaponCombo] === build.weapon_spec) {
+      dbWeaponSpec = reverseWeaponCombo;
     }
     
     // Check role capacity
     const roleCountsResult = await pool.query(
       `SELECT 
-        SUM(CASE WHEN role = 'TANK' THEN 1 ELSE 0 END) as tank_count,
-        SUM(CASE WHEN role = 'HEALER' THEN 1 ELSE 0 END) as healer_count,
-        SUM(CASE WHEN role = 'DPS' THEN 1 ELSE 0 END) as dps_count
+        COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+        COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+        COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
       FROM event_participants
       WHERE event_id = $1`,
       [eventId]
@@ -4771,9 +4766,9 @@ async function handleEventSignupCommand(interaction, appGuildId) {
     
     // Verify there's room for this role
     const roleLimits = {
-      'TANK': event.tanks || 0,
-      'HEALER': event.healers || 0,
-      'DPS': event.dps || 0
+      'TANK': eventDetails.tanks || 0,
+      'HEALER': eventDetails.healers || 0,
+      'DPS': eventDetails.dps || 0
     };
     
     const currentCounts = {
@@ -4782,39 +4777,54 @@ async function handleEventSignupCommand(interaction, appGuildId) {
       'DPS': parseInt(roleCounts?.dps_count || 0)
     };
     
-    if (currentCounts[role] >= roleLimits[role]) {
-      return await interaction.editReply(`Sorry, the ${role} spots are full for this event.`);
-    }
-    
-    // Create new signup
-    await pool.query(
-      `INSERT INTO event_participants 
-        (id, guild_id, event_id, user_id, role, created_at, updated_at)
-      VALUES
-        (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
-      [appGuildId, eventId, user.id, role]
-    );
-    
-    await interaction.editReply(`You've been signed up for "${event.title}" as ${role}.`);
-    
-    // Post a public confirmation
-    try {
-      const confirmEmbed = new EmbedBuilder()
-        .setTitle('New Event Signup')
-        .setDescription(`${interaction.user.username} has signed up for "${event.title}" as ${role}`)
-        .setColor('#00FF00')
-        .setTimestamp();
-      
-      await interaction.followUp({
-        embeds: [confirmEmbed],
-        ephemeral: false
+    // Skip the capacity check if the user is already signed up (just updating)
+    if (!existingSignup.rows?.length && currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
+      const method = isUpdate ? 'update' : 'reply';
+      await interaction[method]({
+        content: `Sorry, the ${role} spots are full for this event.`,
+        components: []
       });
-    } catch (followupError) {
-      console.error('Error sending signup confirmation:', followupError);
+      return;
     }
+    
+    if (existingSignup.rows?.length > 0) {
+      // Update existing signup
+      await pool.query(
+        'UPDATE event_participants SET role = $1, weapon_spec = $2 WHERE event_id = $3 AND user_id = $4',
+        [role, dbWeaponSpec, eventId, userId]
+      );
+      
+      const method = isUpdate ? 'update' : 'editReply';
+      await interaction[method]({
+        content: `Your role for "${eventDetails.title}" has been updated to ${role} (${build.weapon_spec}).`,
+        components: []
+      });
+    } else {
+      // Create new signup
+      await pool.query(
+        `INSERT INTO event_participants 
+          (id, guild_id, event_id, user_id, role, weapon_spec, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
+        [appGuildId, eventId, userId, role, dbWeaponSpec]
+      );
+      
+      const method = isUpdate ? 'update' : 'editReply';
+      await interaction[method]({
+        content: `You have been signed up for "${eventDetails.title}" as ${role} (${build.weapon_spec}).`,
+        components: []
+      });
+    }
+    
+    // Update event display
+    await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
   } catch (error) {
-    console.error('Error signing up for event:', error);
-    await interaction.editReply('Failed to sign up for the event.');
+    console.error('Error in handleEventSignup:', error);
+    const method = isUpdate ? 'update' : 'editReply';
+    await interaction[method]({
+      content: 'An error occurred while processing your signup. Please try again.',
+      components: []
+    });
   }
 }
 
