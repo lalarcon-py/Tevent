@@ -637,16 +637,15 @@ const TeamPlanner = () => {
   const captureAndSendTeamImages = async () => {
     if (teams.length === 0) return;
     
-    setIsAnnouncingTeams(true);
+    setIsAnnouncingTeams(true); // Reuse the loading state
     
     try {
-      // Create a single container for ALL teams
-      const allTeamsRef = document.createElement('div');
-      allTeamsRef.style.position = 'absolute';
-      allTeamsRef.style.left = '-9999px';
-      allTeamsRef.style.background = '#121212';
-      allTeamsRef.style.padding = '20px';
-      document.body.appendChild(allTeamsRef);
+      // Create a single container for all teams
+      const teamsGridRef = document.createElement('div');
+      teamsGridRef.style.position = 'absolute';
+      teamsGridRef.style.left = '-9999px';
+      teamsGridRef.style.width = '1200px'; // Fixed width for the grid
+      document.body.appendChild(teamsGridRef);
       
       // Render all teams in a grid layout
       ReactDOM.render(
@@ -656,12 +655,9 @@ const TeamPlanner = () => {
           borderRadius: 2,
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
         }}>
-          <Typography variant="h4" sx={{ color: 'white', mb: 3 }}>
-            {eventData?.title || 'Team Assignments'}
-          </Typography>
           <Grid container spacing={2}>
             {teams.map(team => (
-              <Grid item xs={12} sm={6} md={4} key={team.id}>
+              <Grid item xs={4} key={team.id}>
                 <Box sx={{ 
                   bgcolor: '#1e1e1e',
                   borderRadius: 2,
@@ -691,7 +687,12 @@ const TeamPlanner = () => {
                     
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       {/* Role counters */}
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        ml: 'auto',
+                        mr: 1
+                      }}>
                         <Box sx={{ 
                           display: 'flex', 
                           alignItems: 'center',
@@ -740,7 +741,7 @@ const TeamPlanner = () => {
                   </Box>
                   
                   {/* Team members */}
-                  <Box sx={{ p: 1.5 }}>
+                  <Box sx={{ p: 1.5, minHeight: 150 }}>
                     {team.members.length > 0 ? (
                       team.members.map(member => {
                         // Get role styling for this member
@@ -803,7 +804,7 @@ const TeamPlanner = () => {
                             key={member.id || member.user_id || (member.User?.id)}
                             sx={{
                               position: 'relative',
-                              padding: '6px 8px',
+                              padding: '8px 10px',
                               mb: 1,
                               width: '100%',
                               backgroundColor: 'rgba(24, 24, 27, 0.7)',
@@ -812,7 +813,7 @@ const TeamPlanner = () => {
                               borderRadius: '6px',
                               border: '1px solid',
                               borderColor: roleStyles.borderColor || 'rgba(255, 255, 255, 0.1)',
-                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                              boxShadow: '0 2px 5px rgba(0, 0, 0, 0.15)',
                               display: 'flex',
                               alignItems: 'center',
                               overflow: 'hidden'
@@ -833,21 +834,21 @@ const TeamPlanner = () => {
                             
                             {/* Weapon icons */}
                             <Box sx={{ 
-                              mr: 1,
+                              mr: 1.5,
                               display: 'flex',
                               position: 'relative'
                             }}>
                               {primaryWeapon && (
                                 <Box
                                   sx={{
-                                    width: 24,
-                                    height: 24,
+                                    width: 28,
+                                    height: 28,
                                     borderRadius: '50%',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
                                     border: '1px solid rgba(255, 255, 255, 0.1)',
                                     zIndex: 2
                                   }}
@@ -856,8 +857,8 @@ const TeamPlanner = () => {
                                     src={`/weapons/${primaryWeapon} Art.png`}
                                     alt={primaryWeapon}
                                     style={{ 
-                                      width: 16, 
-                                      height: 16, 
+                                      width: 18, 
+                                      height: 18, 
                                       objectFit: 'contain',
                                       filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))'
                                     }}
@@ -870,16 +871,16 @@ const TeamPlanner = () => {
                               {secondaryWeapon && (
                                 <Box
                                   sx={{
-                                    width: 24,
-                                    height: 24,
+                                    width: 28,
+                                    height: 28,
                                     borderRadius: '50%',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
                                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                                    ml: '-6px',
+                                    ml: '-8px',
                                     zIndex: 1
                                   }}
                                 >
@@ -887,8 +888,8 @@ const TeamPlanner = () => {
                                     src={`/weapons/${secondaryWeapon} Art.png`}
                                     alt={secondaryWeapon}
                                     style={{ 
-                                      width: 16, 
-                                      height: 16, 
+                                      width: 18, 
+                                      height: 18, 
                                       objectFit: 'contain',
                                       filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))'
                                     }}
@@ -909,7 +910,7 @@ const TeamPlanner = () => {
                               <Typography 
                                 variant="body2"
                                 sx={{
-                                  fontSize: '0.75rem',
+                                  fontSize: '0.85rem',
                                   fontWeight: 500,
                                   color: 'white',
                                   whiteSpace: 'nowrap',
@@ -926,7 +927,7 @@ const TeamPlanner = () => {
                                   variant="caption"
                                   sx={{
                                     color: roleStyles.color,
-                                    fontSize: '0.65rem',
+                                    fontSize: '0.7rem',
                                     fontWeight: 500
                                   }}
                                 >
@@ -948,7 +949,7 @@ const TeamPlanner = () => {
                                       variant="caption"
                                       sx={{
                                         color: 'rgba(255,255,255,0.7)',
-                                        fontSize: '0.65rem'
+                                        fontSize: '0.7rem'
                                       }}
                                     >
                                       {memberWeaponSpec}
@@ -957,26 +958,6 @@ const TeamPlanner = () => {
                                 )}
                               </Box>
                             </Box>
-                            
-                            {/* Combat power if available */}
-                            {member.combat_power && (
-                              <Box sx={{ 
-                                ml: 0.5,
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: '50px',
-                                backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                border: '1px solid rgba(255, 215, 0, 0.3)'
-                              }}>
-                                <Typography sx={{ 
-                                  color: '#ffd700',
-                                  fontSize: '0.6rem',
-                                  fontWeight: 600
-                                }}>
-                                  CP {member.combat_power}
-                                </Typography>
-                              </Box>
-                            )}
                           </Box>
                         );
                       })
@@ -985,11 +966,9 @@ const TeamPlanner = () => {
                         color: 'rgba(255, 255, 255, 0.4)',
                         fontStyle: 'italic',
                         textAlign: 'center',
-                        fontSize: '0.8rem',
-                        mt: 2,
-                        mb: 2
+                        mt: 4
                       }}>
-                        No members assigned
+                        Drag members here to add to the team
                       </Typography>
                     )}
                   </Box>
@@ -998,26 +977,24 @@ const TeamPlanner = () => {
             ))}
           </Grid>
         </Box>,
-        allTeamsRef
+        teamsGridRef
       );
       
-      // Use html2canvas to capture the entire grid at once
-      const canvas = await html2canvas(allTeamsRef.firstChild, {
+      // Use html2canvas to capture the entire grid
+      const canvas = await html2canvas(teamsGridRef.firstChild, {
         backgroundColor: '#121212',
-        scale: 1.5, // Keep higher quality since we're only capturing once
+        scale: 1, // Lower scale for reduced size
         logging: false,
-        useCORS: true,
-        width: Math.min(1200, window.innerWidth), // Limit width for better display
-        height: allTeamsRef.firstChild.offsetHeight
+        useCORS: true
       });
       
-      // Convert to image data with JPEG format and reduced quality
-      const imageData = canvas.toDataURL('image/jpeg', 0.85);
+      // Convert to image data with JPEG format and medium quality
+      const imageData = canvas.toDataURL('image/jpeg', 0.75);
       
       // Clean up
-      document.body.removeChild(allTeamsRef);
+      document.body.removeChild(teamsGridRef);
       
-      // Send a single image to Discord
+      // Send the single image to the server
       const response = await fetch(`${API_URL}/api/discord-bot/announce-teams-with-images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1025,7 +1002,6 @@ const TeamPlanner = () => {
         body: JSON.stringify({
           eventId,
           guildId,
-          eventData: await fetchEventDetails(eventId),
           teams: teams.map(team => ({
             id: team.id,
             name: team.name,
@@ -1057,24 +1033,6 @@ const TeamPlanner = () => {
       setIsAnnouncingTeams(false);
     }
   };
-  
-  // Helper function to fetch event details
-  async function fetchEventDetails(eventId) {
-    try {
-      const response = await fetch(`${API_URL}/api/events/${eventId}?guildId=${guildId}`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch event details');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching event details:', error);
-      return { title: 'Event' };
-    }
-  }
 
   const handleEditTeam = async (updatedTeam) => {
     if (!hasEditPermission()) {
