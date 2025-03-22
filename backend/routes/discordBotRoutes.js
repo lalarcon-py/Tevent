@@ -69,79 +69,98 @@ router.get('/guild-mappings', async (req, res) => {
   }
 });
 
-router.post('/announce-teams-with-images', async (req, res) => {
+app.post('/webhook/announce-teams-with-images', async (req, res) => {
   try {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { eventId, guildId, teams, teamImages } = req.body;
+    const { guildId, eventId, eventData, teams, teamImages, secret } = req.body;
     
-    if (!eventId || !guildId || !teams || !teamImages) {
-      return res.status(400).json({ error: 'Missing required parameters' });
-    }
+    console.log(`[INFO] Received announce teams with images webhook - Guild: ${guildId}, Event: ${eventId}`);
     
-    console.log(`Starting team screenshot announcement for event ${eventId} in guild ${guildId}`);
-    
-    // Get event details
-    const event = await db.Event.findOne({
-      where: { 
-        id: eventId,
-        guild_id: guildId
-      }
-    });
-    
-    if (!event) {
-      console.error(`Event not found: ${eventId}`);
-      return res.status(404).json({ error: 'Event not found' });
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
     }
     
-    // Format the event and team data
-    const eventData = {
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      event_time: event.event_time,
-      location: event.location
-    };
+    // Get Discord guild ID from mapping
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
     
-    // Use the Railway internal URL like in your events.js
-    const discordBotUrl = process.env.NODE_ENV === 'production' 
-      ? "http://heartfelt-sparkle.railway.internal:3300" 
-      : "http://localhost:3300";
+    if (!mappingResult.rows.length) {
+      console.error(`[ERROR] Discord guild mapping not found for guild: ${guildId}`);
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Get channel configuration
+    const channelConfigResult = await pool.query(
+      `SELECT channel_id FROM discord_channel_config 
+       WHERE guild_id = $1 AND channel_type = 'events' AND enabled = true`,
+      [guildId]
+    );
+    
+    if (!channelConfigResult.rows.length) {
+      console.error(`[ERROR] No events channel configured for guild: ${guildId}`);
+      return res.status(404).json({ error: 'No events channel configured' });
+    }
+    
+    const channelId = channelConfigResult.rows[0].channel_id;
+    const channel = await client.channels.fetch(channelId);
+    
+    if (!channel) {
+      console.error(`[ERROR] Channel not found: ${channelId}`);
+      return res.status(404).json({ error: 'Channel not found' });
+    }
     
     try {
-      console.log(`Sending team screenshots to Discord bot: ${discordBotUrl}/webhook/announce-teams-with-images`);
+      // Format date and time for the event header
+      const eventDate = new Date(eventData.event_time);
+      const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       
-      // Send to Discord bot using the same approach as your working events code
-      await axios.post(`${discordBotUrl}/webhook/announce-teams-with-images`, {
-        guildId,
-        eventId,
-        eventData,
-        teams,
-        teamImages,
-        secret: process.env.BOT_WEBHOOK_SECRET
+      // Create the team image attachment
+      const imageBuffer = Buffer.from(
+        teamImages[0].image.replace(/^data:image\/\w+;base64,/, ''),
+        'base64'
+      );
+      
+      const attachment = new AttachmentBuilder(imageBuffer, { name: 'teams.jpg' });
+      
+      // Create an embed with the event info and the image
+      const eventEmbed = new EmbedBuilder()
+        .setTitle(`📋 ${eventData.title} - Team Assignments`)
+        .setDescription(
+          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
+          (eventData.description ? `${eventData.description}\n\n` : '')
+        )
+        .setImage('attachment://teams.jpg')
+        .setColor('#1a64f3')
+        .setTimestamp();
+      
+      // Send a single message with the embed and attachment
+      await channel.send({
+        embeds: [eventEmbed],
+        files: [attachment]
       });
       
-      console.log(`Successfully sent team screenshots to Discord bot`);
+      console.log(`[INFO] Team screenshots sent successfully for event ${eventId}`);
       res.json({ success: true });
-    } catch (webhookError) {
-      console.error('Failed to send screenshots to Discord bot:', {
-        message: webhookError.message,
-        stack: webhookError.stack,
-        response: webhookError.response?.data
-      });
-      
+    } catch (error) {
+      console.error(`[ERROR] Error sending team screenshots: ${error.message}`);
+      console.error(error.stack);
       return res.status(500).json({ 
-        error: 'Failed to send team screenshots to Discord',
-        details: webhookError.message
+        error: 'Error sending to channel',
+        details: error.message
       });
     }
   } catch (error) {
-    console.error('Error sending team screenshots:', error);
+    console.error(`[ERROR] Error processing team screenshots webhook: ${error.message}`);
+    console.error(error.stack);
     res.status(500).json({ 
-      error: 'Failed to send team screenshots',
-      details: error.message 
+      error: 'Internal server error',
+      details: error.message
     });
   }
 });
