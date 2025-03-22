@@ -2385,7 +2385,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
   try {
     // Verify the build has the required fields
     if (!build || !build.primary || !build.secondary || !build.weapon_spec) {
-      const method = isUpdate ? 'update' : 'reply';
+      const method = isUpdate ? 'update' : 'editReply';
       await interaction[method]({
         content: 'Invalid build data. Please ensure your build has primary and secondary weapons and a class specified.',
         components: []
@@ -2422,6 +2422,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     
     const roleCounts = roleCountsResult.rows[0];
     
+    // Verify there's room for this role
     const roleLimits = {
       'TANK': eventDetails.tanks || 0,
       'HEALER': eventDetails.healers || 0,
@@ -2436,7 +2437,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     
     // Skip the capacity check if the user is already signed up (just updating)
     if (!existingSignup.rows?.length && currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
-      const method = isUpdate ? 'update' : 'reply';
+      const method = isUpdate ? 'update' : 'editReply';
       await interaction[method]({
         content: `Sorry, the ${role} spots are full for this event.`,
         components: []
@@ -3307,15 +3308,19 @@ client.on('interactionCreate', async (interaction) => {
             
             // For regular signup roles (TANK, HEALER, DPS):
             
-            // Filter builds by the selected role specifically
+            // Filter builds by the selected role - CASE INSENSITIVE COMPARISON
             const roleSpecificBuilds = userBuilds.filter(build => 
-              build.spec === role
+              build.spec && build.spec.toUpperCase() === role.toUpperCase()
             );
+            
+            console.log(`[DEBUG] Role-specific builds for ${role}: ${JSON.stringify(roleSpecificBuilds)}`);
             
             // Also get builds with no spec or "Any" spec as fallbacks
             const genericBuilds = userBuilds.filter(build => 
-              !build.spec || build.spec === 'Any'
+              !build.spec || (build.spec && build.spec.toUpperCase() === 'ANY')
             );
+            
+            console.log(`[DEBUG] Generic builds: ${JSON.stringify(genericBuilds)}`);
             
             // Combine role-specific builds first, then generic builds
             const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
@@ -3407,14 +3412,14 @@ client.on('interactionCreate', async (interaction) => {
               console.error('Error parsing builds:', e);
             }
             
-            // Filter builds by the selected role specifically
+            // Filter builds by the selected role - CASE INSENSITIVE COMPARISON
             const roleSpecificBuilds = userBuilds.filter(build => 
-              build.spec === role
+              build.spec && build.spec.toUpperCase() === role.toUpperCase()
             );
             
             // Also get builds with no spec or "Any" spec as fallbacks
             const genericBuilds = userBuilds.filter(build => 
-              !build.spec || build.spec === 'Any'
+              !build.spec || (build.spec && build.spec.toUpperCase() === 'ANY')
             );
             
             // Combine role-specific builds first, then generic builds
@@ -3553,102 +3558,6 @@ async function showClassSelectionMenu(interaction, userId, username, userBuilds,
 }
 
 async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId) {
-  try {
-    // Get the original message that contains the embed
-    const message = interaction.message;
-    if (!message || !message.embeds || message.embeds.length === 0) return;
-    
-    // Get updated participant data
-    const participantsResult = await pool.query(
-      `SELECT ep.role, ep.weapon_spec, u.username, u.discord_id, u.builds
-       FROM event_participants ep
-       JOIN users u ON ep.user_id = u.id
-       WHERE ep.event_id = $1
-       ORDER BY ep.created_at ASC`,
-      [eventId]
-    );
-    
-    // Get absentees
-    const absenteesResult = await pool.query(
-      `SELECT ea.user_id, u.username
-       FROM event_absentees ea
-       JOIN users u ON ea.user_id = u.id
-       WHERE ea.event_id = $1
-       ORDER BY ea.created_at ASC`,
-      [eventId]
-    );
-    
-    // Get tentative members if the table exists
-    let tentativeMembers = [];
-    try {
-      const tentativeResult = await pool.query(
-        `SELECT et.user_id, u.username
-         FROM event_tentative et
-         JOIN users u ON et.user_id = u.id
-         WHERE et.event_id = $1
-         ORDER BY et.created_at ASC`,
-        [eventId]
-      );
-      
-      tentativeMembers = tentativeResult.rows || [];
-    } catch (e) {
-      // Table might not exist, ignore
-    }
-    
-    // Create updated event object
-    const updatedEvent = {
-      ...eventDetails,
-      participants: participantsResult.rows,
-      absentees: absenteesResult.rows,
-      tentative: tentativeMembers
-    };
-    
-    // Create updated embed
-    const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
-    
-    // Create signup buttons with custom role emojis
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`signup_${eventId}_TANK`)
-          .setLabel('Tank')
-          .setEmoji('1352736996405022780')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`signup_${eventId}_HEALER`)
-          .setLabel('Healer')
-          .setEmoji('1352737011479482468')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`signup_${eventId}_DPS`)
-          .setLabel('DPS')
-          .setEmoji('1352737043972624518')
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`signup_${eventId}_TENTATIVE`)
-          .setLabel('Tentative')
-          .setEmoji('⏳')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`signup_${eventId}_ABSENT`)
-          .setLabel('Absent')
-          .setEmoji('❌')
-          .setStyle(ButtonStyle.Secondary)
-      );
-    
-    // Update the original message with new embed
-    await message.edit({
-      embeds: [updatedEmbed],
-      components: [row]
-    }).catch(err => {
-      console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
-    });
-    
-    console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
-  } catch (error) {
-    console.error(`[ERROR] Error updating event display: ${error.message}`);
-  }
-}async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId) {
   try {
     // Get the original message that contains the embed
     const message = interaction.message;
