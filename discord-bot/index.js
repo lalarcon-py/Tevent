@@ -3563,9 +3563,9 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
     const message = interaction.message;
     if (!message || !message.embeds || message.embeds.length === 0) return;
     
-    // Get updated participant data
+    // Get updated participant data - REMOVE weapon_spec column from query
     const participantsResult = await pool.query(
-      `SELECT ep.role, ep.weapon_spec, u.username, u.discord_id, u.builds
+      `SELECT ep.role, u.username, u.discord_id, u.builds
        FROM event_participants ep
        JOIN users u ON ep.user_id = u.id
        WHERE ep.event_id = $1
@@ -4687,7 +4687,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     }
     
     if (existingSignup.rows?.length > 0) {
-      // Update existing signup - WITHOUT weapon_spec column
+      // Update existing signup - REMOVE weapon_spec column
       await pool.query(
         'UPDATE event_participants SET role = $1 WHERE event_id = $2 AND user_id = $3',
         [role, eventId, userId]
@@ -4699,7 +4699,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
         components: []
       });
     } else {
-      // Create new signup - WITHOUT weapon_spec column
+      // Create new signup - REMOVE weapon_spec column
       await pool.query(
         `INSERT INTO event_participants 
           (id, guild_id, event_id, user_id, role, created_at, updated_at)
