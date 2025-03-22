@@ -986,16 +986,31 @@ const TeamPlanner = () => {
           teamRef
         );
         
-        // Use html2canvas to capture the rendered team
+        // Use html2canvas to capture the rendered team with reduced quality
         const canvas = await html2canvas(teamRef.firstChild, {
           backgroundColor: '#1e1e1e',
-          scale: 2, // Higher quality
+          scale: 1, // Changed from 2 to 1 to reduce size
           logging: false,
           useCORS: true
         });
         
-        // Convert to image data
-        const imageData = canvas.toDataURL('image/png');
+        // Resize large canvases if necessary
+        const maxWidth = 800;
+        let finalCanvas = canvas;
+        
+        if (canvas.width > maxWidth) {
+          const scaleFactor = maxWidth / canvas.width;
+          finalCanvas = document.createElement('canvas');
+          finalCanvas.width = canvas.width * scaleFactor;
+          finalCanvas.height = canvas.height * scaleFactor;
+          
+          const ctx = finalCanvas.getContext('2d');
+          ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+        }
+        
+        // Convert to image data with JPEG format and reduced quality
+        const imageData = finalCanvas.toDataURL('image/jpeg', 0.7); // Changed from PNG to JPEG with 70% quality
+        
         teamImages.push({
           name: team.name,
           image: imageData
