@@ -69,6 +69,83 @@ router.get('/guild-mappings', async (req, res) => {
   }
 });
 
+router.post('/announce-teams-with-images', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { eventId, guildId, teams, teamImages } = req.body;
+    
+    if (!eventId || !guildId || !teams || !teamImages) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    console.log(`Starting team screenshot announcement for event ${eventId} in guild ${guildId}`);
+    
+    // Get event details
+    const event = await db.Event.findOne({
+      where: { 
+        id: eventId,
+        guild_id: guildId
+      }
+    });
+    
+    if (!event) {
+      console.error(`Event not found: ${eventId}`);
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    
+    // Format the event and team data
+    const eventData = {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      event_time: event.event_time,
+      location: event.location
+    };
+    
+    // Use the Railway internal URL like in your events.js
+    const discordBotUrl = process.env.NODE_ENV === 'production' 
+      ? "http://heartfelt-sparkle.railway.internal:3300" 
+      : "http://localhost:3300";
+    
+    try {
+      console.log(`Sending team screenshots to Discord bot: ${discordBotUrl}/webhook/announce-teams-with-images`);
+      
+      // Send to Discord bot using the same approach as your working events code
+      await axios.post(`${discordBotUrl}/webhook/announce-teams-with-images`, {
+        guildId,
+        eventId,
+        eventData,
+        teams,
+        teamImages,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+      
+      console.log(`Successfully sent team screenshots to Discord bot`);
+      res.json({ success: true });
+    } catch (webhookError) {
+      console.error('Failed to send screenshots to Discord bot:', {
+        message: webhookError.message,
+        stack: webhookError.stack,
+        response: webhookError.response?.data
+      });
+      
+      return res.status(500).json({ 
+        error: 'Failed to send team screenshots to Discord',
+        details: webhookError.message
+      });
+    }
+  } catch (error) {
+    console.error('Error sending team screenshots:', error);
+    res.status(500).json({ 
+      error: 'Failed to send team screenshots',
+      details: error.message 
+    });
+  }
+});
+
 router.get('/status', async (req, res) => {
   try {
     const { guildId } = req.query;

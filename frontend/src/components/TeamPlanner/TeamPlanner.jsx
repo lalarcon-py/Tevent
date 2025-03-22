@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import ReactDOM from 'react-dom';
+import html2canvas from 'html2canvas';
 import { 
   Box, 
   Typography, 
@@ -22,6 +24,7 @@ import {
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import SettingsIcon from '@mui/icons-material/Settings';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
@@ -214,7 +217,7 @@ const BuildSelectionDialog = ({ open, member, onClose, onSelectBuild }) => {
   );
 };
 
-const DraggableMember = ({ member, onRemove }) => {
+const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
   const { eventId } = useParams();
   const dragRef = React.useRef(null);
   
@@ -260,50 +263,6 @@ const DraggableMember = ({ member, onRemove }) => {
     };
   }, [member]);
   
-  // Get role styling
-  const getRoleStyles = (role) => {
-    if (!role) return { color: 'white', bgGradient: 'linear-gradient(to right, #2c2c2c, #1a1a1a)' };
-    
-    const roleUpper = role.toUpperCase();
-    if (roleUpper === 'TANK') {
-      return {
-        color: '#66b3ff',
-        bgGradient: 'linear-gradient(to right, rgba(102, 179, 255, 0.15), rgba(102, 179, 255, 0.05))',
-        borderColor: 'rgba(102, 179, 255, 0.3)'
-      };
-    }
-    if (roleUpper === 'HEALER') {
-      return {
-        color: '#66ff66', 
-        bgGradient: 'linear-gradient(to right, rgba(102, 255, 102, 0.15), rgba(102, 255, 102, 0.05))',
-        borderColor: 'rgba(102, 255, 102, 0.3)'
-      };
-    }
-    if (roleUpper === 'DPS') {
-      return {
-        color: '#ff6666',
-        bgGradient: 'linear-gradient(to right, rgba(255, 102, 102, 0.15), rgba(255, 102, 102, 0.05))',
-        borderColor: 'rgba(255, 102, 102, 0.3)'
-      };
-    }
-    if (roleUpper === 'TENTATIVE') {
-      return {
-        color: '#ffcc66',
-        bgGradient: 'linear-gradient(to right, rgba(255, 204, 102, 0.15), rgba(255, 204, 102, 0.05))',
-        borderColor: 'rgba(255, 204, 102, 0.3)'
-      };
-    }
-    if (roleUpper === 'ABSENT') {
-      return {
-        color: '#aaaaaa',
-        bgGradient: 'linear-gradient(to right, rgba(170, 170, 170, 0.15), rgba(170, 170, 170, 0.05))',
-        borderColor: 'rgba(170, 170, 170, 0.3)'
-      };
-    }
-    
-    return { color: 'white', bgGradient: 'linear-gradient(to right, #2c2c2c, #1a1a1a)' };
-  };
-
   console.log('Member in DraggableMember:', {
     id: member.id || member.user_id,
     role: member.role,
@@ -365,7 +324,7 @@ const DraggableMember = ({ member, onRemove }) => {
   // Calculate weapon spec
   const weaponSpec = getWeaponSpec(primaryWeapon, secondaryWeapon);
   
-  // Get role-specific styling
+  // Get role-specific styling - using the component-level function
   const roleStyles = getRoleStyles(member.role);
   
   return (
@@ -629,6 +588,461 @@ const TeamPlanner = () => {
     
     // Only Guild Master, Guild Advisor, and Guild Guardian can edit teams
     return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(effectiveRole);
+  };
+
+  const getRoleStyles = (role) => {
+    if (!role) return { color: 'white', bgGradient: 'linear-gradient(to right, #2c2c2c, #1a1a1a)' };
+    
+    const roleUpper = role.toUpperCase();
+    if (roleUpper === 'TANK') {
+      return {
+        color: '#66b3ff',
+        bgGradient: 'linear-gradient(to right, rgba(102, 179, 255, 0.15), rgba(102, 179, 255, 0.05))',
+        borderColor: 'rgba(102, 179, 255, 0.3)'
+      };
+    }
+    if (roleUpper === 'HEALER') {
+      return {
+        color: '#66ff66', 
+        bgGradient: 'linear-gradient(to right, rgba(102, 255, 102, 0.15), rgba(102, 255, 102, 0.05))',
+        borderColor: 'rgba(102, 255, 102, 0.3)'
+      };
+    }
+    if (roleUpper === 'DPS') {
+      return {
+        color: '#ff6666',
+        bgGradient: 'linear-gradient(to right, rgba(255, 102, 102, 0.15), rgba(255, 102, 102, 0.05))',
+        borderColor: 'rgba(255, 102, 102, 0.3)'
+      };
+    }
+    if (roleUpper === 'TENTATIVE') {
+      return {
+        color: '#ffcc66',
+        bgGradient: 'linear-gradient(to right, rgba(255, 204, 102, 0.15), rgba(255, 204, 102, 0.05))',
+        borderColor: 'rgba(255, 204, 102, 0.3)'
+      };
+    }
+    if (roleUpper === 'ABSENT') {
+      return {
+        color: '#aaaaaa',
+        bgGradient: 'linear-gradient(to right, rgba(170, 170, 170, 0.15), rgba(170, 170, 170, 0.05))',
+        borderColor: 'rgba(170, 170, 170, 0.3)'
+      };
+    }
+    
+    return { color: 'white', bgGradient: 'linear-gradient(to right, #2c2c2c, #1a1a1a)' };
+  };
+
+  // New function to capture and send team screenshots
+  const captureAndSendTeamImages = async () => {
+    if (teams.length === 0) return;
+    
+    setIsAnnouncingTeams(true); // Reuse the loading state
+    
+    try {
+      // Create an array to store image data
+      const teamImages = [];
+      
+      // For each team, create a temporary clone without edit controls
+      for (const team of teams) {
+        // Create a container reference for the team
+        const teamRef = document.createElement('div');
+        teamRef.style.position = 'absolute';
+        teamRef.style.left = '-9999px';
+        document.body.appendChild(teamRef);
+        
+        // Render the team without edit controls
+        ReactDOM.render(
+          <Box sx={{ 
+            p: 2,
+            width: '500px', // Fixed width for consistency
+            bgcolor: '#1e1e1e',
+            borderRadius: 2,
+            overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+          }}>
+            {/* Team header */}
+            <Box sx={{ 
+              p: 2,
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  color: 'white',
+                  fontWeight: 600
+                }}
+              >
+                {team.name}
+              </Typography>
+              
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                {/* Role distribution indicators */}
+                <Box sx={{ display: 'flex' }}>
+                  <Tooltip title={`${team.members.filter(m => m.role?.toUpperCase() === 'TANK').length} Tanks`}>
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      px: 1,
+                      height: 28,
+                      borderRadius: '14px',
+                      mr: 0.5,
+                      backgroundColor: 'rgba(102, 179, 255, 0.2)',
+                      border: '1px solid rgba(102, 179, 255, 0.3)'
+                    }}>
+                      <ShieldIcon sx={{ color: '#66b3ff', fontSize: 16, mr: 0.5 }} />
+                      <Typography sx={{ color: '#66b3ff', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {team.members.filter(m => m.role?.toUpperCase() === 'TANK').length}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                  
+                  <Tooltip title={`${team.members.filter(m => m.role?.toUpperCase() === 'HEALER').length} Healers`}>
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      px: 1,
+                      height: 28,
+                      borderRadius: '14px',
+                      mr: 0.5,
+                      backgroundColor: 'rgba(102, 255, 102, 0.2)',
+                      border: '1px solid rgba(102, 255, 102, 0.3)'
+                    }}>
+                      <LocalHospitalIcon sx={{ color: '#66ff66', fontSize: 16, mr: 0.5 }} />
+                      <Typography sx={{ color: '#66ff66', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {team.members.filter(m => m.role?.toUpperCase() === 'HEALER').length}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                  
+                  <Tooltip title={`${team.members.filter(m => m.role?.toUpperCase() === 'DPS').length} DPS`}>
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      px: 1,
+                      height: 28,
+                      borderRadius: '14px',
+                      backgroundColor: 'rgba(255, 102, 102, 0.2)',
+                      border: '1px solid rgba(255, 102, 102, 0.3)'
+                    }}>
+                      <FlashOnIcon sx={{ color: '#ff6666', fontSize: 16, mr: 0.5 }} />
+                      <Typography sx={{ color: '#ff6666', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {team.members.filter(m => m.role?.toUpperCase() === 'DPS').length}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                </Box>
+              </Box>
+            </Box>
+            
+            {/* Team members */}
+            <Box sx={{ p: 2 }}>
+              {team.members?.map(member => {
+                // Get role styling for this member
+                const roleStyles = getRoleStyles(member.role);
+                
+                // Get build info and weapon spec
+                let activeBuild = null;
+                
+                // First try to use selected_build
+                if (member.selected_build) {
+                  activeBuild = member.selected_build;
+                } 
+                // If no selected_build, use builds array
+                else {
+                  let builds = [];
+                  
+                  if (member.User?.builds && Array.isArray(member.User.builds)) {
+                    builds = member.User.builds;
+                  } else if (member.builds && Array.isArray(member.builds)) {
+                    builds = member.builds;
+                  } else if (member.User?.builds && typeof member.User.builds === 'string') {
+                    try {
+                      builds = JSON.parse(member.User.builds);
+                    } catch (e) {
+                      builds = [];
+                    }
+                  } else if (member.builds && typeof member.builds === 'string') {
+                    try {
+                      builds = JSON.parse(member.builds);
+                    } catch (e) {
+                      builds = [];
+                    }
+                  }
+                  
+                  // Try to find a build matching the role
+                  if (member.role && builds.length > 0) {
+                    const roleMapping = {
+                      'TANK': 'Tank',
+                      'HEALER': 'Healer',
+                      'DPS': 'DPS'
+                    };
+                    
+                    const normalizedRole = roleMapping[member.role.toUpperCase()] || member.role;
+                    
+                    activeBuild = builds.find(b => 
+                      b.spec && b.spec.toUpperCase() === normalizedRole.toUpperCase()
+                    ) || builds[0];
+                  }
+                }
+                
+                // Get weapon information
+                const primaryWeapon = activeBuild?.primary || '';
+                const secondaryWeapon = activeBuild?.secondary || '';
+                
+                // Calculate weapon spec
+                const memberWeaponSpec = getWeaponSpec(primaryWeapon, secondaryWeapon);
+                
+                return (
+                  <Box 
+                    key={member.id || member.user_id || (member.User?.id)}
+                    sx={{
+                      position: 'relative',
+                      padding: '10px 12px',
+                      mb: 1.5,
+                      width: '100%',
+                      backgroundColor: 'rgba(24, 24, 27, 0.7)',
+                      backgroundImage: roleStyles.bgGradient,
+                      color: 'white',
+                      borderRadius: '8px',
+                      border: '1px solid',
+                      borderColor: roleStyles.borderColor || 'rgba(255, 255, 255, 0.1)',
+                      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {/* Role indicator */}
+                    <Box 
+                      sx={{ 
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: '4px',
+                        backgroundColor: roleStyles.color,
+                        borderRadius: '8px 0 0 8px'
+                      }} 
+                    />
+                    
+                    {/* Weapon icons */}
+                    <Box sx={{ 
+                      mr: 2,
+                      display: 'flex',
+                      position: 'relative'
+                    }}>
+                      {primaryWeapon && (
+                        <Box
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            zIndex: 2
+                          }}
+                        >
+                          <img 
+                            src={`/weapons/${primaryWeapon} Art.png`}
+                            alt={primaryWeapon}
+                            style={{ 
+                              width: 24, 
+                              height: 24, 
+                              objectFit: 'contain',
+                              filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))'
+                            }}
+                            onError={(e) => { 
+                              console.error(`Failed to load image: ${primaryWeapon}`);
+                              e.target.style.display = 'none'; 
+                            }}
+                          />
+                        </Box>
+                      )}
+                      {secondaryWeapon && (
+                        <Box
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            ml: '-10px',
+                            zIndex: 1
+                          }}
+                        >
+                          <img 
+                            src={`/weapons/${secondaryWeapon} Art.png`}
+                            alt={secondaryWeapon}
+                            style={{ 
+                              width: 24, 
+                              height: 24, 
+                              objectFit: 'contain',
+                              filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))'
+                            }}
+                            onError={(e) => { 
+                              console.error(`Failed to load image: ${secondaryWeapon}`);
+                              e.target.style.display = 'none'; 
+                            }}
+                          />
+                        </Box>
+                      )}
+                    </Box>
+                    
+                    {/* Text content */}
+                    <Box sx={{ 
+                      flexGrow: 1,
+                      overflow: 'hidden'
+                    }}>
+                      {/* Character name */}
+                      <Typography 
+                        variant="body2"
+                        sx={{
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                          color: 'white',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {member.User?.username || member.username}
+                      </Typography>
+                      
+                      {/* Role and spec text */}
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography 
+                          variant="caption"
+                          sx={{
+                            color: roleStyles.color,
+                            fontSize: '0.8rem',
+                            fontWeight: 500
+                          }}
+                        >
+                          {member.role}
+                        </Typography>
+                        
+                        {memberWeaponSpec && memberWeaponSpec !== 'Unknown' && (
+                          <>
+                            <Box 
+                              sx={{ 
+                                width: '4px', 
+                                height: '4px', 
+                                borderRadius: '50%', 
+                                backgroundColor: 'rgba(255,255,255,0.5)', 
+                                mx: 0.5 
+                              }} 
+                            />
+                            <Typography 
+                              variant="caption"
+                              sx={{
+                                color: 'rgba(255,255,255,0.7)',
+                                fontSize: '0.8rem'
+                              }}
+                            >
+                              {memberWeaponSpec}
+                            </Typography>
+                          </>
+                        )}
+                      </Box>
+                    </Box>
+                    
+                    {/* Combat power if available */}
+                    {member.combat_power && (
+                      <Box sx={{ 
+                        ml: 1.5,
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: '50px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                        border: '1px solid rgba(255, 215, 0, 0.3)'
+                      }}>
+                        <Typography sx={{ 
+                          color: '#ffd700',
+                          fontSize: '0.75rem',
+                          fontWeight: 600
+                        }}>
+                          CP {member.combat_power}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>,
+          teamRef
+        );
+        
+        // Use html2canvas to capture the rendered team
+        const canvas = await html2canvas(teamRef.firstChild, {
+          backgroundColor: '#1e1e1e',
+          scale: 2, // Higher quality
+          logging: false,
+          useCORS: true
+        });
+        
+        // Convert to image data
+        const imageData = canvas.toDataURL('image/png');
+        teamImages.push({
+          name: team.name,
+          image: imageData
+        });
+        
+        // Clean up
+        document.body.removeChild(teamRef);
+      }
+      
+      // Send the images to the server
+      const response = await fetch(`${API_URL}/api/discord-bot/announce-teams-with-images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          eventId,
+          guildId,
+          teams: teams.map(team => ({
+            id: team.id,
+            name: team.name,
+            members: team.members.map(member => ({
+              id: member.user_id || member.id || (member.User?.id),
+              username: member.User?.username || member.username,
+              role: member.role
+            }))
+          })),
+          teamImages
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to send team screenshots');
+      }
+      
+      setAnnounceSuccess({
+        success: true,
+        message: "Teams announced with screenshots to Discord!"
+      });
+    } catch (error) {
+      console.error('Error capturing or sending team screenshots:', error);
+      setAnnounceSuccess({
+        success: false,
+        message: error.message || 'Failed to send team screenshots'
+      });
+    } finally {
+      setIsAnnouncingTeams(false);
+    }
   };
 
   const handleEditTeam = async (updatedTeam) => {
@@ -1454,6 +1868,7 @@ const TeamPlanner = () => {
                 key={member.id || member.user_id || (member.User?.id)} 
                 member={member} 
                 onRemove={canEdit ? () => onRemoveMember(team.id, member) : null} 
+                getRoleStyles={getRoleStyles}
               />
             ))
           ) : (
@@ -1484,7 +1899,7 @@ const TeamPlanner = () => {
   };
 
   // ParticipantPool component
-  const ParticipantPool = ({ participants }) => {
+  const ParticipantPool = ({ participants, getRoleStyles }) => {
     // Group participants by role
     const roleGroups = {
       tank: participants.filter(p => getParticipantSpec(p) === 'Tank'),
@@ -1569,6 +1984,7 @@ const TeamPlanner = () => {
                 <DraggableMember 
                   key={member.id || member.user_id || (member.User?.id)} 
                   member={member} 
+                  getRoleStyles={getRoleStyles}
                 />
               ))
             ) : (
@@ -1600,7 +2016,8 @@ const TeamPlanner = () => {
               roleGroups.healer.map(member => (
                 <DraggableMember 
                   key={member.id || member.user_id || (member.User?.id)} 
-                  member={member} 
+                  member={member}
+                  getRoleStyles={getRoleStyles} 
                 />
               ))
             ) : (
@@ -1632,7 +2049,8 @@ const TeamPlanner = () => {
               roleGroups.dps.map(member => (
                 <DraggableMember 
                   key={member.id || member.user_id || (member.User?.id)} 
-                  member={member} 
+                  member={member}
+                  getRoleStyles={getRoleStyles} 
                 />
               ))
             ) : (
@@ -1721,6 +2139,21 @@ const TeamPlanner = () => {
                   Create Team
                 </Button>
                 
+                {/* Screenshot Teams button */}
+                <Button
+                  variant="contained"
+                  onClick={captureAndSendTeamImages}
+                  disabled={isAnnouncingTeams || teams.length === 0}
+                  startIcon={<PhotoCameraIcon />}
+                  sx={{
+                    bgcolor: '#ff9800',
+                    '&:hover': { bgcolor: '#ed8c00' },
+                    '&.Mui-disabled': { bgcolor: 'rgba(255, 152, 0, 0.3)' }
+                  }}
+                >
+                  {isAnnouncingTeams ? 'Processing...' : 'Screenshot Teams'}
+                </Button>
+                
                 {/* Announce Teams button */}
                 <Button
                   variant="contained"
@@ -1783,7 +2216,9 @@ const TeamPlanner = () => {
     
         <Grid container spacing={3}>
         <Grid item xs={12} md={3}>
-          <ParticipantPool participants={participants} />
+          <ParticipantPool participants={participants}
+          getRoleStyles={getRoleStyles} 
+          />
             
             {/* Absentees Section */}
             <Paper sx={{ p: 2, mt: 2, bgcolor: '#1e1e1e' }}>

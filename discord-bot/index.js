@@ -5,6 +5,7 @@ const {
   GatewayIntentBits, 
   EmbedBuilder, 
   ActionRowBuilder, 
+  AttachmentBuilder,
   ButtonBuilder, 
   ButtonStyle, 
   REST, 
@@ -5037,6 +5038,116 @@ async function verifyEventChannelConfigurations() {
     console.error(`[ERROR] Error verifying channel configurations: ${error.message}`);
   }
 }
+
+app.post('/webhook/announce-teams-with-images', async (req, res) => {
+  try {
+    const { guildId, eventId, eventData, teams, teamImages, secret } = req.body;
+    
+    console.log(`[INFO] Received announce teams with images webhook - Guild: ${guildId}, Event: ${eventId}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get Discord guild ID from mapping
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      console.error(`[ERROR] Discord guild mapping not found for guild: ${guildId}`);
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Get channel configuration
+    const channelConfigResult = await pool.query(
+      `SELECT channel_id FROM discord_channel_config 
+       WHERE guild_id = $1 AND channel_type = 'events' AND enabled = true`,
+      [guildId]
+    );
+    
+    if (!channelConfigResult.rows.length) {
+      console.error(`[ERROR] No events channel configured for guild: ${guildId}`);
+      return res.status(404).json({ error: 'No events channel configured' });
+    }
+    
+    const channelId = channelConfigResult.rows[0].channel_id;
+    const channel = await client.channels.fetch(channelId);
+    
+    if (!channel) {
+      console.error(`[ERROR] Channel not found: ${channelId}`);
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+    
+    try {
+      // Format date and time for the event header
+      const eventDate = new Date(eventData.event_time);
+      const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      
+      // Create an initial embed with event information
+      const eventEmbed = new EmbedBuilder()
+        .setTitle(`📋 ${eventData.title} - Team Assignments`)
+        .setDescription(
+          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
+          (eventData.description ? `${eventData.description}\n\n` : '') +
+          `👥 **Total Teams:** ${teamImages.length}`
+        )
+        .setColor('#1a64f3')
+        .setTimestamp();
+      
+      // Send the event header first
+      await channel.send({ embeds: [eventEmbed] });
+      
+      // Process each team image
+      for (let i = 0; i < teamImages.length; i++) {
+        const teamImage = teamImages[i];
+        
+        // Convert base64 image to buffer
+        const imageBuffer = Buffer.from(
+          teamImage.image.replace(/^data:image\/\w+;base64,/, ''),
+          'base64'
+        );
+        
+        // Create attachment from buffer
+        const attachment = new AttachmentBuilder(imageBuffer, { name: `team-${i+1}.png` });
+        
+        // Send the team image
+        await channel.send({ 
+          content: `**Team ${i+1}: ${teamImage.name}**`, 
+          files: [attachment] 
+        });
+        
+        // Add a small delay to prevent rate limiting
+        if (i < teamImages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      console.log(`[INFO] Team screenshots sent successfully for event ${eventId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error(`[ERROR] Error sending team screenshots: ${error.message}`);
+      console.error(error.stack);
+      return res.status(500).json({ 
+        error: 'Error sending to channel',
+        details: error.message
+      });
+    }
+  } catch (error) {
+    console.error(`[ERROR] Error processing team screenshots webhook: ${error.message}`);
+    console.error(error.stack);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message
+    });
+  }
+});
 
 app.post('/webhook/announce-teams', async (req, res) => {
   try {
