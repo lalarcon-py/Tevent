@@ -1169,43 +1169,6 @@ client.on('guildCreate', async (guild) => {
   }
 });
 
-// updateDatabaseSchema for user build "caching"
-async function updateDatabaseSchema() {
-  try {
-    console.log('Updating database schema...');
-    
-    // Add weapon_spec column to event_participants if it doesn't exist
-    await sequelize.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'event_participants' AND column_name = 'weapon_spec'
-        ) THEN
-          ALTER TABLE event_participants ADD COLUMN weapon_spec VARCHAR(255);
-        END IF;
-      END
-      $$;
-    `);
-    
-    // Create user_preferences table
-    await sequelize.query(`
-      CREATE TABLE IF NOT EXISTS user_preferences (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL,
-        preferred_weapon_spec VARCHAR(255),
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(user_id)
-      );
-    `);
-    
-    console.log('Database schema updated successfully');
-  } catch (error) {
-    console.error('Error updating database schema:', error);
-  }
-}
-
 // Member join handler
 client.on('guildMemberAdd', async (member) => {
   try {
@@ -2417,7 +2380,111 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Register slash commands
+async function handleEventSignup(interaction, build, userId, eventId, role, eventDetails, appGuildId, isUpdate = false) {
+  try {
+    // Verify the build has the required fields
+    if (!build || !build.primary || !build.secondary || !build.weapon_spec) {
+      const method = isUpdate ? 'update' : 'reply';
+      await interaction[method]({
+        content: 'Invalid build data. Please ensure your build has primary and secondary weapons and a class specified.',
+        components: []
+      });
+      return;
+    }
+    
+    // Check if user is already signed up
+    const existingSignup = await pool.query(
+      'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
+      [eventId, userId]
+    );
+    
+    // Determine weapon_spec to use (the format the database expects)
+    const weaponCombo = `${build.primary}|${build.secondary}`;
+    const reverseWeaponCombo = `${build.secondary}|${build.primary}`;
+    
+    // Check which weapon combo matches the weapon_spec in WEAPON_SPECS
+    let dbWeaponSpec = weaponCombo;
+    if (WEAPON_SPECS[reverseWeaponCombo] === build.weapon_spec) {
+      dbWeaponSpec = reverseWeaponCombo;
+    }
+    
+    // Check role capacity
+    const roleCountsResult = await pool.query(
+      `SELECT 
+        COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+        COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+        COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
+      FROM event_participants
+      WHERE event_id = $1`,
+      [eventId]
+    );
+    
+    const roleCounts = roleCountsResult.rows[0];
+    
+    // Verify there's room for this role
+    const roleLimits = {
+      'TANK': eventDetails.tanks || 0,
+      'HEALER': eventDetails.healers || 0,
+      'DPS': eventDetails.dps || 0
+    };
+    
+    const currentCounts = {
+      'TANK': parseInt(roleCounts?.tank_count || 0),
+      'HEALER': parseInt(roleCounts?.healer_count || 0),
+      'DPS': parseInt(roleCounts?.dps_count || 0)
+    };
+    
+    // Skip the capacity check if the user is already signed up (just updating)
+    if (!existingSignup.rows?.length && currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
+      const method = isUpdate ? 'update' : 'reply';
+      await interaction[method]({
+        content: `Sorry, the ${role} spots are full for this event.`,
+        components: []
+      });
+      return;
+    }
+    
+    if (existingSignup.rows?.length > 0) {
+      // Update existing signup
+      await pool.query(
+        'UPDATE event_participants SET role = $1, weapon_spec = $2 WHERE event_id = $3 AND user_id = $4',
+        [role, dbWeaponSpec, eventId, userId]
+      );
+      
+      const method = isUpdate ? 'update' : 'editReply';
+      await interaction[method]({
+        content: `Your role for "${eventDetails.title}" has been updated to ${role} (${build.weapon_spec}).`,
+        components: []
+      });
+    } else {
+      // Create new signup
+      await pool.query(
+        `INSERT INTO event_participants 
+          (id, guild_id, event_id, user_id, role, weapon_spec, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
+        [appGuildId, eventId, userId, role, dbWeaponSpec]
+      );
+      
+      const method = isUpdate ? 'update' : 'editReply';
+      await interaction[method]({
+        content: `You have been signed up for "${eventDetails.title}" as ${role} (${build.weapon_spec}).`,
+        components: []
+      });
+    }
+    
+    // Update event display
+    await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+  } catch (error) {
+    console.error('Error in handleEventSignup:', error);
+    const method = isUpdate ? 'update' : 'editReply';
+    await interaction[method]({
+      content: 'An error occurred while processing your signup. Please try again.',
+      components: []
+    });
+  }
+}
+
 // Register slash commands
 const registerCommands = async () => {
   try {
@@ -3240,115 +3307,44 @@ client.on('interactionCreate', async (interaction) => {
             
             // For regular signup roles (TANK, HEALER, DPS):
             
-            // Check if user has a preferred weapon spec already
-            const prefResult = await pool.query(
-              'SELECT preferred_weapon_spec FROM user_preferences WHERE user_id = $1',
-              [userId]
+            // Filter builds by the selected role
+            const compatibleBuilds = userBuilds.filter(build => 
+              !build.spec || build.spec === role || build.spec === 'Any'
             );
             
-            const hasStoredPreference = prefResult.rows?.length > 0 && 
-                                    prefResult.rows[0].preferred_weapon_spec;
+            if (compatibleBuilds.length === 0) {
+              return await safeReply(interaction, {
+                content: `You don't have any builds configured for the ${role} role. Please configure your builds on the website first.`,
+                ephemeral: true
+              });
+            }
             
-            // If the user already has a preference stored, use it
-            if (hasStoredPreference) {
-              const weaponSpec = prefResult.rows[0].preferred_weapon_spec;
-              const className = WEAPON_SPECS[weaponSpec] || 'Unknown Class';
-              
-              // Verify the stored preference is valid for this user's builds
-              let isValidBuild = false;
-              for (const build of userBuilds) {
-                if (build.weapon_spec === className) {
-                  isValidBuild = true;
-                  break;
-                }
-              }
-              
-              if (!isValidBuild) {
-                console.log(`[DEBUG] Stored preference ${className} is no longer valid for user ${username}`);
-                
-                // Invalid preference - prompt for a new selection
-                await pool.query(
-                  `DELETE FROM user_preferences WHERE user_id = $1`,
-                  [userId]
-                );
-                
-                await showClassSelectionMenu(interaction, userId, username, userBuilds, eventId, role, eventDetails, appGuildId);
-                return;
-              }
-              
-              // Check if user is already signed up
-              const existingSignup = await pool.query(
-                'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                [eventId, userId]
-              );
-              
-              if (existingSignup.rows?.length > 0) {
-                // Update existing signup
-                await pool.query(
-                  'UPDATE event_participants SET role = $1, weapon_spec = $2 WHERE event_id = $3 AND user_id = $4',
-                  [role, weaponSpec, eventId, userId]
-                );
-                
-                await safeReply(interaction, {
-                  content: `Your role for "${eventDetails.title}" has been updated to ${role} (${className}).`,
-                  ephemeral: true
-                });
-              } else {
-                // Check role capacity
-                const roleCountsResult = await pool.query(
-                  `SELECT 
-                    COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-                    COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-                    COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-                  FROM event_participants
-                  WHERE event_id = $1`,
-                  [eventId]
-                );
-                
-                const roleCounts = roleCountsResult.rows[0];
-                
-                // Verify there's room for this role
-                const roleLimits = {
-                  'TANK': eventDetails.tanks || 0,
-                  'HEALER': eventDetails.healers || 0,
-                  'DPS': eventDetails.dps || 0
-                };
-                
-                const currentCounts = {
-                  'TANK': parseInt(roleCounts?.tank_count || 0),
-                  'HEALER': parseInt(roleCounts?.healer_count || 0),
-                  'DPS': parseInt(roleCounts?.dps_count || 0)
-                };
-                
-                if (currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
-                  await safeReply(interaction, {
-                    content: `Sorry, the ${role} spots are full for this event.`,
-                    ephemeral: true
-                  });
-                  return;
-                }
-                
-                // Create new signup with weapon spec
-                await pool.query(
-                  `INSERT INTO event_participants 
-                    (id, guild_id, event_id, user_id, role, weapon_spec, created_at, updated_at)
-                  VALUES
-                    (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
-                  [appGuildId, eventId, userId, role, weaponSpec]
-                );
-                
-                await safeReply(interaction, {
-                  content: `You have been signed up for "${eventDetails.title}" as ${role} (${className}).`,
-                  ephemeral: true
-                });
-              }
-              
-              // Update event display
-              await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
-            } 
-            // User doesn't have a preference stored, prompt to select a class
+            // If there's only one compatible build, use it directly
+            if (compatibleBuilds.length === 1) {
+              await handleEventSignup(interaction, compatibleBuilds[0], userId, eventId, role, eventDetails, appGuildId);
+            }
+            // If there are multiple builds, show a selection menu
             else {
-              await showClassSelectionMenu(interaction, userId, username, userBuilds, eventId, role, eventDetails, appGuildId);
+              // Create selection menu for builds
+              const options = compatibleBuilds.map((build, index) => ({
+                label: build.weapon_spec || `Build ${index + 1}`,
+                description: `${build.primary} + ${build.secondary}${build.spec ? ` (${build.spec})` : ''}`,
+                value: `${index}`  // Use index as the value
+              }));
+              
+              const row = new ActionRowBuilder()
+                .addComponents(
+                  new StringSelectMenuBuilder()
+                    .setCustomId(`build_select_${userId}_${eventId}_${role}`)
+                    .setPlaceholder('Select your build')
+                    .addOptions(options)
+                );
+              
+              await safeReply(interaction, {
+                content: `You have multiple compatible builds for ${role}. Please select which one to use:`,
+                components: [row],
+                ephemeral: true
+              });
             }
           } catch (error) {
             console.error(`Error processing signup button:`, error);
@@ -3358,15 +3354,14 @@ client.on('interactionCreate', async (interaction) => {
             });
           }
         }
-        // Handle class selection for signup
+        // Handle build selection for signup
         else if (interaction.isStringSelectMenu() && 
-                 interaction.customId.startsWith('class_select_signup_')) {
+                 interaction.customId.startsWith('build_select_')) {
           try {
-            const [_, __, userId, eventId, role] = interaction.customId.split('_');
-            const selectedWeaponCombo = interaction.values[0];
-            const selectedClassName = WEAPON_SPECS[selectedWeaponCombo] || 'Unknown';
+            const [_, userId, eventId, role] = interaction.customId.split('_');
+            const selectedBuildIndex = parseInt(interaction.values[0]);
             
-            console.log(`[DEBUG] Processing class selection for signup - User: ${userId}, Event: ${eventId}, Role: ${role}`);
+            console.log(`[DEBUG] Processing build selection - User: ${userId}, Event: ${eventId}, Role: ${role}, Build Index: ${selectedBuildIndex}`);
             
             // Get app guild ID
             const appGuildId = await getGuildMapping(interaction.guild.id);
@@ -3378,7 +3373,7 @@ client.on('interactionCreate', async (interaction) => {
               return;
             }
             
-            // Get user builds to verify selection is valid
+            // Get user's builds
             const userResult = await pool.query(
               'SELECT builds FROM users WHERE id = $1',
               [userId]
@@ -3392,7 +3387,7 @@ client.on('interactionCreate', async (interaction) => {
               return;
             }
             
-            // Verify the selection is valid for this user
+            // Parse builds
             let userBuilds = [];
             try {
               userBuilds = typeof userResult.rows[0].builds === 'string' 
@@ -3402,35 +3397,20 @@ client.on('interactionCreate', async (interaction) => {
               console.error('Error parsing builds:', e);
             }
             
-            let isValidSelection = false;
-            for (const build of userBuilds) {
-              // Check if this build matches the selected weapon combo (either way)
-              const combo1 = `${build.primary}|${build.secondary}`;
-              const combo2 = `${build.secondary}|${build.primary}`;
-              if (combo1 === selectedWeaponCombo || combo2 === selectedWeaponCombo) {
-                isValidSelection = true;
-                break;
-              }
-            }
+            // Filter builds by the selected role
+            const compatibleBuilds = userBuilds.filter(build => 
+              !build.spec || build.spec === role || build.spec === 'Any'
+            );
             
-            if (!isValidSelection) {
+            if (selectedBuildIndex < 0 || selectedBuildIndex >= compatibleBuilds.length) {
               await interaction.update({
-                content: 'Error: The selected class is not available for your character.',
+                content: 'Error: Invalid build selection.',
                 components: []
               });
               return;
             }
             
-            // Save the preference to the database
-            await pool.query(
-              `INSERT INTO user_preferences (user_id, preferred_weapon_spec)
-               VALUES ($1, $2)
-               ON CONFLICT (user_id) 
-               DO UPDATE SET 
-                 preferred_weapon_spec = $2,
-                 updated_at = NOW()`,
-              [userId, selectedWeaponCombo]
-            );
+            const selectedBuild = compatibleBuilds[selectedBuildIndex];
             
             // Get event details
             const eventResult = await pool.query(
@@ -3448,130 +3428,13 @@ client.on('interactionCreate', async (interaction) => {
             
             const eventDetails = eventResult.rows[0];
             
-            // Check role capacity
-            const roleCountsResult = await pool.query(
-              `SELECT 
-                COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-                COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-                COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-              FROM event_participants
-              WHERE event_id = $1`,
-              [eventId]
-            );
-            
-            const roleCounts = roleCountsResult.rows[0];
-            
-            // Verify there's room for this role
-            const roleLimits = {
-              'TANK': eventDetails.tanks || 0,
-              'HEALER': eventDetails.healers || 0,
-              'DPS': eventDetails.dps || 0
-            };
-            
-            const currentCounts = {
-              'TANK': parseInt(roleCounts?.tank_count || 0),
-              'HEALER': parseInt(roleCounts?.healer_count || 0),
-              'DPS': parseInt(roleCounts?.dps_count || 0)
-            };
-            
-            if (currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
-              await interaction.update({
-                content: `Sorry, the ${role} spots are full for this event.`,
-                components: []
-              });
-              return;
-            }
-            
-            // Check if already signed up
-            const existingSignup = await pool.query(
-              'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
-              [eventId, userId]
-            );
-            
-            if (existingSignup.rows?.length > 0) {
-              // Update existing signup
-              await pool.query(
-                'UPDATE event_participants SET role = $1, weapon_spec = $2 WHERE event_id = $3 AND user_id = $4',
-                [role, selectedWeaponCombo, eventId, userId]
-              );
-            } else {
-              // Create new signup
-              await pool.query(
-                `INSERT INTO event_participants 
-                  (id, guild_id, event_id, user_id, role, weapon_spec, created_at, updated_at)
-                VALUES
-                  (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
-                [appGuildId, eventId, userId, role, selectedWeaponCombo]
-              );
-            }
-            
-            // Embed for success message
-            const successEmbed = new EmbedBuilder()
-              .setTitle('Event Signup Successful')
-              .setDescription(`You have been signed up for "${eventDetails.title}" as ${role} (${selectedClassName}).`)
-              .addFields(
-                { 
-                  name: 'Class Info', 
-                  value: `${selectedClassName} (${selectedWeaponCombo.replace('|', ' + ')})`, 
-                  inline: true 
-                }
-              )
-              .setColor('#4CAF50');
-            
-            // Create a button to reset class preference
-            const resetRow = new ActionRowBuilder()
-              .addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`reset_class_pref_${userId}`)
-                  .setLabel('Reset Class Preference')
-                  .setStyle(ButtonStyle.Secondary)
-              );
-            
-            await interaction.update({
-              content: 'Signup successful!',
-              embeds: [successEmbed],
-              components: [resetRow]
-            });
-            
-            // Update the event display for everyone
-            await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+            // Complete the signup process with the selected build
+            await handleEventSignup(interaction, selectedBuild, userId, eventId, role, eventDetails, appGuildId, true);
           } catch (error) {
-            console.error('Error handling class selection for signup:', error);
+            console.error('Error handling build selection:', error);
             await interaction.update({
               content: 'An error occurred while processing your selection. Please try again.',
               components: []
-            });
-          }
-        }
-        // Handle reset class preference button
-        else if (interaction.isButton() && interaction.customId.startsWith('reset_class_pref_')) {
-          try {
-            const userId = interaction.customId.replace('reset_class_pref_', '');
-            
-            // Verify this is the correct user
-            if (userId !== interaction.user.id) {
-              await interaction.reply({
-                content: 'This button is not for you.',
-                ephemeral: true
-              });
-              return;
-            }
-            
-            // Delete the preference
-            await pool.query(
-              'DELETE FROM user_preferences WHERE user_id = $1',
-              [userId]
-            );
-            
-            await interaction.reply({
-              content: 'Your class preference has been reset. You will be asked to select a class next time you sign up for an event.',
-              ephemeral: true
-            });
-          } catch (error) {
-            console.error('Error resetting class preference:', error);
-            await interaction.reply({
-              content: 'An error occurred while resetting your class preference.',
-              ephemeral: true
             });
           }
         }
@@ -3672,6 +3535,102 @@ async function showClassSelectionMenu(interaction, userId, username, userBuilds,
 }
 
 async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId) {
+  try {
+    // Get the original message that contains the embed
+    const message = interaction.message;
+    if (!message || !message.embeds || message.embeds.length === 0) return;
+    
+    // Get updated participant data
+    const participantsResult = await pool.query(
+      `SELECT ep.role, ep.weapon_spec, u.username, u.discord_id, u.builds
+       FROM event_participants ep
+       JOIN users u ON ep.user_id = u.id
+       WHERE ep.event_id = $1
+       ORDER BY ep.created_at ASC`,
+      [eventId]
+    );
+    
+    // Get absentees
+    const absenteesResult = await pool.query(
+      `SELECT ea.user_id, u.username
+       FROM event_absentees ea
+       JOIN users u ON ea.user_id = u.id
+       WHERE ea.event_id = $1
+       ORDER BY ea.created_at ASC`,
+      [eventId]
+    );
+    
+    // Get tentative members if the table exists
+    let tentativeMembers = [];
+    try {
+      const tentativeResult = await pool.query(
+        `SELECT et.user_id, u.username
+         FROM event_tentative et
+         JOIN users u ON et.user_id = u.id
+         WHERE et.event_id = $1
+         ORDER BY et.created_at ASC`,
+        [eventId]
+      );
+      
+      tentativeMembers = tentativeResult.rows || [];
+    } catch (e) {
+      // Table might not exist, ignore
+    }
+    
+    // Create updated event object
+    const updatedEvent = {
+      ...eventDetails,
+      participants: participantsResult.rows,
+      absentees: absenteesResult.rows,
+      tentative: tentativeMembers
+    };
+    
+    // Create updated embed
+    const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
+    
+    // Create signup buttons with custom role emojis
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_TANK`)
+          .setLabel('Tank')
+          .setEmoji('1352736996405022780')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_HEALER`)
+          .setLabel('Healer')
+          .setEmoji('1352737011479482468')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_DPS`)
+          .setLabel('DPS')
+          .setEmoji('1352737043972624518')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_TENTATIVE`)
+          .setLabel('Tentative')
+          .setEmoji('⏳')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_ABSENT`)
+          .setLabel('Absent')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Secondary)
+      );
+    
+    // Update the original message with new embed
+    await message.edit({
+      embeds: [updatedEmbed],
+      components: [row]
+    }).catch(err => {
+      console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
+    });
+    
+    console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
+  } catch (error) {
+    console.error(`[ERROR] Error updating event display: ${error.message}`);
+  }
+}async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId) {
   try {
     // Get the original message that contains the embed
     const message = interaction.message;

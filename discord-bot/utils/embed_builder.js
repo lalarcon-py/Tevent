@@ -414,29 +414,51 @@ module.exports = {
       
       // Format players with weapon icons and better styling
       const formatPlayers = (players) => {
-        if (!players || players.length === 0) return '—';
+        if (players.length === 0) return '—';
         
-        return players.map((player, index) => {
-          const username = player.User?.username || player.username || 'Unknown';
-          let buildEmoji = '';
+        return players.map((p, idx) => {
+          const name = p.User?.username || p.username || 'Unknown';
+          let primaryEmoji = '';
+          let secondaryEmoji = '';
+          let className = '';
           
-          // Get player build/weapon info
-          try {
-            if (player.User?.builds) {
-              const builds = typeof player.User.builds === 'string' 
-                ? JSON.parse(player.User.builds) 
-                : player.User.builds;
-              
-              if (builds && builds.length > 0) {
-                const primaryBuild = builds[0];
-                buildEmoji = getWeaponEmoji(primaryBuild.weapon || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
-              }
+          // Get weapon emojis and class name from weapon_spec
+          if (p.weapon_spec) {
+            const weapons = p.weapon_spec.split('|');
+            if (weapons.length >= 2) {
+              primaryEmoji = getWeaponEmoji(weapons[0]);
+              secondaryEmoji = getWeaponEmoji(weapons[1]);
+              className = WEAPON_SPECS[p.weapon_spec] || '';
             }
-          } catch (e) {
-            console.error('Error parsing builds:', e);
+          }
+          // If no weapon_spec in participant data, try to parse from builds
+          else {
+            try {
+              let builds = [];
+              
+              // Try to get builds from various possible sources
+              if (p.builds) {
+                builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+              } else if (p.User?.builds) {
+                builds = typeof p.User.builds === 'string' ? JSON.parse(p.User.builds) : p.User.builds;
+              }
+              
+              if (Array.isArray(builds) && builds.length > 0) {
+                // Use the first build by default
+                const build = builds[0];
+                if (build.primary) primaryEmoji = getWeaponEmoji(build.primary);
+                if (build.secondary) secondaryEmoji = getWeaponEmoji(build.secondary);
+                if (build.weapon_spec) className = build.weapon_spec;
+              }
+            } catch (e) {
+              console.error(`Error processing builds for player ${name}:`, e);
+            }
           }
           
-          return `${index + 1}. ${buildEmoji} **${username}**`;
+          // Create display with both weapon emojis and class name
+          const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji} ` : primaryEmoji ? `${primaryEmoji} ` : '';
+          const classDisplay = className ? ` (${className})` : '';
+          return `${idx + 1}. ${weaponDisplay}**${name}**${classDisplay}`;
         }).join('\n');
       };
       
@@ -451,8 +473,9 @@ module.exports = {
           'dagger': '<:Dagger:1352127620761784321>',
           'spear': '<:Spear:1352127656748908636>',
           'wand': '<:Wand:1352127712180830249>',
-          'sword': '<:SwordandShield:1352127689183592459>',
+          'sword and shield': '<:SwordandShield:1352127689183592459>',
           'swordandshield': '<:SwordandShield:1352127689183592459>',
+          'sword': '<:SwordandShield:1352127689183592459>',
           'crossbow': '<:Crossbow:1352127594597978112>',
           'greatsword': '<:Greatsword:1352127640227549265>',
           'staff': '<:Staff:1352127671831887923>',
