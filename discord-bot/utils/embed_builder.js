@@ -422,37 +422,44 @@ module.exports = {
           let secondaryEmoji = '';
           let className = '';
           
-          // Get weapon emojis and class name from weapon_spec
-          if (p.weapon_spec) {
-            const weapons = p.weapon_spec.split('|');
-            if (weapons.length >= 2) {
-              primaryEmoji = getWeaponEmoji(weapons[0]);
-              secondaryEmoji = getWeaponEmoji(weapons[1]);
-              className = WEAPON_SPECS[p.weapon_spec] || '';
+          try {
+            // Get the user's builds
+            let userBuilds = [];
+            if (p.User?.builds) {
+              userBuilds = typeof p.User.builds === 'string' 
+                ? JSON.parse(p.User.builds) 
+                : p.User.builds;
+            } else if (p.builds) {
+              userBuilds = typeof p.builds === 'string' 
+                ? JSON.parse(p.builds) 
+                : p.builds;
             }
-          }
-          // If no weapon_spec in participant data, try to parse from builds
-          else {
-            try {
-              let builds = [];
+            
+            if (Array.isArray(userBuilds) && userBuilds.length > 0) {
+              // Find a build that matches the role
+              const role = p.role;
+              let matchingBuild = null;
               
-              // Try to get builds from various possible sources
-              if (p.builds) {
-                builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
-              } else if (p.User?.builds) {
-                builds = typeof p.User.builds === 'string' ? JSON.parse(p.User.builds) : p.User.builds;
+              // First try to find a build that specifically matches this role
+              if (role) {
+                matchingBuild = userBuilds.find(b => 
+                  b.spec && b.spec.toUpperCase() === role.toUpperCase()
+                );
               }
               
-              if (Array.isArray(builds) && builds.length > 0) {
-                // Use the first build by default
-                const build = builds[0];
-                if (build.primary) primaryEmoji = getWeaponEmoji(build.primary);
-                if (build.secondary) secondaryEmoji = getWeaponEmoji(build.secondary);
-                if (build.weapon_spec) className = build.weapon_spec;
+              // If no role-specific build, use the first one
+              if (!matchingBuild && userBuilds.length > 0) {
+                matchingBuild = userBuilds[0];
               }
-            } catch (e) {
-              console.error(`Error processing builds for player ${name}:`, e);
+              
+              if (matchingBuild) {
+                primaryEmoji = getWeaponEmoji(matchingBuild.primary);
+                secondaryEmoji = getWeaponEmoji(matchingBuild.secondary);
+                className = matchingBuild.weapon_spec;
+              }
             }
+          } catch (e) {
+            console.error(`Error processing builds for player ${name}:`, e);
           }
           
           // Create display with both weapon emojis and class name

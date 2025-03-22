@@ -4636,7 +4636,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
   try {
     // Verify the build has the required fields
     if (!build || !build.primary || !build.secondary || !build.weapon_spec) {
-      const method = isUpdate ? 'update' : 'reply';
+      const method = isUpdate ? 'update' : 'editReply';
       await interaction[method]({
         content: 'Invalid build data. Please ensure your build has primary and secondary weapons and a class specified.',
         components: []
@@ -4649,16 +4649,6 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
       'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
       [eventId, userId]
     );
-    
-    // Determine weapon_spec to use (the format the database expects)
-    const weaponCombo = `${build.primary}|${build.secondary}`;
-    const reverseWeaponCombo = `${build.secondary}|${build.primary}`;
-    
-    // Check which weapon combo matches the weapon_spec in WEAPON_SPECS
-    let dbWeaponSpec = weaponCombo;
-    if (WEAPON_SPECS[reverseWeaponCombo] === build.weapon_spec) {
-      dbWeaponSpec = reverseWeaponCombo;
-    }
     
     // Check role capacity
     const roleCountsResult = await pool.query(
@@ -4688,7 +4678,7 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     
     // Skip the capacity check if the user is already signed up (just updating)
     if (!existingSignup.rows?.length && currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
-      const method = isUpdate ? 'update' : 'reply';
+      const method = isUpdate ? 'update' : 'editReply';
       await interaction[method]({
         content: `Sorry, the ${role} spots are full for this event.`,
         components: []
@@ -4697,10 +4687,10 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     }
     
     if (existingSignup.rows?.length > 0) {
-      // Update existing signup
+      // Update existing signup - WITHOUT weapon_spec column
       await pool.query(
-        'UPDATE event_participants SET role = $1, weapon_spec = $2 WHERE event_id = $3 AND user_id = $4',
-        [role, dbWeaponSpec, eventId, userId]
+        'UPDATE event_participants SET role = $1 WHERE event_id = $2 AND user_id = $3',
+        [role, eventId, userId]
       );
       
       const method = isUpdate ? 'update' : 'editReply';
@@ -4709,13 +4699,13 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
         components: []
       });
     } else {
-      // Create new signup
+      // Create new signup - WITHOUT weapon_spec column
       await pool.query(
         `INSERT INTO event_participants 
-          (id, guild_id, event_id, user_id, role, weapon_spec, created_at, updated_at)
+          (id, guild_id, event_id, user_id, role, created_at, updated_at)
         VALUES
-          (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
-        [appGuildId, eventId, userId, role, dbWeaponSpec]
+          (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+        [appGuildId, eventId, userId, role]
       );
       
       const method = isUpdate ? 'update' : 'editReply';
