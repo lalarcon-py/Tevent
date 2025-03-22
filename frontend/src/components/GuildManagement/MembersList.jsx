@@ -1056,15 +1056,19 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
       const memberToUpdate = {
         ...updatedMember,
-        guildId, // Add guild ID to request body
-        weapon_spec: weaponSpec,
+        guildId,
+        weapon_spec: weaponSpec, // This might be needed for backward compatibility
         combat_power: updatedMember.combat_power,
-        builds: updatedMember.builds.map(build => ({
-          primary: build.primary,
-          secondary: build.secondary,
-          spec: build.spec,
-          weapon_spec: weaponSpec
-        }))
+        builds: updatedMember.builds.map(build => {
+          // Calculate weapon_spec for EACH build
+          const buildWeaponSpec = getWeaponSpec(build.primary, build.secondary);
+          return {
+            primary: build.primary,
+            secondary: build.secondary,
+            spec: build.spec,
+            weapon_spec: buildWeaponSpec
+          };
+        })
       };
   
       console.log('Sending update data:', JSON.stringify(memberToUpdate, null, 2));
