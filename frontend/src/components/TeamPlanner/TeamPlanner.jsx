@@ -640,387 +640,361 @@ const TeamPlanner = () => {
     setIsAnnouncingTeams(true); // Reuse the loading state
     
     try {
-      // Create an array to store image data
-      const teamImages = [];
+      // Create a single container for all teams
+      const teamsGridRef = document.createElement('div');
+      teamsGridRef.style.position = 'absolute';
+      teamsGridRef.style.left = '-9999px';
+      teamsGridRef.style.width = '1200px'; // Fixed width for the grid
+      document.body.appendChild(teamsGridRef);
       
-      // For each team, create a temporary clone without edit controls
-      for (const team of teams) {
-        // Create a container reference for the team
-        const teamRef = document.createElement('div');
-        teamRef.style.position = 'absolute';
-        teamRef.style.left = '-9999px';
-        document.body.appendChild(teamRef);
-        
-        // Render the team without edit controls
-        ReactDOM.render(
-          <Box sx={{ 
-            p: 2,
-            width: '500px', // Fixed width for consistency
-            bgcolor: '#1e1e1e',
-            borderRadius: 2,
-            overflow: 'hidden',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-          }}>
-            {/* Team header */}
-            <Box sx={{ 
-              p: 2,
-              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  color: 'white',
-                  fontWeight: 600
-                }}
-              >
-                {team.name}
-              </Typography>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                {/* Role distribution indicators */}
-                <Box sx={{ display: 'flex' }}>
-                  <Tooltip title={`${team.members.filter(m => m.role?.toUpperCase() === 'TANK').length} Tanks`}>
-                    <Box sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      px: 1,
-                      height: 28,
-                      borderRadius: '14px',
-                      mr: 0.5,
-                      backgroundColor: 'rgba(102, 179, 255, 0.2)',
-                      border: '1px solid rgba(102, 179, 255, 0.3)'
-                    }}>
-                      <ShieldIcon sx={{ color: '#66b3ff', fontSize: 16, mr: 0.5 }} />
-                      <Typography sx={{ color: '#66b3ff', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {team.members.filter(m => m.role?.toUpperCase() === 'TANK').length}
-                      </Typography>
-                    </Box>
-                  </Tooltip>
-                  
-                  <Tooltip title={`${team.members.filter(m => m.role?.toUpperCase() === 'HEALER').length} Healers`}>
-                    <Box sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      px: 1,
-                      height: 28,
-                      borderRadius: '14px',
-                      mr: 0.5,
-                      backgroundColor: 'rgba(102, 255, 102, 0.2)',
-                      border: '1px solid rgba(102, 255, 102, 0.3)'
-                    }}>
-                      <LocalHospitalIcon sx={{ color: '#66ff66', fontSize: 16, mr: 0.5 }} />
-                      <Typography sx={{ color: '#66ff66', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {team.members.filter(m => m.role?.toUpperCase() === 'HEALER').length}
-                      </Typography>
-                    </Box>
-                  </Tooltip>
-                  
-                  <Tooltip title={`${team.members.filter(m => m.role?.toUpperCase() === 'DPS').length} DPS`}>
-                    <Box sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      px: 1,
-                      height: 28,
-                      borderRadius: '14px',
-                      backgroundColor: 'rgba(255, 102, 102, 0.2)',
-                      border: '1px solid rgba(255, 102, 102, 0.3)'
-                    }}>
-                      <FlashOnIcon sx={{ color: '#ff6666', fontSize: 16, mr: 0.5 }} />
-                      <Typography sx={{ color: '#ff6666', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {team.members.filter(m => m.role?.toUpperCase() === 'DPS').length}
-                      </Typography>
-                    </Box>
-                  </Tooltip>
-                </Box>
-              </Box>
-            </Box>
-            
-            {/* Team members */}
-            <Box sx={{ p: 2 }}>
-              {team.members?.map(member => {
-                // Get role styling for this member
-                const roleStyles = getRoleStyles(member.role);
-                
-                // Get build info and weapon spec
-                let activeBuild = null;
-                
-                // First try to use selected_build
-                if (member.selected_build) {
-                  activeBuild = member.selected_build;
-                } 
-                // If no selected_build, use builds array
-                else {
-                  let builds = [];
-                  
-                  if (member.User?.builds && Array.isArray(member.User.builds)) {
-                    builds = member.User.builds;
-                  } else if (member.builds && Array.isArray(member.builds)) {
-                    builds = member.builds;
-                  } else if (member.User?.builds && typeof member.User.builds === 'string') {
-                    try {
-                      builds = JSON.parse(member.User.builds);
-                    } catch (e) {
-                      builds = [];
-                    }
-                  } else if (member.builds && typeof member.builds === 'string') {
-                    try {
-                      builds = JSON.parse(member.builds);
-                    } catch (e) {
-                      builds = [];
-                    }
-                  }
-                  
-                  // Try to find a build matching the role
-                  if (member.role && builds.length > 0) {
-                    const roleMapping = {
-                      'TANK': 'Tank',
-                      'HEALER': 'Healer',
-                      'DPS': 'DPS'
-                    };
-                    
-                    const normalizedRole = roleMapping[member.role.toUpperCase()] || member.role;
-                    
-                    activeBuild = builds.find(b => 
-                      b.spec && b.spec.toUpperCase() === normalizedRole.toUpperCase()
-                    ) || builds[0];
-                  }
-                }
-                
-                // Get weapon information
-                const primaryWeapon = activeBuild?.primary || '';
-                const secondaryWeapon = activeBuild?.secondary || '';
-                
-                // Calculate weapon spec
-                const memberWeaponSpec = getWeaponSpec(primaryWeapon, secondaryWeapon);
-                
-                return (
-                  <Box 
-                    key={member.id || member.user_id || (member.User?.id)}
-                    sx={{
-                      position: 'relative',
-                      padding: '10px 12px',
-                      mb: 1.5,
-                      width: '100%',
-                      backgroundColor: 'rgba(24, 24, 27, 0.7)',
-                      backgroundImage: roleStyles.bgGradient,
-                      color: 'white',
-                      borderRadius: '8px',
-                      border: '1px solid',
-                      borderColor: roleStyles.borderColor || 'rgba(255, 255, 255, 0.1)',
-                      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.15)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {/* Role indicator */}
-                    <Box 
+      // Render all teams in a grid layout
+      ReactDOM.render(
+        <Box sx={{ 
+          p: 3,
+          bgcolor: '#121212',
+          borderRadius: 2,
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+        }}>
+          <Grid container spacing={2}>
+            {teams.map(team => (
+              <Grid item xs={4} key={team.id}>
+                <Box sx={{ 
+                  bgcolor: '#1e1e1e',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  height: '100%',
+                }}>
+                  {/* Team header */}
+                  <Box sx={{ 
+                    p: 1.5,
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <Typography 
+                      variant="h6" 
                       sx={{ 
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: '4px',
-                        backgroundColor: roleStyles.color,
-                        borderRadius: '8px 0 0 8px'
-                      }} 
-                    />
+                        color: 'white',
+                        fontWeight: 600,
+                        fontSize: '1rem'
+                      }}
+                    >
+                      {team.name}
+                    </Typography>
                     
-                    {/* Weapon icons */}
-                    <Box sx={{ 
-                      mr: 2,
-                      display: 'flex',
-                      position: 'relative'
-                    }}>
-                      {primaryWeapon && (
-                        <Box
-                          sx={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            zIndex: 2
-                          }}
-                        >
-                          <img 
-                            src={`/weapons/${primaryWeapon} Art.png`}
-                            alt={primaryWeapon}
-                            style={{ 
-                              width: 24, 
-                              height: 24, 
-                              objectFit: 'contain',
-                              filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))'
-                            }}
-                            onError={(e) => { 
-                              console.error(`Failed to load image: ${primaryWeapon}`);
-                              e.target.style.display = 'none'; 
-                            }}
-                          />
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {/* Role counters */}
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        ml: 'auto',
+                        mr: 1
+                      }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center',
+                          bgcolor: 'rgba(102, 179, 255, 0.2)',
+                          borderRadius: '16px',
+                          px: 1, 
+                          py: 0.2,
+                          mr: 0.5
+                        }}>
+                          <ShieldIcon sx={{ color: '#66b3ff', fontSize: 16 }} />
+                          <Typography sx={{ color: 'white', fontSize: '0.75rem', ml: 0.5 }}>
+                            {team.members.filter(m => m.role?.toUpperCase() === 'TANK').length}
+                          </Typography>
                         </Box>
-                      )}
-                      {secondaryWeapon && (
-                        <Box
-                          sx={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            ml: '-10px',
-                            zIndex: 1
-                          }}
-                        >
-                          <img 
-                            src={`/weapons/${secondaryWeapon} Art.png`}
-                            alt={secondaryWeapon}
-                            style={{ 
-                              width: 24, 
-                              height: 24, 
-                              objectFit: 'contain',
-                              filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))'
-                            }}
-                            onError={(e) => { 
-                              console.error(`Failed to load image: ${secondaryWeapon}`);
-                              e.target.style.display = 'none'; 
-                            }}
-                          />
-                        </Box>
-                      )}
-                    </Box>
-                    
-                    {/* Text content */}
-                    <Box sx={{ 
-                      flexGrow: 1,
-                      overflow: 'hidden'
-                    }}>
-                      {/* Character name */}
-                      <Typography 
-                        variant="body2"
-                        sx={{
-                          fontSize: '0.95rem',
-                          fontWeight: 500,
-                          color: 'white',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}
-                      >
-                        {member.User?.username || member.username}
-                      </Typography>
-                      
-                      {/* Role and spec text */}
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Typography 
-                          variant="caption"
-                          sx={{
-                            color: roleStyles.color,
-                            fontSize: '0.8rem',
-                            fontWeight: 500
-                          }}
-                        >
-                          {member.role}
-                        </Typography>
                         
-                        {memberWeaponSpec && memberWeaponSpec !== 'Unknown' && (
-                          <>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center',
+                          bgcolor: 'rgba(102, 255, 102, 0.2)',
+                          borderRadius: '16px',
+                          px: 1, 
+                          py: 0.2,
+                          mr: 0.5
+                        }}>
+                          <LocalHospitalIcon sx={{ color: '#66ff66', fontSize: 16 }} />
+                          <Typography sx={{ color: 'white', fontSize: '0.75rem', ml: 0.5 }}>
+                            {team.members.filter(m => m.role?.toUpperCase() === 'HEALER').length}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center',
+                          bgcolor: 'rgba(255, 102, 102, 0.2)',
+                          borderRadius: '16px',
+                          px: 1, 
+                          py: 0.2
+                        }}>
+                          <FlashOnIcon sx={{ color: '#ff6666', fontSize: 16 }} />
+                          <Typography sx={{ color: 'white', fontSize: '0.75rem', ml: 0.5 }}>
+                            {team.members.filter(m => m.role?.toUpperCase() === 'DPS').length}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Box>
+                  
+                  {/* Team members */}
+                  <Box sx={{ p: 1.5, minHeight: 150 }}>
+                    {team.members.length > 0 ? (
+                      team.members.map(member => {
+                        // Get role styling for this member
+                        const roleStyles = getRoleStyles(member.role);
+                        
+                        // Get build info and weapon spec
+                        let activeBuild = null;
+                        
+                        // First try to use selected_build
+                        if (member.selected_build) {
+                          activeBuild = member.selected_build;
+                        } 
+                        // If no selected_build, use builds array
+                        else {
+                          let builds = [];
+                          
+                          if (member.User?.builds && Array.isArray(member.User.builds)) {
+                            builds = member.User.builds;
+                          } else if (member.builds && Array.isArray(member.builds)) {
+                            builds = member.builds;
+                          } else if (member.User?.builds && typeof member.User.builds === 'string') {
+                            try {
+                              builds = JSON.parse(member.User.builds);
+                            } catch (e) {
+                              builds = [];
+                            }
+                          } else if (member.builds && typeof member.builds === 'string') {
+                            try {
+                              builds = JSON.parse(member.builds);
+                            } catch (e) {
+                              builds = [];
+                            }
+                          }
+                          
+                          // Try to find a build matching the role
+                          if (member.role && builds.length > 0) {
+                            const roleMapping = {
+                              'TANK': 'Tank',
+                              'HEALER': 'Healer',
+                              'DPS': 'DPS'
+                            };
+                            
+                            const normalizedRole = roleMapping[member.role.toUpperCase()] || member.role;
+                            
+                            activeBuild = builds.find(b => 
+                              b.spec && b.spec.toUpperCase() === normalizedRole.toUpperCase()
+                            ) || builds[0];
+                          }
+                        }
+                        
+                        // Get weapon information
+                        const primaryWeapon = activeBuild?.primary || '';
+                        const secondaryWeapon = activeBuild?.secondary || '';
+                        
+                        // Calculate weapon spec
+                        const memberWeaponSpec = getWeaponSpec(primaryWeapon, secondaryWeapon);
+                        
+                        return (
+                          <Box 
+                            key={member.id || member.user_id || (member.User?.id)}
+                            sx={{
+                              position: 'relative',
+                              padding: '8px 10px',
+                              mb: 1,
+                              width: '100%',
+                              backgroundColor: 'rgba(24, 24, 27, 0.7)',
+                              backgroundImage: roleStyles.bgGradient,
+                              color: 'white',
+                              borderRadius: '6px',
+                              border: '1px solid',
+                              borderColor: roleStyles.borderColor || 'rgba(255, 255, 255, 0.1)',
+                              boxShadow: '0 2px 5px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            {/* Role indicator */}
                             <Box 
                               sx={{ 
-                                width: '4px', 
-                                height: '4px', 
-                                borderRadius: '50%', 
-                                backgroundColor: 'rgba(255,255,255,0.5)', 
-                                mx: 0.5 
+                                position: 'absolute',
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: '3px',
+                                backgroundColor: roleStyles.color,
+                                borderRadius: '6px 0 0 6px'
                               }} 
                             />
-                            <Typography 
-                              variant="caption"
-                              sx={{
-                                color: 'rgba(255,255,255,0.7)',
-                                fontSize: '0.8rem'
-                              }}
-                            >
-                              {memberWeaponSpec}
-                            </Typography>
-                          </>
-                        )}
-                      </Box>
-                    </Box>
-                    
-                    {/* Combat power if available */}
-                    {member.combat_power && (
-                      <Box sx={{ 
-                        ml: 1.5,
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: '50px',
-                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                        border: '1px solid rgba(255, 215, 0, 0.3)'
+                            
+                            {/* Weapon icons */}
+                            <Box sx={{ 
+                              mr: 1.5,
+                              display: 'flex',
+                              position: 'relative'
+                            }}>
+                              {primaryWeapon && (
+                                <Box
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    zIndex: 2
+                                  }}
+                                >
+                                  <img 
+                                    src={`/weapons/${primaryWeapon} Art.png`}
+                                    alt={primaryWeapon}
+                                    style={{ 
+                                      width: 18, 
+                                      height: 18, 
+                                      objectFit: 'contain',
+                                      filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))'
+                                    }}
+                                    onError={(e) => { 
+                                      e.target.style.display = 'none'; 
+                                    }}
+                                  />
+                                </Box>
+                              )}
+                              {secondaryWeapon && (
+                                <Box
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    ml: '-8px',
+                                    zIndex: 1
+                                  }}
+                                >
+                                  <img 
+                                    src={`/weapons/${secondaryWeapon} Art.png`}
+                                    alt={secondaryWeapon}
+                                    style={{ 
+                                      width: 18, 
+                                      height: 18, 
+                                      objectFit: 'contain',
+                                      filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))'
+                                    }}
+                                    onError={(e) => { 
+                                      e.target.style.display = 'none'; 
+                                    }}
+                                  />
+                                </Box>
+                              )}
+                            </Box>
+                            
+                            {/* Text content */}
+                            <Box sx={{ 
+                              flexGrow: 1,
+                              overflow: 'hidden'
+                            }}>
+                              {/* Character name */}
+                              <Typography 
+                                variant="body2"
+                                sx={{
+                                  fontSize: '0.85rem',
+                                  fontWeight: 500,
+                                  color: 'white',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}
+                              >
+                                {member.User?.username || member.username}
+                              </Typography>
+                              
+                              {/* Role and spec text */}
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Typography 
+                                  variant="caption"
+                                  sx={{
+                                    color: roleStyles.color,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 500
+                                  }}
+                                >
+                                  {member.role}
+                                </Typography>
+                                
+                                {memberWeaponSpec && memberWeaponSpec !== 'Unknown' && (
+                                  <>
+                                    <Box 
+                                      sx={{ 
+                                        width: '3px', 
+                                        height: '3px', 
+                                        borderRadius: '50%', 
+                                        backgroundColor: 'rgba(255,255,255,0.5)', 
+                                        mx: 0.5 
+                                      }} 
+                                    />
+                                    <Typography 
+                                      variant="caption"
+                                      sx={{
+                                        color: 'rgba(255,255,255,0.7)',
+                                        fontSize: '0.7rem'
+                                      }}
+                                    >
+                                      {memberWeaponSpec}
+                                    </Typography>
+                                  </>
+                                )}
+                              </Box>
+                            </Box>
+                          </Box>
+                        );
+                      })
+                    ) : (
+                      <Typography sx={{ 
+                        color: 'rgba(255, 255, 255, 0.4)',
+                        fontStyle: 'italic',
+                        textAlign: 'center',
+                        mt: 4
                       }}>
-                        <Typography sx={{ 
-                          color: '#ffd700',
-                          fontSize: '0.75rem',
-                          fontWeight: 600
-                        }}>
-                          CP {member.combat_power}
-                        </Typography>
-                      </Box>
+                        Drag members here to add to the team
+                      </Typography>
                     )}
                   </Box>
-                );
-              })}
-            </Box>
-          </Box>,
-          teamRef
-        );
-        
-        // Use html2canvas to capture the rendered team with reduced quality
-        const canvas = await html2canvas(teamRef.firstChild, {
-          backgroundColor: '#1e1e1e',
-          scale: 1, // Changed from 2 to 1 to reduce size
-          logging: false,
-          useCORS: true
-        });
-        
-        // Resize large canvases if necessary
-        const maxWidth = 800;
-        let finalCanvas = canvas;
-        
-        if (canvas.width > maxWidth) {
-          const scaleFactor = maxWidth / canvas.width;
-          finalCanvas = document.createElement('canvas');
-          finalCanvas.width = canvas.width * scaleFactor;
-          finalCanvas.height = canvas.height * scaleFactor;
-          
-          const ctx = finalCanvas.getContext('2d');
-          ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
-        }
-        
-        // Convert to image data with JPEG format and reduced quality
-        const imageData = finalCanvas.toDataURL('image/jpeg', 0.7); // Changed from PNG to JPEG with 70% quality
-        
-        teamImages.push({
-          name: team.name,
-          image: imageData
-        });
-        
-        // Clean up
-        document.body.removeChild(teamRef);
-      }
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>,
+        teamsGridRef
+      );
       
-      // Send the images to the server
+      // Use html2canvas to capture the entire grid
+      const canvas = await html2canvas(teamsGridRef.firstChild, {
+        backgroundColor: '#121212',
+        scale: 1, // Lower scale for reduced size
+        logging: false,
+        useCORS: true
+      });
+      
+      // Convert to image data with JPEG format and medium quality
+      const imageData = canvas.toDataURL('image/jpeg', 0.75);
+      
+      // Clean up
+      document.body.removeChild(teamsGridRef);
+      
+      // Send the single image to the server
       const response = await fetch(`${API_URL}/api/discord-bot/announce-teams-with-images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1037,7 +1011,7 @@ const TeamPlanner = () => {
               role: member.role
             }))
           })),
-          teamImages
+          teamImages: [{ name: 'All Teams', image: imageData }]
         })
       });
       
@@ -1047,7 +1021,7 @@ const TeamPlanner = () => {
       
       setAnnounceSuccess({
         success: true,
-        message: "Teams announced with screenshots to Discord!"
+        message: "Teams announced with screenshot to Discord!"
       });
     } catch (error) {
       console.error('Error capturing or sending team screenshots:', error);
@@ -2166,7 +2140,7 @@ const TeamPlanner = () => {
                     '&.Mui-disabled': { bgcolor: 'rgba(255, 152, 0, 0.3)' }
                   }}
                 >
-                  {isAnnouncingTeams ? 'Processing...' : 'Screenshot Teams'}
+                  {isAnnouncingTeams ? 'Processing...' : 'Announce Teams'}
                 </Button>
                 
                 {/* Announce Teams button */}
