@@ -168,8 +168,6 @@ module.exports = {
         return '🔮';
       }
       
-      // Format players with weapon information
-      // Updated formatPlayers function to display both weapon emojis
       const formatPlayers = (players) => {
         if (players.length === 0) return '—';
         
@@ -179,82 +177,36 @@ module.exports = {
           let secondaryEmoji = '';
           let className = '';
           
-          // Check for weapon_spec from our class system
-          if (p.weapon_spec) {
-            className = WEAPON_SPECS[p.weapon_spec] || '';
-            const weapons = p.weapon_spec.split('|');
-            if (weapons.length >= 2) {
-              primaryEmoji = getWeaponEmoji(weapons[0]);
-              secondaryEmoji = getWeaponEmoji(weapons[1]);
-            } else if (weapons.length === 1) {
-              primaryEmoji = getWeaponEmoji(weapons[0]);
+          try {
+            // Get the player's build (assuming only 1)
+            let build = null;
+            
+            // Try to get build from various properties
+            if (p.builds) {
+              const builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+              if (Array.isArray(builds) && builds.length > 0) {
+                build = builds[0];
+              }
+            } else if (p.User?.builds) {
+              const builds = typeof p.User.builds === 'string' ? JSON.parse(p.User.builds) : p.User.builds;
+              if (Array.isArray(builds) && builds.length > 0) {
+                build = builds[0];
+              }
             }
-          } 
-          // If no weapon_spec, try to get weapons from builds
-          else {
-            try {
-              // First check if there's a selected_build
-              if (p.selected_build) {
-                let selectedBuild;
-                if (typeof p.selected_build === 'string') {
-                  try {
-                    selectedBuild = JSON.parse(p.selected_build);
-                  } catch (e) {
-                    selectedBuild = null;
-                  }
-                } else {
-                  selectedBuild = p.selected_build;
-                }
-                
-                if (selectedBuild) {
-                  if (selectedBuild.primary) primaryEmoji = getWeaponEmoji(selectedBuild.primary);
-                  if (selectedBuild.secondary) secondaryEmoji = getWeaponEmoji(selectedBuild.secondary);
-                }
-              }
-              // Try direct builds property
-              else if (p.builds) {
-                let builds;
-                if (typeof p.builds === 'string') {
-                  try {
-                    builds = JSON.parse(p.builds);
-                  } catch (e) {
-                    builds = [];
-                  }
-                } else if (Array.isArray(p.builds)) {
-                  builds = p.builds;
-                }
-                
-                if (Array.isArray(builds) && builds.length > 0) {
-                  const primaryBuild = builds[0];
-                  if (primaryBuild.primary) primaryEmoji = getWeaponEmoji(primaryBuild.primary);
-                  if (primaryBuild.secondary) secondaryEmoji = getWeaponEmoji(primaryBuild.secondary);
-                }
-              }
-              // If no selected build, look for builds in User
-              else if (p.User?.builds) {
-                let builds;
-                if (typeof p.User.builds === 'string') {
-                  try {
-                    builds = JSON.parse(p.User.builds);
-                  } catch (e) {
-                    builds = [];
-                  }
-                } else {
-                  builds = p.User.builds;
-                }
-                
-                if (Array.isArray(builds) && builds.length > 0) {
-                  const primaryBuild = builds[0];
-                  if (primaryBuild.primary) primaryEmoji = getWeaponEmoji(primaryBuild.primary);
-                  if (primaryBuild.secondary) secondaryEmoji = getWeaponEmoji(primaryBuild.secondary);
-                }
-              }
-            } catch (e) {
-              console.error(`Error processing builds for player ${name}:`, e);
+            
+            // Extract display information from the build
+            if (build) {
+              primaryEmoji = getWeaponEmoji(build.primary || '');
+              secondaryEmoji = getWeaponEmoji(build.secondary || '');
+              className = build.weapon_spec || '';
+              
+              console.log(`[DEBUG] Player ${name} weapons: ${build.primary} + ${build.secondary}, class: ${className}`);
             }
+          } catch (e) {
+            console.error(`Error processing builds for player ${name}:`, e);
           }
           
-          // Create display with both weapon emojis
+          // Create display with weapon emojis and class name
           const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
           const classDisplay = className ? ` (${className})` : '';
           return `${idx + 1}. ${weaponDisplay} **${name}**${classDisplay}`;

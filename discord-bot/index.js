@@ -4632,17 +4632,73 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
   }
 }
 
-async function handleEventSignup(interaction, build, userId, eventId, role, eventDetails, appGuildId, isUpdate = false) {
+async function handleEventSignupCommand(interaction, appGuildId) {
+  await interaction.deferReply({ ephemeral: true });
+  
   try {
-    // Verify the build has the required fields
-    if (!build || !build.primary || !build.secondary || !build.weapon_spec) {
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
-        content: 'Invalid build data. Please ensure your build has primary and secondary weapons and a class specified.',
-        components: []
+    const eventId = interaction.options.getString('event_id');
+    const role = interaction.options.getString('role');
+    const discordUserId = interaction.user.id;
+    
+    // Get user data including builds
+    const userResult = await pool.query(
+      'SELECT id, username, builds FROM users WHERE discord_id = $1',
+      [discordUserId]
+    );
+    
+    if (!userResult.rows || userResult.rows.length === 0) {
+      return await interaction.editReply({
+        content: 'You need to register on the website first before signing up for events.',
+        ephemeral: true
       });
-      return;
     }
+    
+    const userId = userResult.rows[0].id;
+    const username = userResult.rows[0].username;
+    
+    // Get user's builds
+    let userBuilds = [];
+    try {
+      userBuilds = typeof userResult.rows[0].builds === 'string' 
+        ? JSON.parse(userResult.rows[0].builds) 
+        : userResult.rows[0].builds;
+    } catch (e) {
+      console.error(`Error parsing builds for user ${username}:`, e);
+    }
+    
+    // Validate role against builds
+    if (!Array.isArray(userBuilds) || userBuilds.length === 0) {
+      return await interaction.editReply({
+        content: 'You have no builds configured. Please set up your builds on the website first.',
+        ephemeral: true
+      });
+    }
+    
+    // Use the first build (simplified approach)
+    const build = userBuilds[0];
+    
+    // Check if the build spec matches the requested role
+    if (build.spec && build.spec.toUpperCase() !== role.toUpperCase()) {
+      return await interaction.editReply({
+        content: `You cannot sign up as ${role} because your build is for ${build.spec}. Please update your build on the website first.`,
+        ephemeral: true
+      });
+    }
+    
+    // Get event details
+    const eventResult = await pool.query(
+      'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
+      [eventId, appGuildId]
+    );
+    
+    if (!eventResult.rows || eventResult.rows.length === 0) {
+      return await interaction.editReply({
+        content: 'Event not found.',
+        ephemeral: true
+      });
+    }
+    
+    const eventDetails = eventResult.rows[0];
     
     // Check if user is already signed up
     const existingSignup = await pool.query(
@@ -4678,28 +4734,25 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
     
     // Skip the capacity check if the user is already signed up (just updating)
     if (!existingSignup.rows?.length && currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
+      return await interaction.editReply({
         content: `Sorry, the ${role} spots are full for this event.`,
-        components: []
+        ephemeral: true
       });
-      return;
     }
     
     if (existingSignup.rows?.length > 0) {
-      // Update existing signup - REMOVE weapon_spec column
+      // Update existing signup
       await pool.query(
         'UPDATE event_participants SET role = $1 WHERE event_id = $2 AND user_id = $3',
         [role, eventId, userId]
       );
       
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
+      await interaction.editReply({
         content: `Your role for "${eventDetails.title}" has been updated to ${role} (${build.weapon_spec}).`,
-        components: []
+        ephemeral: true
       });
     } else {
-      // Create new signup - REMOVE weapon_spec column
+      // Create new signup
       await pool.query(
         `INSERT INTO event_participants 
           (id, guild_id, event_id, user_id, role, created_at, updated_at)
@@ -4708,21 +4761,42 @@ async function handleEventSignup(interaction, build, userId, eventId, role, even
         [appGuildId, eventId, userId, role]
       );
       
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
+      await interaction.editReply({
         content: `You have been signed up for "${eventDetails.title}" as ${role} (${build.weapon_spec}).`,
-        components: []
+        ephemeral: true
       });
     }
     
     // Update event display
-    await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+    try {
+      // Fetch the current event message
+      const eventMessageResult = await pool.query(
+        `SELECT channel_id, message_id FROM discord_event_messages WHERE event_id = $1`,
+        [eventId]
+      );
+      
+      if (eventMessageResult.rows.length > 0) {
+        const { channel_id, message_id } = eventMessageResult.rows[0];
+        
+        try {
+          const channel = await interaction.client.channels.fetch(channel_id);
+          const message = await channel.messages.fetch(message_id);
+          
+          // Update the event display with fresh data
+          await updateEventDisplay(message, eventId, eventDetails, appGuildId);
+        } catch (messageError) {
+          console.error(`[ERROR] Failed to update event message: ${messageError.message}`);
+        }
+      }
+    } catch (displayError) {
+      console.error(`[ERROR] Error updating event display: ${displayError.message}`);
+    }
+    
   } catch (error) {
-    console.error('Error in handleEventSignup:', error);
-    const method = isUpdate ? 'update' : 'editReply';
-    await interaction[method]({
+    console.error('Error in event signup command:', error);
+    await interaction.editReply({
       content: 'An error occurred while processing your signup. Please try again.',
-      components: []
+      ephemeral: true
     });
   }
 }
