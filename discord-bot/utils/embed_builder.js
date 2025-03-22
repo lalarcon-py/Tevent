@@ -418,13 +418,16 @@ module.exports = {
         
         return players.map((p, idx) => {
           const name = p.User?.username || p.username || 'Unknown';
-          const role = p.role; // The role this player signed up with
+          const role = p.role; // This is the critical part - the role from the event signup
+          
+          console.log(`[DEBUG] Processing player ${name} with role ${role}`);
+          
           let primaryEmoji = '';
           let secondaryEmoji = '';
           let className = '';
           
           try {
-            // Get builds from user data
+            // Get the user's builds
             let userBuilds = [];
             if (p.User?.builds) {
               userBuilds = typeof p.User.builds === 'string' 
@@ -436,31 +439,43 @@ module.exports = {
                 : p.builds;
             }
             
-            // First try to find a build that specifically matches this role
-            let matchingBuild = null;
-            if (role && Array.isArray(userBuilds)) {
-              matchingBuild = userBuilds.find(build => 
-                build.spec && build.spec.toUpperCase() === role.toUpperCase()
+            console.log(`[DEBUG] Player builds for ${name}:`, JSON.stringify(userBuilds));
+            
+            // Only proceed if we have a role and builds
+            if (role && Array.isArray(userBuilds) && userBuilds.length > 0) {
+              // EXPLICITLY match the role to a build (case-insensitive)
+              const roleUpperCase = role.toUpperCase();
+              const matchingBuild = userBuilds.find(build => 
+                build.spec && build.spec.toUpperCase() === roleUpperCase
               );
               
-              // If no matching build found, use the first one as fallback
-              if (!matchingBuild && userBuilds.length > 0) {
-                matchingBuild = userBuilds[0];
-              }
+              console.log(`[DEBUG] Matching build for ${role}:`, 
+                matchingBuild ? JSON.stringify(matchingBuild) : 'None found');
               
               if (matchingBuild) {
+                // Found a matching build - use its weapons
                 primaryEmoji = getWeaponEmoji(matchingBuild.primary);
                 secondaryEmoji = getWeaponEmoji(matchingBuild.secondary);
                 className = matchingBuild.weapon_spec;
+                
+                console.log(`[DEBUG] Using role-matched build weapons: ${matchingBuild.primary} + ${matchingBuild.secondary}`);
+              } else {
+                // Fallback to first build if no matching build found
+                primaryEmoji = getWeaponEmoji(userBuilds[0].primary);
+                secondaryEmoji = getWeaponEmoji(userBuilds[0].secondary);
+                className = userBuilds[0].weapon_spec;
+                
+                console.log(`[DEBUG] No matching build found, using first build weapons`);
               }
             }
           } catch (e) {
-            console.error(`Error processing builds for player ${name}:`, e);
+            console.error(`[ERROR] Error processing builds for player ${name}:`, e);
           }
           
-          // Create display with weapons and class
+          // Create display with both weapon emojis
           const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
           const classDisplay = className ? ` (${className})` : '';
+          
           return `${idx + 1}. ${weaponDisplay} **${name}**${classDisplay}`;
         }).join('\n');
       };
