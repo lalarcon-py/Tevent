@@ -74,9 +74,13 @@ module.exports = {
       const healers = participants.filter(p => p.role === 'HEALER');
       const dps = participants.filter(p => p.role === 'DPS');
       
+      console.log(`[DEBUG] Found ${tanks.length} tanks, ${healers.length} healers, ${dps.length} DPS`);
+      
       // Helper function to get emoji for weapon types
       function getWeaponEmoji(weaponType) {
         if (!weaponType) return '';
+        
+        console.log(`[WEAPON DEBUG] Getting emoji for weapon: "${weaponType}"`);
         
         // Convert to string and lowercase for consistent matching
         const type = String(weaponType).toLowerCase();
@@ -95,20 +99,23 @@ module.exports = {
         
         // Try direct match first
         if (emojiMap[type]) {
+          console.log(`[WEAPON DEBUG] Direct match found: ${emojiMap[type]}`);
           return emojiMap[type];
         }
         
         // If no direct match, try partial match
         for (const [key, emoji] of Object.entries(emojiMap)) {
           if (type.includes(key)) {
+            console.log(`[WEAPON DEBUG] Partial match found for "${key}": ${emoji}`);
             return emoji;
           }
         }
         
+        console.log(`[WEAPON DEBUG] No emoji found for weapon: "${weaponType}"`);
         return ''; // No matching emoji found
       }
       
-      // Format players with weapon information
+      // Format players with weapon information and detailed logging
       const formatPlayers = (players) => {
         if (players.length === 0) return '—';
         
@@ -116,48 +123,117 @@ module.exports = {
           const name = p.User?.username || p.username || 'Unknown';
           let buildEmoji = '';
           
+          // Add detailed logging
+          console.log(`[WEAPON DEBUG] Processing player: ${name}`);
+          console.log(`[WEAPON DEBUG] Player data structure:`, 
+            Object.keys(p).join(', '));
+          console.log(`[WEAPON DEBUG] Has User property: ${!!p.User}`);
+          console.log(`[WEAPON DEBUG] Has builds property: ${!!p.builds}`);
+          console.log(`[WEAPON DEBUG] Has selected_build property: ${!!p.selected_build}`);
+          
+          // Safely log User.builds if it exists
+          if (p.User?.builds) {
+            const buildsType = typeof p.User.builds;
+            console.log(`[WEAPON DEBUG] User.builds type: ${buildsType}`);
+            if (buildsType === 'string') {
+              console.log(`[WEAPON DEBUG] User.builds string length: ${p.User.builds.length}`);
+              console.log(`[WEAPON DEBUG] User.builds string preview: ${p.User.builds.substring(0, 100)}...`);
+            } else if (Array.isArray(p.User.builds)) {
+              console.log(`[WEAPON DEBUG] User.builds is array with ${p.User.builds.length} items`);
+              if (p.User.builds.length > 0) {
+                console.log(`[WEAPON DEBUG] First build:`, p.User.builds[0]);
+              }
+            }
+          }
+          
           // Process builds data from different possible formats
           try {
             // First check if there's a selected_build
             if (p.selected_build) {
               let selectedBuild;
               if (typeof p.selected_build === 'string') {
+                console.log(`[WEAPON DEBUG] selected_build is string: ${p.selected_build.substring(0, 100)}...`);
                 try {
                   selectedBuild = JSON.parse(p.selected_build);
+                  console.log(`[WEAPON DEBUG] Parsed selected_build:`, selectedBuild);
                 } catch (e) {
+                  console.log(`[WEAPON DEBUG] Error parsing selected_build:`, e.message);
                   selectedBuild = null;
                 }
               } else {
                 selectedBuild = p.selected_build;
+                console.log(`[WEAPON DEBUG] selected_build is object:`, selectedBuild);
               }
               
               if (selectedBuild && selectedBuild.primary) {
+                console.log(`[WEAPON DEBUG] Found primary weapon in selected_build: ${selectedBuild.primary}`);
                 buildEmoji = getWeaponEmoji(selectedBuild.primary);
+              }
+            }
+            // Try direct builds property
+            else if (p.builds) {
+              let builds;
+              if (typeof p.builds === 'string') {
+                console.log(`[WEAPON DEBUG] builds is string: ${p.builds.substring(0, 100)}...`);
+                try {
+                  builds = JSON.parse(p.builds);
+                  console.log(`[WEAPON DEBUG] Parsed builds:`, builds);
+                } catch (e) {
+                  console.log(`[WEAPON DEBUG] Error parsing builds:`, e.message);
+                  builds = [];
+                }
+              } else if (Array.isArray(p.builds)) {
+                builds = p.builds;
+                console.log(`[WEAPON DEBUG] builds is array with ${builds.length} items`);
+                if (builds.length > 0) {
+                  console.log(`[WEAPON DEBUG] First build:`, builds[0]);
+                }
+              }
+              
+              if (Array.isArray(builds) && builds.length > 0) {
+                const primaryBuild = builds[0];
+                const weaponType = primaryBuild.primary || primaryBuild.weaponType || primaryBuild.primary_weapon || '';
+                console.log(`[WEAPON DEBUG] Detected weapon type: ${weaponType}`);
+                buildEmoji = getWeaponEmoji(weaponType);
               }
             }
             // If no selected build, look for builds in User
             else if (p.User?.builds) {
               let builds;
               if (typeof p.User.builds === 'string') {
+                console.log(`[WEAPON DEBUG] User.builds is string, attempting to parse`);
                 try {
                   builds = JSON.parse(p.User.builds);
+                  console.log(`[WEAPON DEBUG] Successfully parsed User.builds, found ${builds.length} builds`);
                 } catch (e) {
+                  console.log(`[WEAPON DEBUG] Error parsing User.builds:`, e.message);
                   builds = [];
                 }
               } else {
                 builds = p.User.builds;
+                console.log(`[WEAPON DEBUG] User.builds is already an object`);
               }
               
               if (Array.isArray(builds) && builds.length > 0) {
                 const primaryBuild = builds[0];
-                buildEmoji = getWeaponEmoji(primaryBuild.primary || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
+                console.log(`[WEAPON DEBUG] Primary build properties:`, Object.keys(primaryBuild).join(', '));
+                
+                const weaponType = primaryBuild.primary || primaryBuild.weaponType || primaryBuild.primary_weapon || '';
+                console.log(`[WEAPON DEBUG] Detected weapon type: ${weaponType}`);
+                
+                buildEmoji = getWeaponEmoji(weaponType);
               }
+            } else {
+              console.log(`[WEAPON DEBUG] No build data found for player ${name}`);
             }
           } catch (e) {
-            console.error('Error processing builds for player:', e);
+            console.error(`[WEAPON DEBUG] Error processing builds for player ${name}:`, e.message, e.stack);
           }
           
-          return `${idx + 1}. ${buildEmoji} **${name}**`;
+          const result = `${idx + 1}. ${buildEmoji} **${name}**`;
+          console.log(`[WEAPON DEBUG] Final result for player: ${result}`);
+          
+          return result;
         }).join('\n');
       };
       
@@ -175,23 +251,6 @@ module.exports = {
         return absentees.map((a, idx) => {
           const username = typeof a === 'string' ? a : (a.username || a.User?.username || 'Unknown');
           return `${idx + 1}. ~~**${username}**~~`;
-        }).join('\n');
-      };
-      
-      // Get tentative members
-      let tentative = [];
-      if (Array.isArray(event.tentative)) {
-        tentative = event.tentative;
-      } else if (event.EventTentative && Array.isArray(event.EventTentative)) {
-        tentative = event.EventTentative;
-      }
-      
-      // Format tentative
-      const formatTentative = () => {
-        if (tentative.length === 0) return '—';
-        return tentative.map((t, idx) => {
-          const username = typeof t === 'string' ? t : (t.username || t.User?.username || 'Unknown');
-          return `${idx + 1}. **${username}**`;
         }).join('\n');
       };
       
@@ -237,8 +296,8 @@ module.exports = {
           inline: false
         },
         { 
-          name: `⏳ Tentative (${tentative.length || 0})`, 
-          value: formatTentative(), 
+          name: `⏳ Tentative (0)`, 
+          value: '—', 
           inline: false
         }
       );
