@@ -696,6 +696,12 @@ app.post('/webhook/new-item', async (req, res) => {
     
     const item = itemResult.rows[0];
     
+    // Check if item quantity is greater than 0
+    if (item.quantity <= 0) {
+      console.log(`Skipping notification for item ${itemId} as quantity is ${item.quantity}`);
+      return res.json({ success: true, message: 'Item quantity is 0, notification skipped' });
+    }
+    
     // Get Discord guild ID
     const mappingResult = await pool.query(
       'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
@@ -772,7 +778,7 @@ app.post('/webhook/new-item', async (req, res) => {
       embed.setThumbnail(item.icon);
     }
     
-    // Create buttons - ENSURE CONSISTENT NAME
+    // Create buttons
     const buttonsRow = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
@@ -792,10 +798,10 @@ app.post('/webhook/new-item', async (req, res) => {
           .setStyle(ButtonStyle.Secondary)
       );
     
-    // Send the message with buttons - USE THE SAME VARIABLE NAME
+    // Send the message with buttons
     const message = await channel.send({
       embeds: [embed],
-      components: [buttonsRow]  // Use buttonsRow consistently
+      components: [buttonsRow]
     });
     
     // Create tracking table if needed
@@ -5724,6 +5730,12 @@ function startItemPolling() {
         try {
           console.log(`Processing new item: ${item.name} (ID: ${item.id})`);
           
+          // Check if item quantity is greater than 0
+          if (item.quantity <= 0) {
+            console.log(`Skipping notification for item ${item.id} as quantity is ${item.quantity}`);
+            continue; // Skip to the next item
+          }
+          
           let timerDisplay = formatTimerDuration(item.timer_duration || 1440);
           try {
             if (item.timer_duration && (item.created_at || item.updated_at)) {
@@ -5788,7 +5800,7 @@ function startItemPolling() {
             'storage', 
             embed,
             null,
-            [buttonsRow]  // Changed from 'requestRow' to 'buttonsRow'
+            [buttonsRow]
           );
           
           if (message) {
