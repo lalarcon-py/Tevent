@@ -5104,8 +5104,14 @@ app.post('/webhook/announce-teams-with-images', async (req, res) => {
       // Send the event header first
       await channel.send({ embeds: [eventEmbed] });
       
-      // Process each team image
-      for (let i = 0; i < teamImages.length; i++) {
+      // Create a single message with all team images as attachments
+      const attachments = [];
+      const teamNames = [];
+      
+      // Process up to 10 images (Discord limit)
+      const maxImages = Math.min(teamImages.length, 10);
+      
+      for (let i = 0; i < maxImages; i++) {
         const teamImage = teamImages[i];
         
         // Convert base64 image to buffer
@@ -5114,18 +5120,45 @@ app.post('/webhook/announce-teams-with-images', async (req, res) => {
           'base64'
         );
         
-        // Create attachment from buffer
-        const attachment = new AttachmentBuilder(imageBuffer, { name: `team-${i+1}.png` });
-        
-        // Send the team image
-        await channel.send({ 
-          content: `**Team ${i+1}: ${teamImage.name}**`, 
-          files: [attachment] 
-        });
-        
-        // Add a small delay to prevent rate limiting
-        if (i < teamImages.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        // Create attachment
+        attachments.push(new AttachmentBuilder(imageBuffer, { name: `team-${i+1}.png` }));
+        teamNames.push(`**Team ${i+1}: ${teamImage.name}**`);
+      }
+      
+      // Send a single message with all attachments
+      await channel.send({ 
+        content: teamNames.join('\n'),
+        files: attachments
+      });
+      
+      // If we have more than 10 teams, send additional messages
+      if (teamImages.length > 10) {
+        for (let batch = 1; batch * 10 < teamImages.length; batch++) {
+          const startIdx = batch * 10;
+          const endIdx = Math.min(startIdx + 10, teamImages.length);
+          
+          const batchAttachments = [];
+          const batchTeamNames = [];
+          
+          for (let i = startIdx; i < endIdx; i++) {
+            const teamImage = teamImages[i];
+            
+            // Convert base64 image to buffer
+            const imageBuffer = Buffer.from(
+              teamImage.image.replace(/^data:image\/\w+;base64,/, ''),
+              'base64'
+            );
+            
+            // Create attachment
+            batchAttachments.push(new AttachmentBuilder(imageBuffer, { name: `team-${i+1}.png` }));
+            batchTeamNames.push(`**Team ${i+1}: ${teamImage.name}**`);
+          }
+          
+          // Send batch message
+          await channel.send({ 
+            content: batchTeamNames.join('\n'),
+            files: batchAttachments
+          });
         }
       }
       
