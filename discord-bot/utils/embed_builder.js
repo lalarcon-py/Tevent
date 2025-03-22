@@ -323,16 +323,8 @@ module.exports = {
    */
   createTeamEmbed: (team) => {
     try {
-      const tankEmoji = '<:Tank:1352736996405022780>';
-      const healerEmoji = '<:Healer:1352737011479482468>';
-      const dpsEmoji = '<:DPS:1352737043972624518>';
-      
       const members = team.members || [];
-      const tanks = members.filter(m => m.role === 'TANK') || [];
-      const healers = members.filter(m => m.role === 'HEALER') || [];
-      const dps = members.filter(m => m.role === 'DPS') || [];
-      
-      const totalParticipants = tanks.length + healers.length + dps.length;
+      const totalParticipants = members.length;
       const late = team.late || [];
       const tentative = team.tentative || [];
       const extras = late.length + tentative.length;
@@ -364,16 +356,12 @@ module.exports = {
         timeAgoString = `\`${diffDays}d ago\``;
       }
       
-      // Format players with weapon icons and better styling
+      // Format players with weapon icons (no role separation)
       const formatPlayers = (players) => {
         if (players.length === 0) return '—';
         
         return players.map((p, idx) => {
           const name = p.User?.username || p.username || 'Unknown';
-          const role = p.role; // This is the critical part - the role from the event signup
-          
-          console.log(`[DEBUG] Processing player ${name} with role ${role}`);
-          
           let primaryEmoji = '';
           let secondaryEmoji = '';
           let className = '';
@@ -391,81 +379,23 @@ module.exports = {
                 : p.builds;
             }
             
-            console.log(`[DEBUG] Player builds for ${name}:`, JSON.stringify(userBuilds));
-            
-            // Only proceed if we have a role and builds
-            if (role && Array.isArray(userBuilds) && userBuilds.length > 0) {
-              // EXPLICITLY match the role to a build (case-insensitive)
-              const roleUpperCase = role.toUpperCase();
-              const matchingBuild = userBuilds.find(build => 
-                build.spec && build.spec.toUpperCase() === roleUpperCase
-              );
-              
-              console.log(`[DEBUG] Matching build for ${role}:`, 
-                matchingBuild ? JSON.stringify(matchingBuild) : 'None found');
-              
-              if (matchingBuild) {
-                // Found a matching build - use its weapons
-                primaryEmoji = getWeaponEmoji(matchingBuild.primary);
-                secondaryEmoji = getWeaponEmoji(matchingBuild.secondary);
-                className = matchingBuild.weapon_spec;
-                
-                console.log(`[DEBUG] Using role-matched build weapons: ${matchingBuild.primary} + ${matchingBuild.secondary}`);
-              } else {
-                // Fallback to first build if no matching build found
-                primaryEmoji = getWeaponEmoji(userBuilds[0].primary);
-                secondaryEmoji = getWeaponEmoji(userBuilds[0].secondary);
-                className = userBuilds[0].weapon_spec;
-                
-                console.log(`[DEBUG] No matching build found, using first build weapons`);
-              }
+            // Just use the first build for simplicity
+            if (Array.isArray(userBuilds) && userBuilds.length > 0) {
+              const build = userBuilds[0];
+              primaryEmoji = getWeaponEmoji(build.primary);
+              secondaryEmoji = getWeaponEmoji(build.secondary);
+              className = build.weapon_spec;
             }
           } catch (e) {
-            console.error(`[ERROR] Error processing builds for player ${name}:`, e);
+            console.error(`Error processing builds for player ${name}:`, e);
           }
           
-          // Create display with both weapon emojis
-          const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
+          // Create display with both weapon emojis and class name
+          const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji} ` : primaryEmoji ? `${primaryEmoji} ` : '';
           const classDisplay = className ? ` (${className})` : '';
-          
-          return `${idx + 1}. ${weaponDisplay} **${name}**${classDisplay}`;
+          return `${idx + 1}. ${weaponDisplay}**${name}**${classDisplay}`;
         }).join('\n');
       };
-      
-      // Helper function to get emoji for weapon types using custom Discord emojis
-      function getWeaponEmoji(weaponType) {
-        if (!weaponType) return '';
-        
-        // Convert to string and lowercase for consistent matching
-        const type = String(weaponType).toLowerCase();
-        
-        const emojiMap = {
-          'dagger': '<:Dagger:1352127620761784321>',
-          'spear': '<:Spear:1352127656748908636>',
-          'wand': '<:Wand:1352127712180830249>',
-          'sword and shield': '<:SwordandShield:1352127689183592459>',
-          'swordandshield': '<:SwordandShield:1352127689183592459>',
-          'sword': '<:SwordandShield:1352127689183592459>',
-          'crossbow': '<:Crossbow:1352127594597978112>',
-          'greatsword': '<:Greatsword:1352127640227549265>',
-          'staff': '<:Staff:1352127671831887923>',
-          'bow': '<:Bow:1352127546308825170>'
-        };
-        
-        // Try direct match first
-        if (emojiMap[type]) {
-          return emojiMap[type];
-        }
-        
-        // If no direct match, try partial match
-        for (const [key, emoji] of Object.entries(emojiMap)) {
-          if (type.includes(key)) {
-            return emoji;
-          }
-        }
-        
-        return ''; // No matching emoji found
-      }
       
       // Determine team color based on event or team type
       let teamColor = '#1a64f3'; // Default blue
@@ -488,39 +418,12 @@ module.exports = {
           `${team.description ? `**Notes:** ${team.description}\n` : ''}`
         );
       
-      // Create role distribution bar if we have role limits - updated with custom emojis
-      if (team.max_tanks || team.max_healers || team.max_dps) {
-        const roleBar = [
-          `${tankEmoji} \`${tanks.length}/${team.max_tanks || '∞'}\` | ` +
-          `${healerEmoji} \`${healers.length}/${team.max_healers || '∞'}\` | ` +
-          `${dpsEmoji} \`${dps.length}/${team.max_dps || '∞'}\``
-        ];
-        
-        embed.addFields({
-          name: 'Role Distribution',
-          value: roleBar.join('\n'),
-          inline: false
-        });
-      }
-      
-      // Add role fields with enhanced styling - updated with custom emojis
-      embed.addFields(
-        { 
-          name: `${tankEmoji} Tanks (${tanks.length})`, 
-          value: formatPlayers(tanks), 
-          inline: true 
-        },
-        { 
-          name: `${healerEmoji} Healers (${healers.length})`, 
-          value: formatPlayers(healers), 
-          inline: true 
-        },
-        { 
-          name: `${dpsEmoji} DPS (${dps.length})`, 
-          value: formatPlayers(dps), 
-          inline: true 
-        }
-      );
+      // Add all members together in one field (no role separation)
+      embed.addFields({
+        name: 'Team Members',
+        value: formatPlayers(members),
+        inline: false
+      });
       
       // Add late and tentative sections if members exist
       if (late.length > 0) {

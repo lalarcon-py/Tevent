@@ -5049,7 +5049,12 @@ app.post('/webhook/announce-teams', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
     
-    // Get Discord guild ID from app guild ID
+    // Define emoji constants
+    const tankEmoji = '<:Tank:1352736996405022780>';
+    const healerEmoji = '<:Healer:1352737011479482468>';
+    const dpsEmoji = '<:DPS:1352737043972624518>';
+    
+    // Get Discord guild ID from mapping
     const mappingResult = await pool.query(
       'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
       [guildId]
@@ -5061,9 +5066,8 @@ app.post('/webhook/announce-teams', async (req, res) => {
     }
     
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
-    console.log(`[INFO] Found Discord guild mapping: ${discordGuildId}`);
     
-    // Get the channel configuration for events
+    // Get channel configuration for events
     const channelConfigResult = await pool.query(
       `SELECT channel_id FROM discord_channel_config 
        WHERE guild_id = $1 AND channel_type = 'events' AND enabled = true`,
@@ -5076,35 +5080,11 @@ app.post('/webhook/announce-teams', async (req, res) => {
     }
     
     const channelId = channelConfigResult.rows[0].channel_id;
+    const channel = await client.channels.fetch(channelId);
     
-    // Verify the channel exists and the bot has access
-    let channel;
-    try {
-      channel = await client.channels.fetch(channelId);
-      if (!channel) {
-        console.error(`[ERROR] Channel not found: ${channelId}`);
-        return res.status(404).json({ error: 'Channel not found' });
-      }
-    } catch (channelError) {
-      console.error(`[ERROR] Failed to fetch channel: ${channelError.message}`);
-      return res.status(500).json({ 
-        error: 'Failed to fetch channel',
-        details: channelError.message
-      });
-    }
-    
-    // Verify permissions
-    try {
-      const permissions = channel.permissionsFor(client.user);
-      if (!permissions.has('SendMessages') || !permissions.has('EmbedLinks')) {
-        console.error(`[ERROR] Bot lacks permissions in channel ${channelId}`);
-        return res.status(403).json({ 
-          error: 'Permission denied',
-          details: 'Bot requires SendMessages and EmbedLinks permissions'
-        });
-      }
-    } catch (permError) {
-      console.error(`[ERROR] Error checking permissions: ${permError.message}`);
+    if (!channel) {
+      console.error(`[ERROR] Channel not found: ${channelId}`);
+      return res.status(404).json({ error: 'Channel not found' });
     }
     
     try {
@@ -5113,7 +5093,43 @@ app.post('/webhook/announce-teams', async (req, res) => {
       const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       
-      // Helper function to get emoji for weapon types using custom Discord emojis
+      // Create main embed for event header
+      const mainEmbed = new EmbedBuilder()
+        .setTitle(`📋 ${eventData.title} - Team Assignments`)
+        .setDescription(
+          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
+          `${eventData.description || ''}\n\n` +
+          `👥 **Total Teams:** ${teams.length}`
+        )
+        .setColor('#1a64f3')
+        .setTimestamp()
+        .setFooter({ text: `Use /team view [team_id] for detailed team information` });
+        
+      // Helper function to format player names with weapon emojis
+      function formatPlayer(player) {
+        let weaponEmojis = '';
+        try {
+          if (player.builds) {
+            const builds = typeof player.builds === 'string' ? JSON.parse(player.builds) : player.builds;
+            if (Array.isArray(builds) && builds.length > 0) {
+              const build = builds[0]; // Use first build
+              if (build.primary) {
+                weaponEmojis += getWeaponEmoji(build.primary);
+              }
+              if (build.secondary) {
+                weaponEmojis += getWeaponEmoji(build.secondary);
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`Error parsing builds for player ${player.username}:`, e);
+        }
+        
+        return `${weaponEmojis} **${player.username || 'Unknown'}**`;
+      }
+      
+      // Helper function to get emoji for weapon types
       function getWeaponEmoji(weaponType) {
         if (!weaponType) return '';
         
@@ -5133,139 +5149,53 @@ app.post('/webhook/announce-teams', async (req, res) => {
           'bow': '<:Bow:1352127546308825170>'
         };
         
-        // Try direct match first
         if (emojiMap[type]) {
           return emojiMap[type];
         }
         
-        // If no direct match, try partial match
         for (const [key, emoji] of Object.entries(emojiMap)) {
           if (type.includes(key)) {
             return emoji;
           }
         }
         
-        return ''; // No matching emoji found
+        return '';
       }
       
-      // Create a modern main embed for team announcements
-      const mainEmbed = new EmbedBuilder()
-        .setTitle(`📋 ${eventData.title} - Team Assignments`)
-        .setDescription(
-          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
-          `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
-          `${eventData.description || ''}\n\n` +
-          `👥 **Total Teams:** ${teams.length}`
-        )
-        .setColor('#1a64f3')
-        .setTimestamp()
-        .setFooter({ text: `Use /team view [team_id] for detailed team information` });
+      // Send the header embed first
+      await channel.send({ embeds: [mainEmbed] });
       
-      console.log(`[INFO] Processing ${teams.length} teams...`);
-      
-      // Discord has a limit of 25 fields per embed
-      const MAX_FIELDS = 25;
-      const needsMultipleEmbeds = teams.length > MAX_FIELDS;
-      
-      // Format players with weapon emojis
-      const formatMembers = (members, role) => {
-        if (!members || members.length === 0) return '';
-        
-        return members.filter(m => m.role?.toUpperCase() === role).map(m => {
-          const username = m.username || 'Unknown';
-          let weaponEmoji = '';
+      // Process teams in batches of 3 for inline display
+      for (let i = 0; i < teams.length; i += 3) {
+        const teamBatch = teams.slice(i, i + 3);
+        const batchEmbed = new EmbedBuilder()
+          .setColor('#1a64f3');
           
-          try {
-            if (m.builds) {
-              const builds = typeof m.builds === 'string' 
-                ? JSON.parse(m.builds) 
-                : m.builds;
-              
-              if (builds && builds.length > 0) {
-                const primaryBuild = builds[0];
-                weaponEmoji = getWeaponEmoji(primaryBuild.weapon || primaryBuild.weaponType || primaryBuild.primary_weapon || '');
-              }
-            }
-          } catch (e) {
-            console.error('Error parsing builds:', e);
-          }
+        // Add each team in this batch as an inline field
+        teamBatch.forEach((team, index) => {
+          // Format team members without role distinction
+          const memberLines = team.members
+            .map(member => formatPlayer(member))
+            .join('\n');
           
-          return `${weaponEmoji} ${username}`;
-        }).join(', ');
-      };
-      
-      // If we need multiple embeds, adjust our approach
-      if (needsMultipleEmbeds) {
-        console.log(`[INFO] Too many teams (${teams.length}) for a single embed, splitting into multiple messages`);
-        
-        // Send the header embed first
-        await channel.send({ embeds: [mainEmbed] });
-        
-        // Process teams in batches
-        for (let i = 0; i < teams.length; i += MAX_FIELDS) {
-          const teamBatch = teams.slice(i, i + MAX_FIELDS);
-          const batchEmbed = new EmbedBuilder()
-            .setTitle(`${eventData.title} - Teams (continued)`)
-            .setColor('#1a64f3');
-          
-          // Add each team as a field
-          for (let j = 0; j < teamBatch.length; j++) {
-            const team = teamBatch[j];
-            const groupNumber = i + j + 1;
-            
-            // Format team members with roles and weapon types
-            const tanks = formatMembers(team.members, 'TANK');
-            const healers = formatMembers(team.members, 'HEALER');
-            const dps = formatMembers(team.members, 'DPS');
-            
-            // Create a cleaner team display
-            const teamText = [
-              `${tankEmoji} **Tanks:** ${tanks || '—'}`,
-              `${healerEmoji} **Healers:** ${healers || '—'}`,
-              `${dpsEmoji} **DPS:** ${dps || '—'}`
-            ].join('\n');
-            
-            batchEmbed.addFields({
-              name: `Group ${groupNumber}: ${team.name}`,
-              value: teamText || 'No members assigned',
-              inline: false
-            });
-          }
-          
-          await channel.send({ embeds: [batchEmbed] });
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } else {
-        // All teams can fit in a single embed
-        // Add each team as a field
-        teams.forEach((team, index) => {
-          const groupNumber = index + 1;
-          
-          // Format team members with roles and weapon types
-          const tanks = formatMembers(team.members, 'TANK');
-          const healers = formatMembers(team.members, 'HEALER');
-          const dps = formatMembers(team.members, 'DPS');
-
-          const tankEmoji = '<:Tank:1352736996405022780>';
-          const healerEmoji = '<:Healer:1352737011479482468>';
-          const dpsEmoji = '<:DPS:1352737043972624518>';
-          
-          // Create a cleaner team display
-          const teamText = [
-            `${tankEmoji} **Tanks:** ${tanks || '—'}`,
-            `${healerEmoji} **Healers:** ${healers || '—'}`,
-            `${dpsEmoji} **DPS:** ${dps || '—'}`
-          ].join('\n');
-          
-          mainEmbed.addFields({
-            name: `Group ${groupNumber}: ${team.name}`,
-            value: teamText || 'No members assigned',
-            inline: false
+          batchEmbed.addFields({
+            name: `Group ${i + index + 1}: ${team.name}`,
+            value: memberLines || 'No members assigned',
+            inline: true
           });
         });
         
-        // Send the embed with all teams
-        await channel.send({ embeds: [mainEmbed] });
+        // Add empty fields to ensure proper 3-column layout if needed
+        const emptyFieldsNeeded = 3 - teamBatch.length;
+        for (let j = 0; j < emptyFieldsNeeded; j++) {
+          batchEmbed.addFields({
+            name: '\u200B', // Zero-width space
+            value: '\u200B',
+            inline: true
+          });
+        }
+        
+        await channel.send({ embeds: [batchEmbed] });
       }
       
       console.log(`[INFO] Team announcements completed successfully for event ${eventId}`);
