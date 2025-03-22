@@ -5245,6 +5245,10 @@ app.post('/webhook/announce-teams', async (req, res) => {
           const tanks = formatMembers(team.members, 'TANK');
           const healers = formatMembers(team.members, 'HEALER');
           const dps = formatMembers(team.members, 'DPS');
+
+          const tankEmoji = '<:Tank:1352736996405022780>';
+          const healerEmoji = '<:Healer:1352737011479482468>';
+          const dpsEmoji = '<:DPS:1352737043972624518>';
           
           // Create a cleaner team display
           const teamText = [
