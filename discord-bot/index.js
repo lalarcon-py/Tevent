@@ -73,6 +73,8 @@ const pool = new Pool({
   }
 });
 
+module.exports.pool = pool;
+
 // Test database connection
 pool.query('SELECT NOW()')
   .then(result => console.log("Database connection successful, server time:", result.rows[0].now))

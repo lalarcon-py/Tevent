@@ -1,6 +1,6 @@
 // discord-bot/commands/application.js
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
-const pool = require('../utils/database');
+const { pool } = require('../index');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');

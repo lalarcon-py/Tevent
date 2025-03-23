@@ -1,17 +1,7 @@
 // backend/discord_bot/utils/database.js
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
-
-// Test database connection
-pool.query('SELECT NOW()')
-  .then(result => console.log("Database connection successful, server time:", result.rows[0].now))
-  .catch(err => console.error("Database connection error:", err));
+const db = require('../../../models');
+const { Op, Sequelize } = require('sequelize');
+const { sequelize } = require('../../../config/database');
 
 /**
  * Database utility functions for Discord bot with direct database access
@@ -31,25 +21,32 @@ module.exports = {
       
       // Test database connection
       try {
-        await pool.query('SELECT 1');
+        await sequelize.query('SELECT 1');
         console.log(`[DEBUG] Database connection verified before getUpcomingEvents query`);
       } catch (connError) {
         console.error(`[ERROR] Database connection test failed in getUpcomingEvents: ${connError.message}`);
       }
       
-      const eventsResult = await pool.query(
-        `SELECT e.*, 
-          (SELECT COUNT(*) FROM event_participants ep WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
-          (SELECT COUNT(*) FROM event_participants ep WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
-          (SELECT COUNT(*) FROM event_participants ep WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
-        FROM events e
-        WHERE e.guild_id = $1 AND e.event_time BETWEEN $2 AND $3
-        ORDER BY e.event_time ASC`,
-        [guildId, now, futureDate]
-      );
+      const events = await db.Event.findAll({
+        where: {
+          guild_id: guildId,
+          event_time: {
+            [Op.between]: [now, futureDate]
+          }
+        },
+        include: [{
+          model: db.EventParticipant,
+          as: 'participants',
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'discord_id']
+          }]
+        }],
+        order: [['event_time', 'ASC']]
+      });
       
-      console.log(`[DEBUG] Found ${eventsResult.rows.length} upcoming events`);
-      return eventsResult.rows;
+      console.log(`[DEBUG] Found ${events.length} upcoming events`);
+      return events;
     } catch (error) {
       console.error(`[ERROR] getUpcomingEvents failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
@@ -63,18 +60,19 @@ module.exports = {
   getEventById: async (eventId) => {
     console.log(`[DEBUG] getEventById called with eventId: ${eventId}`);
     try {
-      const eventResult = await pool.query(
-        `SELECT e.*, 
-          (SELECT COUNT(*) FROM event_participants ep WHERE ep.event_id = e.id AND ep.role = 'TANK') as tank_count,
-          (SELECT COUNT(*) FROM event_participants ep WHERE ep.event_id = e.id AND ep.role = 'HEALER') as healer_count,
-          (SELECT COUNT(*) FROM event_participants ep WHERE ep.event_id = e.id AND ep.role = 'DPS') as dps_count
-        FROM events e
-        WHERE e.id = $1`,
-        [eventId]
-      );
+      const event = await db.Event.findByPk(eventId, {
+        include: [{
+          model: db.EventParticipant,
+          as: 'participants',
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'discord_id']
+          }]
+        }]
+      });
       
-      console.log(`[DEBUG] Event found: ${eventResult.rows.length > 0 ? 'Yes' : 'No'}`);
-      return eventResult.rows[0];
+      console.log(`[DEBUG] Event found: ${event ? 'Yes' : 'No'}`);
+      return event;
     } catch (error) {
       console.error(`[ERROR] getEventById failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
@@ -96,27 +94,30 @@ module.exports = {
       
       // First try a basic query to check connectivity
       try {
-        const testResult = await pool.query('SELECT NOW() as time');
-        console.log(`[DEBUG] Basic connectivity test: ${JSON.stringify(testResult.rows[0])}`);
+        const testResult = await sequelize.query('SELECT NOW() as time');
+        console.log(`[DEBUG] Basic connectivity test: ${JSON.stringify(testResult[0])}`);
       } catch (testError) {
         console.error(`[ERROR] Basic connectivity test failed: ${testError.message}`);
       }
       
-      const result = await pool.query(
+      const [result] = await sequelize.query(
         `SELECT app_guild_id FROM discord_guild_mappings 
          WHERE discord_guild_id = $1`,
-        [discordServerId.toString()]
+        { 
+          bind: [discordServerId.toString()],
+          type: sequelize.QueryTypes.SELECT
+        }
       );
       
-      console.log(`[DEBUG] Query result for Discord mapping: ${JSON.stringify(result.rows[0])}`);
+      console.log(`[DEBUG] Query result for Discord mapping: ${JSON.stringify(result)}`);
       
-      if (!result.rows.length) {
+      if (!result) {
         console.log(`[DEBUG] No mapping found for Discord guild ID: ${discordServerId}`);
         return null;
       }
       
-      console.log(`[DEBUG] Mapping found, returning app_guild_id: ${result.rows[0].app_guild_id}`);
-      return result.rows[0].app_guild_id;
+      console.log(`[DEBUG] Mapping found, returning app_guild_id: ${result.app_guild_id}`);
+      return result.app_guild_id;
     } catch (error) {
       console.error(`[ERROR] getGuildIdFromDiscord failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
@@ -130,32 +131,18 @@ module.exports = {
   getEventTeams: async (eventId) => {
     console.log(`[DEBUG] getEventTeams called with eventId: ${eventId}`);
     try {
-      const teamsResult = await pool.query(
-        `SELECT t.* 
-         FROM teams t
-         WHERE t.event_id = $1
-         ORDER BY t.name ASC`,
-        [eventId]
-      );
-      
-      // For each team, get members
-      const teams = [];
-      
-      for (const team of teamsResult.rows) {
-        const membersResult = await pool.query(
-          `SELECT tm.*, u.username, u.discord_id, u.builds
-           FROM team_members tm
-           JOIN users u ON tm.user_id = u.id
-           WHERE tm.team_id = $1
-           ORDER BY tm.position ASC`,
-          [team.id]
-        );
-        
-        teams.push({
-          ...team,
-          members: membersResult.rows
-        });
-      }
+      const teams = await db.Team.findAll({
+        where: { event_id: eventId },
+        include: [{
+          model: db.TeamMember,
+          as: 'members',
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'discord_id', 'builds']
+          }]
+        }],
+        order: [['name', 'ASC']]
+      });
       
       console.log(`[DEBUG] Found ${teams.length} teams for event ${eventId}`);
       return teams;
@@ -172,28 +159,16 @@ module.exports = {
   getTeamById: async (teamId) => {
     console.log(`[DEBUG] getTeamById called with teamId: ${teamId}`);
     try {
-      const teamResult = await pool.query(
-        `SELECT * FROM teams WHERE id = $1`,
-        [teamId]
-      );
-      
-      if (!teamResult.rows.length) {
-        return null;
-      }
-      
-      const team = teamResult.rows[0];
-      
-      // Get team members
-      const membersResult = await pool.query(
-        `SELECT tm.*, u.username, u.discord_id, u.builds
-         FROM team_members tm
-         JOIN users u ON tm.user_id = u.id
-         WHERE tm.team_id = $1
-         ORDER BY tm.position ASC`,
-        [teamId]
-      );
-      
-      team.members = membersResult.rows;
+      const team = await db.Team.findByPk(teamId, {
+        include: [{
+          model: db.TeamMember,
+          as: 'members',
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'discord_id', 'builds']
+          }]
+        }]
+      });
       
       console.log(`[DEBUG] Team found: ${team ? 'Yes' : 'No'}`);
       return team;
@@ -217,47 +192,45 @@ module.exports = {
       console.log(`[DEBUG] Calculating attendance since ${periodStart.toISOString()}`);
       
       // Get events in the specified period
-      const eventsResult = await pool.query(
-        `SELECT e.id
-         FROM events e
-         WHERE e.guild_id = $1 AND e.event_time BETWEEN $2 AND $3`,
-        [guildId, periodStart, new Date()]
-      );
+      const events = await db.Event.findAll({
+        where: {
+          guild_id: guildId,
+          event_time: {
+            [Op.gte]: periodStart,
+            [Op.lte]: new Date()
+          }
+        },
+        include: [{
+          model: db.EventParticipant,
+          as: 'participants',
+          attributes: ['id', 'user_id']
+        }]
+      });
       
-      const events = eventsResult.rows;
       console.log(`[DEBUG] Found ${events.length} events in the period`);
       
       // Get guild members
-      const membersResult = await pool.query(
-        `SELECT gm.user_id, u.username
-         FROM guild_members gm
-         JOIN users u ON gm.user_id = u.id
-         WHERE gm.guild_id = $1`,
-        [guildId]
-      );
+      const members = await db.GuildMember.findAll({
+        where: { guild_id: guildId },
+        include: [{
+          model: db.User,
+          attributes: ['id', 'username']
+        }]
+      });
       
-      const members = membersResult.rows;
       console.log(`[DEBUG] Found ${members.length} guild members`);
       
       // Calculate attendance stats
       const stats = [];
       
       for (const member of members) {
-        if (!member.username) continue;
+        if (!member.User) continue;
         
         let eventsAttended = 0;
         
         for (const event of events) {
-          const attendanceResult = await pool.query(
-            `SELECT COUNT(*) as attended
-             FROM event_participants
-             WHERE event_id = $1 AND user_id = $2`,
-            [event.id, member.user_id]
-          );
-          
-          if (parseInt(attendanceResult.rows[0].attended) > 0) {
-            eventsAttended++;
-          }
+          const attended = event.participants.some(p => p.user_id === member.user_id);
+          if (attended) eventsAttended++;
         }
         
         const attendanceRate = events.length > 0 ? 
@@ -265,7 +238,7 @@ module.exports = {
         
         stats.push({
           id: member.user_id,
-          username: member.username,
+          username: member.User.username,
           events_attended: eventsAttended,
           total_events: events.length,
           attendance_rate: parseFloat(attendanceRate.toFixed(1))
@@ -287,58 +260,53 @@ module.exports = {
   signUpForEvent: async (guildId, eventId, discordUserId, role) => {
     console.log(`[DEBUG] signUpForEvent called with guildId: ${guildId}, eventId: ${eventId}, discordUserId: ${discordUserId}, role: ${role}`);
     try {
-      const userResult = await pool.query(
-        `SELECT id FROM users WHERE discord_id = $1`,
-        [discordUserId]
-      );
+      const user = await db.User.findOne({
+        where: { discord_id: discordUserId }
+      });
       
-      if (!userResult.rows.length) {
+      if (!user) {
         console.log(`[DEBUG] User not found for Discord ID: ${discordUserId}`);
         return { success: false, message: 'User not found' };
       }
       
-      const userId = userResult.rows[0].id;
-      console.log(`[DEBUG] Found user: ${userId}`);
+      console.log(`[DEBUG] Found user: ${user.id}`);
       
       // Check if event exists
-      const eventResult = await pool.query(
-        `SELECT * FROM events WHERE id = $1 AND guild_id = $2`,
-        [eventId, guildId]
-      );
+      const event = await db.Event.findOne({
+        where: { id: eventId, guild_id: guildId }
+      });
       
-      if (!eventResult.rows.length) {
+      if (!event) {
         console.log(`[DEBUG] Event not found: ${eventId}`);
         return { success: false, message: 'Event not found' };
       }
       
-      const event = eventResult.rows[0];
       console.log(`[DEBUG] Found event: ${event.id}`);
       
       // Check if user is already signed up
-      const existingResult = await pool.query(
-        `SELECT * FROM event_participants 
-         WHERE event_id = $1 AND user_id = $2 AND guild_id = $3`,
-        [eventId, userId, guildId]
-      );
+      const existing = await db.EventParticipant.findOne({
+        where: {
+          event_id: eventId,
+          user_id: user.id,
+          guild_id: guildId
+        }
+      });
       
-      if (existingResult.rows.length) {
-        console.log(`[DEBUG] User already signed up, updating role from ${existingResult.rows[0].role} to ${role}`);
+      if (existing) {
+        console.log(`[DEBUG] User already signed up, updating role from ${existing.role} to ${role}`);
         // Update role if already signed up
-        await pool.query(
-          `UPDATE event_participants SET role = $1 WHERE id = $2`,
-          [role, existingResult.rows[0].id]
-        );
+        await existing.update({ role });
         return { success: true, message: 'Role updated' };
       }
       
       // Check if role is full
-      const participantsResult = await pool.query(
-        `SELECT * FROM event_participants 
-         WHERE event_id = $1 AND role = $2 AND guild_id = $3`,
-        [eventId, role, guildId]
-      );
-      
-      const participants = participantsResult.rows;
+      const participants = await db.EventParticipant.findAll({
+        where: { 
+          event_id: eventId,
+          role,
+          guild_id: guildId
+        }
+      });
       
       const roleLimits = {
         'TANK': event.tanks || 0,
@@ -351,15 +319,15 @@ module.exports = {
         return { success: false, message: `${role} slots are full` };
       }
       
-      console.log(`[DEBUG] Creating new signup for event ${eventId}, user ${userId}, role ${role}`);
+      console.log(`[DEBUG] Creating new signup for event ${eventId}, user ${user.id}, role ${role}`);
       
       // Create new signup
-      await pool.query(
-        `INSERT INTO event_participants
-         (id, guild_id, event_id, user_id, role, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
-        [guildId, eventId, userId, role]
-      );
+      await db.EventParticipant.create({
+        event_id: eventId,
+        user_id: user.id,
+        guild_id: guildId,
+        role
+      });
       
       console.log(`[DEBUG] Signup created successfully`);
       return { success: true };
@@ -377,97 +345,75 @@ module.exports = {
     console.log(`[DEBUG] updateEventAttendance called with eventId: ${eventId}, userId: ${userId}, attended: ${attended}`);
     try {
       // Get the event first to check guild_id
-      const eventResult = await pool.query(
-        `SELECT id, guild_id FROM events WHERE id = $1`,
-        [eventId]
-      );
+      const event = await db.Event.findByPk(eventId, {
+        attributes: ['id', 'guild_id']
+      });
       
-      if (!eventResult.rows.length) {
+      if (!event) {
         console.log(`[DEBUG] Event not found: ${eventId}`);
         throw new Error('Event not found');
       }
       
-      const event = eventResult.rows[0];
       console.log(`[DEBUG] Found event: ${event.id}, guild: ${event.guild_id}`);
       
       if (attended) {
         console.log(`[DEBUG] Marking user ${userId} as attended`);
         // If marking as attended, create or ensure a participant record exists
-        const participantResult = await pool.query(
-          `SELECT id FROM event_participants
-           WHERE event_id = $1 AND user_id = $2 AND guild_id = $3`,
-          [eventId, userId, event.guild_id]
-        );
+        const [participant, created] = await db.EventParticipant.findOrCreate({
+          where: { 
+            event_id: eventId,
+            user_id: userId,
+            guild_id: event.guild_id
+          },
+          defaults: {
+            role: 'ATTENDEE' // Default role if not specified
+          }
+        });
         
-        if (!participantResult.rows.length) {
-          await pool.query(
-            `INSERT INTO event_participants
-             (id, guild_id, event_id, user_id, role, created_at, updated_at)
-             VALUES (gen_random_uuid(), $1, $2, $3, 'ATTENDEE', NOW(), NOW())`,
-            [event.guild_id, eventId, userId]
-          );
-          console.log(`[DEBUG] Participant record created`);
-        } else {
-          console.log(`[DEBUG] Participant record found`);
-        }
+        console.log(`[DEBUG] Participant record ${created ? 'created' : 'found'}`);
         
         // Remove from absentees if table exists
-        try {
-          const absenteeResult = await pool.query(
-            `SELECT 1 FROM information_schema.tables 
-             WHERE table_name = 'event_absentees'`
-          );
-          
-          if (absenteeResult.rows.length) {
-            const result = await pool.query(
-              `DELETE FROM event_absentees
-               WHERE event_id = $1 AND user_id = $2 AND guild_id = $3`,
-              [eventId, userId, event.guild_id]
-            );
-            console.log(`[DEBUG] Removed ${result.rowCount} absentee records`);
+        if (db.EventAbsentee) {
+          try {
+            const result = await db.EventAbsentee.destroy({
+              where: {
+                event_id: eventId,
+                user_id: userId,
+                guild_id: event.guild_id
+              }
+            });
+            console.log(`[DEBUG] Removed ${result} absentee records`);
+          } catch (error) {
+            console.warn(`[WARN] Failed to remove from absentees: ${error.message}`);
           }
-        } catch (error) {
-          console.warn(`[WARN] Failed to remove from absentees: ${error.message}`);
         }
       } else {
         console.log(`[DEBUG] Marking user ${userId} as absent`);
         // If marking as absent, remove participant record if it exists
-        const result = await pool.query(
-          `DELETE FROM event_participants
-           WHERE event_id = $1 AND user_id = $2 AND guild_id = $3`,
-          [eventId, userId, event.guild_id]
-        );
+        const result = await db.EventParticipant.destroy({
+          where: { 
+            event_id: eventId,
+            user_id: userId,
+            guild_id: event.guild_id
+          }
+        });
         
-        console.log(`[DEBUG] Removed ${result.rowCount} participant records`);
+        console.log(`[DEBUG] Removed ${result} participant records`);
         
         // Create absence record if table exists
-        try {
-          const absenteeResult = await pool.query(
-            `SELECT 1 FROM information_schema.tables 
-             WHERE table_name = 'event_absentees'`
-          );
-          
-          if (absenteeResult.rows.length) {
-            const existingAbsenteeResult = await pool.query(
-              `SELECT id FROM event_absentees
-               WHERE event_id = $1 AND user_id = $2 AND guild_id = $3`,
-              [eventId, userId, event.guild_id]
-            );
-            
-            if (!existingAbsenteeResult.rows.length) {
-              await pool.query(
-                `INSERT INTO event_absentees
-                 (id, guild_id, event_id, user_id, created_at, updated_at)
-                 VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
-                [event.guild_id, eventId, userId]
-              );
-              console.log(`[DEBUG] Absentee record created`);
-            } else {
-              console.log(`[DEBUG] Absentee record already exists`);
-            }
+        if (db.EventAbsentee) {
+          try {
+            const [absentee, created] = await db.EventAbsentee.findOrCreate({
+              where: {
+                event_id: eventId,
+                user_id: userId,
+                guild_id: event.guild_id
+              }
+            });
+            console.log(`[DEBUG] Absentee record ${created ? 'created' : 'found'}`);
+          } catch (error) {
+            console.warn(`[WARN] Failed to add to absentees: ${error.message}`);
           }
-        } catch (error) {
-          console.warn(`[WARN] Failed to add to absentees: ${error.message}`);
         }
       }
       
@@ -490,25 +436,31 @@ module.exports = {
       
       // Add a basic database connectivity test 
       try {
-        const testResult = await pool.query('SELECT NOW() as time');
-        console.log(`[DEBUG] Storage items DB connectivity test: ${JSON.stringify(testResult.rows[0])}`);
+        const testResult = await sequelize.query('SELECT NOW() as time');
+        console.log(`[DEBUG] Storage items DB connectivity test: ${JSON.stringify(testResult[0])}`);
       } catch (testError) {
         console.error(`[ERROR] Storage items DB connectivity test failed: ${testError.message}`);
       }
       
-      // Use direct query
-      const storageItemsResult = await pool.query(
-        `SELECT gsi.*, i.name, i.type, i.icon 
-         FROM guild_storage_items gsi
-         LEFT JOIN items i ON gsi.item_id = i.id
-         WHERE gsi.guild_id = $1`,
-        [guildId]
-      );
+      // Use direct query instead of ORM
+      const query = `
+        SELECT gsi.*, i.name, i.type, i.icon 
+        FROM guild_storage_items gsi
+        LEFT JOIN items i ON gsi.item_id = i.id
+        WHERE gsi.guild_id = $1
+      `;
       
-      console.log(`[DEBUG] Storage items query complete. Found ${storageItemsResult.rows.length} items.`);
+      console.log(`[DEBUG] Storage items query about to execute for guild: ${guildId}`);
+      
+      const storageItems = await sequelize.query(query, {
+        bind: [guildId],
+        type: sequelize.QueryTypes.SELECT
+      });
+      
+      console.log(`[DEBUG] Storage items query complete. Found ${storageItems.length} items.`);
       
       // Transform the results to match expected structure
-      const formattedItems = storageItemsResult.rows.map(item => ({
+      const formattedItems = storageItems.map(item => ({
         id: item.id,
         item_id: item.item_id,
         quantity: item.quantity,
@@ -539,38 +491,31 @@ module.exports = {
     try {
       console.log(`[DEBUG] Querying for pending loot requests in guild ${guildId}`);
       
-      const requestsResult = await pool.query(
-        `SELECT lr.*, gsi.quantity, i.name, i.type, i.icon, u.username, u.discord_id
-         FROM loot_requests lr
-         JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
-         JOIN items i ON gsi.item_id = i.id
-         JOIN users u ON lr.user_id = u.id
-         WHERE lr.guild_id = $1 AND lr.status = 'Pending'
-         ORDER BY lr.created_at DESC`,
-        [guildId]
-      );
-      
-      // Transform to match expected structure
-      const formattedRequests = requestsResult.rows.map(request => ({
-        ...request,
-        storageItem: {
-          ...request,
-          Item: {
-            id: request.item_id,
-            name: request.name,
-            type: request.type,
-            icon: request.icon
-          }
+      const requests = await db.LootRequest.findAll({
+        where: { 
+          guild_id: guildId,
+          status: 'Pending'
         },
-        user: {
-          id: request.user_id,
-          username: request.username,
-          discord_id: request.discord_id
-        }
-      }));
+        include: [
+          {
+            model: db.GuildStorageItem,
+            as: 'storageItem',
+            include: [{
+              model: db.Item,
+              attributes: ['id', 'name', 'type', 'icon']
+            }]
+          },
+          {
+            model: db.User,
+            as: 'user',
+            attributes: ['id', 'username', 'discord_id']
+          }
+        ],
+        order: [['created_at', 'DESC']]
+      });
       
-      console.log(`[DEBUG] Found ${formattedRequests.length} pending loot requests`);
-      return formattedRequests;
+      console.log(`[DEBUG] Found ${requests.length} pending loot requests`);
+      return requests;
     } catch (error) {
       console.error(`[ERROR] getLootRequests failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
@@ -583,109 +528,112 @@ module.exports = {
    */
   approveLootRequest: async (guildId, requestId) => {
     console.log(`[DEBUG] approveLootRequest called with guildId: ${guildId}, requestId: ${requestId}`);
-    const client = await pool.connect();
+    const t = await db.sequelize.transaction();
     
     try {
-      await client.query('BEGIN');
-      
       console.log(`[DEBUG] Finding loot request: ${requestId}`);
       
-      const requestResult = await client.query(
-        `SELECT lr.*, gsi.quantity, i.name as item_name, i.type as item_type, 
-                u.id as user_id, u.username, u.discord_id, gsi.id as storage_item_id
-         FROM loot_requests lr
-         JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
-         JOIN items i ON gsi.item_id = i.id
-         JOIN users u ON lr.user_id = u.id
-         WHERE lr.id = $1 AND lr.guild_id = $2`,
-        [requestId, guildId]
-      );
+      const request = await db.LootRequest.findOne({
+        where: { 
+          id: requestId,
+          guild_id: guildId
+        },
+        include: [
+          {
+            model: db.GuildStorageItem,
+            as: 'storageItem',
+            include: [db.Item]
+          },
+          {
+            model: db.User,
+            as: 'user'
+          }
+        ],
+        transaction: t
+      });
       
-      if (!requestResult.rows.length) {
+      if (!request) {
         console.log(`[DEBUG] Request not found: ${requestId}`);
-        await client.query('ROLLBACK');
+        await t.rollback();
         return { success: false, message: 'Request not found' };
       }
       
-      const request = requestResult.rows[0];
-      console.log(`[DEBUG] Found request: ${request.id}, item: ${request.item_name}, user: ${request.username}`);
+      console.log(`[DEBUG] Found request: ${request.id}, item: ${request.storageItem?.Item?.name}, user: ${request.user?.username}`);
       
       // Check if item is still available
-      if (request.quantity < 1) {
-        console.log(`[DEBUG] Item no longer available: ${request.storage_item_id}`);
-        await client.query('ROLLBACK');
+      if (!request.storageItem || request.storageItem.quantity < 1) {
+        console.log(`[DEBUG] Item no longer available: ${request.storageItem?.id || 'unknown'}`);
+        await t.rollback();
         return { success: false, message: 'Item no longer available in storage' };
       }
       
-      console.log(`[DEBUG] Item available, quantity: ${request.quantity}`);
+      console.log(`[DEBUG] Item available, quantity: ${request.storageItem.quantity}`);
       
       // Update request status
       console.log(`[DEBUG] Updating request status to Approved`);
-      await client.query(
-        `UPDATE loot_requests 
-         SET status = 'Approved', updated_at = NOW()
-         WHERE id = $1`,
-        [requestId]
-      );
+      await request.update({ status: 'Approved' }, { transaction: t });
       
       // Check if this is the last of the item
-      const willReachZero = request.quantity <= 1;
+      const willReachZero = request.storageItem.quantity <= 1;
       
       if (willReachZero) {
         // If this is the last one, remove the item from storage
         console.log(`[DEBUG] This is the last of the item - removing from storage`);
         
         // Deny all other pending requests for this item with "out of stock" status
-        await client.query(
-          `UPDATE loot_requests 
-           SET status = 'Denied - Out of Stock', updated_at = NOW()
-           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-          [request.storage_item_id, request.id]
+        await db.LootRequest.update(
+          { status: 'Denied - Out of Stock', updated_at: new Date() },
+          { 
+            where: {
+              storage_item_id: request.storageItem.id,
+              status: 'Pending',
+              id: { [db.Sequelize.Op.ne]: request.id }
+            },
+            transaction: t
+          }
         );
         
         // Delete the item from storage
-        await client.query(
-          `DELETE FROM guild_storage_items WHERE id = $1`,
-          [request.storage_item_id]
-        );
+        await db.GuildStorageItem.destroy({
+          where: { id: request.storageItem.id },
+          transaction: t
+        });
       } else {
         // Otherwise just decrement the quantity
-        console.log(`[DEBUG] Decrementing item quantity from ${request.quantity} to ${request.quantity - 1}`);
-        await client.query(
-          `UPDATE guild_storage_items
-           SET quantity = quantity - 1, updated_at = NOW()
-           WHERE id = $1`,
-          [request.storage_item_id]
-        );
+        console.log(`[DEBUG] Decrementing item quantity from ${request.storageItem.quantity} to ${request.storageItem.quantity - 1}`);
+        await request.storageItem.decrement('quantity', { transaction: t });
         
         // Deny other pending requests for this specific request (not all requests for the item)
-        await client.query(
-          `UPDATE loot_requests 
-           SET status = 'Denied - Granted to other', updated_at = NOW()
-           WHERE id != $1 AND storage_item_id = $2 AND status = 'Pending'`,
-          [request.id, request.storage_item_id]
+        await db.LootRequest.update(
+          { status: 'Denied - Granted to other', updated_at: new Date() },
+          { 
+            where: {
+              id: { [db.Sequelize.Op.ne]: request.id },
+              storage_item_id: request.storageItem.id,
+              status: 'Pending'
+            },
+            transaction: t
+          }
         );
       }
       
       console.log(`[DEBUG] Committing transaction`);
-      await client.query('COMMIT');
+      await t.commit();
       
       console.log(`[DEBUG] Approval successful ${willReachZero ? '(last item removed from storage)' : ''}`);
       return { 
         success: true,
-        userId: request.user_id,
-        username: request.username || 'Unknown',
-        discordId: request.discord_id,
-        itemName: request.item_name || 'Unknown Item',
+        userId: request.user?.id,
+        username: request.user?.username || 'Unknown',
+        discordId: request.user?.discord_id,
+        itemName: request.storageItem?.Item?.name || 'Unknown Item',
         wasLastItem: willReachZero
       };
     } catch (error) {
       console.error(`[ERROR] approveLootRequest failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
-      await client.query('ROLLBACK');
+      await t.rollback();
       throw error;
-    } finally {
-      client.release();
     }
   },
   
@@ -697,40 +645,42 @@ module.exports = {
     try {
       console.log(`[DEBUG] Finding loot request: ${requestId}`);
       
-      const requestResult = await pool.query(
-        `SELECT lr.*, i.name as item_name, u.username, u.discord_id
-         FROM loot_requests lr
-         JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
-         JOIN items i ON gsi.item_id = i.id
-         JOIN users u ON lr.user_id = u.id
-         WHERE lr.id = $1 AND lr.guild_id = $2`,
-        [requestId, guildId]
-      );
+      const request = await db.LootRequest.findOne({
+        where: { 
+          id: requestId,
+          guild_id: guildId
+        },
+        include: [
+          {
+            model: db.GuildStorageItem,
+            as: 'storageItem',
+            include: [db.Item]
+          },
+          {
+            model: db.User,
+            as: 'user'
+          }
+        ]
+      });
       
-      if (!requestResult.rows.length) {
+      if (!request) {
         console.log(`[DEBUG] Request not found: ${requestId}`);
         return { success: false, message: 'Request not found' };
       }
       
-      const request = requestResult.rows[0];
-      console.log(`[DEBUG] Found request: ${request.id}, item: ${request.item_name}, user: ${request.username}`);
+      console.log(`[DEBUG] Found request: ${request.id}, item: ${request.storageItem?.Item?.name}, user: ${request.user?.username}`);
       
       // Update request status
       console.log(`[DEBUG] Updating request status to Denied`);
-      await pool.query(
-        `UPDATE loot_requests 
-         SET status = 'Denied', updated_at = NOW()
-         WHERE id = $1`,
-        [requestId]
-      );
+      await request.update({ status: 'Denied' });
       
       console.log(`[DEBUG] Denial successful`);
       return { 
         success: true,
-        userId: request.user_id,
-        username: request.username || 'Unknown',
-        discordId: request.discord_id,
-        itemName: request.item_name || 'Unknown Item'
+        userId: request.user?.id,
+        username: request.user?.username || 'Unknown',
+        discordId: request.user?.discord_id,
+        itemName: request.storageItem?.Item?.name || 'Unknown Item'
       };
     } catch (error) {
       console.error(`[ERROR] denyLootRequest failed: ${error.message}`);
@@ -747,65 +697,63 @@ module.exports = {
     try {
       console.log(`[DEBUG] Finding user with Discord ID: ${discordUserId}`);
       
-      const userResult = await pool.query(
-        `SELECT id FROM users WHERE discord_id = $1`,
-        [discordUserId]
-      );
+      const user = await db.User.findOne({
+        where: { discord_id: discordUserId }
+      });
       
-      if (!userResult.rows.length) {
+      if (!user) {
         console.log(`[DEBUG] User not found for Discord ID: ${discordUserId}`);
         return { success: false, message: 'User not found' };
       }
       
-      const userId = userResult.rows[0].id;
-      console.log(`[DEBUG] Found user: ${userId}`);
+      console.log(`[DEBUG] Found user: ${user.id}`);
       
       console.log(`[DEBUG] Finding storage item: ${itemId}`);
-      const storageItemResult = await pool.query(
-        `SELECT gsi.*, i.name
-         FROM guild_storage_items gsi
-         JOIN items i ON gsi.item_id = i.id
-         WHERE gsi.id = $1 AND gsi.guild_id = $2`,
-        [itemId, guildId]
-      );
+      const storageItem = await db.GuildStorageItem.findOne({
+        where: { 
+          id: itemId,
+          guild_id: guildId
+        },
+        include: [db.Item]
+      });
       
-      if (!storageItemResult.rows.length) {
+      if (!storageItem) {
         console.log(`[DEBUG] Item not found in storage: ${itemId}`);
         return { success: false, message: 'Item not found in storage' };
       }
       
-      const storageItem = storageItemResult.rows[0];
-      console.log(`[DEBUG] Found storage item: ${storageItem.id}, name: ${storageItem.name}`);
+      console.log(`[DEBUG] Found storage item: ${storageItem.id}, name: ${storageItem.Item?.name}`);
       
       // Check if user already has a pending request for this item
       console.log(`[DEBUG] Checking for existing requests`);
-      const existingRequestResult = await pool.query(
-        `SELECT id FROM loot_requests 
-         WHERE storage_item_id = $1 AND user_id = $2 AND guild_id = $3 AND status = 'Pending'`,
-        [itemId, userId, guildId]
-      );
+      const existingRequest = await db.LootRequest.findOne({
+        where: {
+          storage_item_id: itemId,
+          user_id: user.id,
+          guild_id: guildId,
+          status: 'Pending'
+        }
+      });
       
-      if (existingRequestResult.rows.length) {
-        console.log(`[DEBUG] Existing request found: ${existingRequestResult.rows[0].id}`);
+      if (existingRequest) {
+        console.log(`[DEBUG] Existing request found: ${existingRequest.id}`);
         return { success: false, message: 'You already have a pending request for this item' };
       }
       
       console.log(`[DEBUG] Creating new loot request`);
       // Create new request
-      const requestResult = await pool.query(
-        `INSERT INTO loot_requests
-         (id, storage_item_id, user_id, guild_id, status, created_at, updated_at)
-         VALUES
-         (gen_random_uuid(), $1, $2, $3, 'Pending', NOW(), NOW())
-         RETURNING id`,
-        [itemId, userId, guildId]
-      );
+      const request = await db.LootRequest.create({
+        storage_item_id: itemId,
+        user_id: user.id,
+        guild_id: guildId,
+        status: 'Pending'
+      });
       
-      console.log(`[DEBUG] Loot request created: ${requestResult.rows[0].id}`);
+      console.log(`[DEBUG] Loot request created: ${request.id}`);
       return { 
         success: true,
-        requestId: requestResult.rows[0].id,
-        itemName: storageItem.name || 'Unknown Item'
+        requestId: request.id,
+        itemName: storageItem.Item?.name || 'Unknown Item'
       };
     } catch (error) {
       console.error(`[ERROR] createLootRequest failed: ${error.message}`);
@@ -822,24 +770,17 @@ module.exports = {
     try {
       console.log(`[DEBUG] Querying for user with Discord ID: ${discordId}`);
       
-      const userResult = await pool.query(
-        `SELECT id, username, discord_id FROM users WHERE discord_id = $1`,
-        [discordId]
-      );
+      const user = await db.User.findOne({
+        where: { discord_id: discordId },
+        attributes: ['id', 'username', 'discord_id']
+      });
       
-      console.log(`[DEBUG] User found: ${userResult.rows.length > 0 ? 'Yes' : 'No'}`);
-      return userResult.rows[0];
+      console.log(`[DEBUG] User found: ${user ? 'Yes' : 'No'}`);
+      return user;
     } catch (error) {
       console.error(`[ERROR] getUserByDiscordId failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
       throw error;
     }
-  },
-  
-  /**
-   * Execute raw SQL queries
-   */
-  query: async (text, params) => {
-    return await pool.query(text, params);
   }
 };
