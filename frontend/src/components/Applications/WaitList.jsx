@@ -1,5 +1,5 @@
 // src/components/Applications/WaitList.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -21,6 +21,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import axiosInstance from '../../config/axios';
+import { getImageUrl } from '../../utils/imageUtils';
 
 const WaitList = ({ waitList, setWaitList }) => {
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
@@ -29,13 +30,25 @@ const WaitList = ({ waitList, setWaitList }) => {
   const [selectedImage, setSelectedImage] = useState('');
   const [notifyMessage, setNotifyMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [guildId, setGuildId] = useState(null);
+
+  useEffect(() => {
+    try {
+      const storedGuildId = localStorage.getItem('guildId');
+      if (storedGuildId) {
+        setGuildId(storedGuildId);
+      }
+    } catch (e) {
+      console.error('Failed to get guild ID from localStorage:', e);
+    }
+  }, []);
 
   const handleNotify = async () => {
-    if (!selectedApp) return;
+    if (!selectedApp || !guildId) return;
     
     setLoading(true);
     try {
-      await axiosInstance.post(`/api/guild-applications/${selectedApp.id}/notify`, {
+      await axiosInstance.post(`/api/guild-applications/${selectedApp.id}/notify?guildId=${guildId}`, {
         message: notifyMessage
       });
       
@@ -51,9 +64,11 @@ const WaitList = ({ waitList, setWaitList }) => {
   };
 
   const handleRemove = async (application) => {
+    if (!guildId) return;
+    
     setLoading(true);
     try {
-      await axiosInstance.delete(`/api/guild-applications/${application.id}`);
+      await axiosInstance.delete(`/api/guild-applications/${application.id}?guildId=${guildId}`);
       
       // Remove from waitlist
       setWaitList(prev => prev.filter(app => app.id !== application.id));
@@ -132,7 +147,7 @@ const WaitList = ({ waitList, setWaitList }) => {
                         size="small"
                         startIcon={<VisibilityIcon />}
                         onClick={() => {
-                          setSelectedImage(application.screenshot_url || application.screenshotUrl);
+                          setSelectedImage(getImageUrl(application.screenshot_url || application.screenshotUrl));
                           setImageDialogOpen(true);
                         }}
                       >

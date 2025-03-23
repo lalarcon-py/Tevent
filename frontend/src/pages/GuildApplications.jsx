@@ -58,17 +58,26 @@ const GuildApplications = () => {
       setLoading(true);
       try {
         if (isAdminRole) {
-          // Fetch pending applications
-          const appResponse = await axiosInstance.get('/api/guild-applications');
+          // Get the current guild ID from localStorage or context
+          const guildId = localStorage.getItem('guildId');
+          
+          if (!guildId) {
+            setError('No guild selected');
+            setLoading(false);
+            return;
+          }
+          
+          // Include guild ID in the request
+          const appResponse = await axiosInstance.get(`/api/guild-applications?guildId=${guildId}`);
           setApplications(appResponse.data);
           
-          // Fetch waitlist
-          const waitResponse = await axiosInstance.get('/api/guild-applications/waitlist');
+          // Also include guild ID in waitlist request
+          const waitResponse = await axiosInstance.get(`/api/guild-applications/waitlist?guildId=${guildId}`);
           setWaitList(waitResponse.data);
         } else if (appliedGuildId) {
           // For regular users, check if they have a pending application
           try {
-            const userAppResponse = await axiosInstance.get('/api/guild-applications/my-application');
+            const userAppResponse = await axiosInstance.get(`/api/guild-applications/my-application?guildId=${appliedGuildId}`);
             setUserApplication(userAppResponse.data);
           } catch (err) {
             if (err.response?.status !== 404) {

@@ -1,5 +1,5 @@
 // src/components/Applications/ApplicationList.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -22,6 +22,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import axiosInstance from '../../config/axios';
+import { getImageUrl } from '../../utils/imageUtils';
 
 const ApplicationList = ({ applications, setApplications, setWaitList }) => {
   const [denyDialogOpen, setDenyDialogOpen] = useState(false);
@@ -29,11 +30,28 @@ const ApplicationList = ({ applications, setApplications, setWaitList }) => {
   const [selectedApp, setSelectedApp] = useState(null);
   const [selectedImage, setSelectedImage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [guildId, setGuildId] = useState(null);
+
+  useEffect(() => {
+    try {
+      const storedGuildId = localStorage.getItem('guildId');
+      if (storedGuildId) {
+        setGuildId(storedGuildId);
+      }
+    } catch (e) {
+      console.error('Failed to get guild ID from localStorage:', e);
+    }
+  }, []);
 
   const handleApprove = async (application) => {
+    if (!guildId) {
+      console.error('No guild ID available');
+      return;
+    }
+    
     setLoading(true);
     try {
-      await axiosInstance.post(`/api/guild-applications/${application.id}/approve`);
+      await axiosInstance.post(`/api/guild-applications/${application.id}/approve?guildId=${guildId}`);
       
       // Remove from applications list
       setApplications(prev => prev.filter(app => app.id !== application.id));
@@ -45,9 +63,14 @@ const ApplicationList = ({ applications, setApplications, setWaitList }) => {
   };
 
   const handleWaitlist = async (application) => {
+    if (!guildId) {
+      console.error('No guild ID available');
+      return;
+    }
+    
     setLoading(true);
     try {
-      const response = await axiosInstance.post(`/api/guild-applications/${application.id}/waitlist`);
+      const response = await axiosInstance.post(`/api/guild-applications/${application.id}/waitlist?guildId=${guildId}`);
       
       // Remove from applications list
       setApplications(prev => prev.filter(app => app.id !== application.id));
@@ -62,11 +85,14 @@ const ApplicationList = ({ applications, setApplications, setWaitList }) => {
   };
 
   const handleDeny = async () => {
-    if (!selectedApp) return;
+    if (!selectedApp || !guildId) {
+      console.error('No application or guild ID available');
+      return;
+    }
     
     setLoading(true);
     try {
-      await axiosInstance.post(`/api/guild-applications/${selectedApp.id}/deny`);
+      await axiosInstance.post(`/api/guild-applications/${selectedApp.id}/deny?guildId=${guildId}`);
       
       // Remove from applications list
       setApplications(prev => prev.filter(app => app.id !== selectedApp.id));
@@ -149,7 +175,7 @@ const ApplicationList = ({ applications, setApplications, setWaitList }) => {
                         size="small"
                         startIcon={<VisibilityIcon />}
                         onClick={() => {
-                          setSelectedImage(application.screenshot_url || application.screenshotUrl);
+                          setSelectedImage(getImageUrl(application.screenshot_url || application.screenshotUrl));
                           setImageDialogOpen(true);
                         }}
                       >
@@ -228,7 +254,7 @@ const ApplicationList = ({ applications, setApplications, setWaitList }) => {
         <DialogTitle>Gear Screenshot</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <img 
+          <img 
               src={selectedImage} 
               alt="Gear Screenshot" 
               style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }} 

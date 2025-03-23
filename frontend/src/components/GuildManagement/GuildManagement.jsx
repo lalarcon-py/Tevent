@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { Box, TextField, CircularProgress } from '@mui/material';
 import MembersList from './MembersList';
 import InviteLinkButton from '../InviteLinkButton';
-import GearCheckButton from './GearCheckButton';
 import LeaveGuildButton from './LeaveGuildButton';
 import DiscordLogin from '../Auth/DiscordLogin';
 import { useAuth } from '../../contexts/AuthContext';
@@ -133,7 +132,6 @@ const GuildManagement = () => {
             
             <Box sx={{ display: 'flex', gap: 2 }}>
               <InviteLinkButton />
-              <GearCheckButton />
               {guildId && <LeaveGuildButton guildId={guildId} currentUserRole={currentUser?.role} />}
             </Box>
           </Box>
@@ -147,7 +145,7 @@ const GuildManagement = () => {
               searchTerm={searchTerm} 
               members={members} 
               setMembers={setMembers}
-              currentUser={user} // Pass the current user from auth context
+              currentUser={user}
             />
           </Box>
         </>
