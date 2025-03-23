@@ -158,6 +158,18 @@ const gearCheckController = {
       console.error('Error uploading gear check:', error);
       res.status(500).json({ error: 'Failed to upload gear check', details: error.message });
     }
+
+    try {
+      const webhookURL = `${process.env.BOT_WEBHOOK_URL || 'http://localhost:3300'}/webhook/new-gear-check`;
+      await axios.post(webhookURL, {
+        guildId: gearCheck.guild_id,
+        gearCheckId: gearCheck.id,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+    } catch (webhookError) {
+      console.error('Error notifying Discord bot about new gear check:', webhookError);
+      // Continue even if webhook fails
+    }
   },
   
   // Approve a gear check

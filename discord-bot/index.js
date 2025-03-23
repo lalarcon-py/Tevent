@@ -1176,6 +1176,241 @@ client.on('guildCreate', async (guild) => {
   }
 });
 
+app.post('/webhook/new-application', async (req, res) => {
+  try {
+    const { guildId, applicationId, secret } = req.body;
+    
+    console.log(`[INFO] Received new application webhook - Guild: ${guildId}, Application: ${applicationId}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get application details
+    const applicationResult = await pool.query(
+      `SELECT ga.*, u.username, u.discord_id, g.name as guild_name 
+       FROM guild_applications ga
+       JOIN users u ON ga.user_id = u.id
+       JOIN guilds g ON ga.guild_id = g.id
+       WHERE ga.id = $1`,
+      [applicationId]
+    );
+    
+    if (!applicationResult.rows.length) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    
+    const application = applicationResult.rows[0];
+    
+    // Get Discord guild ID from mapping
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Create the application embed
+    const embed = new EmbedBuilder()
+      .setTitle('📝 New Guild Application')
+      .setDescription(`**${application.username}** has applied to join ${application.guild_name}`)
+      .addFields(
+        { name: 'In-Game Name', value: application.in_game_name || 'Not provided', inline: true },
+        { name: 'Combat Power', value: application.combat_power?.toString() || 'Not provided', inline: true },
+        { name: 'Previous Guilds', value: application.previous_guilds || 'None', inline: false },
+        { name: 'Leave Reason', value: application.leave_reason || 'N/A', inline: false }
+      )
+      .setColor('#4CAF50')
+      .setTimestamp()
+      .setFooter({ text: `Application ID: ${applicationId}` });
+      
+    // Add QuestLog link if provided
+    if (application.questlog_link) {
+      embed.addFields({ name: 'QuestLog Link', value: application.questlog_link, inline: false });
+    }
+    
+    // Create buttons for approve/deny
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`approve_application_${applicationId}`)
+          .setLabel('Approve')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`deny_application_${applicationId}`)
+          .setLabel('Deny')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`waitlist_application_${applicationId}`)
+          .setLabel('Waitlist')
+          .setStyle(ButtonStyle.Secondary)
+      );
+    
+    // Prepare components array
+    const components = [row];
+    
+    // Add screenshot if available
+    let attachment = null;
+    if (application.screenshot_url) {
+      try {
+        // Get the screenshot file path
+        const uploadDir = path.join(__dirname, '..', application.screenshot_url);
+        if (fs.existsSync(uploadDir)) {
+          attachment = new AttachmentBuilder(uploadDir, { name: 'screenshot.png' });
+          embed.setImage('attachment://screenshot.png');
+        }
+      } catch (fileError) {
+        console.error(`Error with screenshot file: ${fileError.message}`);
+      }
+    }
+    
+    // Send notification to the configured channel
+    const message = await sendNotificationToConfiguredChannel(
+      guildId, 
+      discordGuildId, 
+      'applications', 
+      embed,
+      null,
+      components,
+      attachment ? [attachment] : undefined
+    );
+    
+    if (message) {
+      // Store reference to this message for later updates
+      await pool.query(
+        `INSERT INTO discord_application_messages 
+         (guild_id, application_id, channel_id, message_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (application_id) DO UPDATE SET
+         channel_id = $3, message_id = $4`,
+        [guildId, applicationId, message.channelId, message.id]
+      );
+      
+      console.log(`[INFO] Application notification sent successfully for application ${applicationId}`);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`[ERROR] Error processing application webhook:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Gear Check Webhook
+app.post('/webhook/new-gear-check', async (req, res) => {
+  try {
+    const { guildId, gearCheckId, secret } = req.body;
+    
+    console.log(`[INFO] Received new gear check webhook - Guild: ${guildId}, Gear Check: ${gearCheckId}`);
+    
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.error(`[ERROR] Invalid webhook secret provided`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Get gear check details
+    const gearCheckResult = await pool.query(
+      `SELECT gc.*, u.username, u.discord_id, u.combat_power
+       FROM gear_checks gc
+       JOIN users u ON gc.user_id = u.id
+       WHERE gc.id = $1`,
+      [gearCheckId]
+    );
+    
+    if (!gearCheckResult.rows.length) {
+      return res.status(404).json({ error: 'Gear check not found' });
+    }
+    
+    const gearCheck = gearCheckResult.rows[0];
+    
+    // Get Discord guild ID from mapping
+    const mappingResult = await pool.query(
+      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
+      [guildId]
+    );
+    
+    if (!mappingResult.rows.length) {
+      return res.status(404).json({ error: 'Discord guild mapping not found' });
+    }
+    
+    const discordGuildId = mappingResult.rows[0].discord_guild_id;
+    
+    // Create the gear check embed
+    const embed = new EmbedBuilder()
+      .setTitle('⚔️ Gear Check Submission')
+      .setDescription(`**${gearCheck.username}** has submitted a gear check`)
+      .addFields(
+        { name: 'Combat Power', value: gearCheck.combat_power?.toString() || 'Not available', inline: true },
+        { name: 'Status', value: 'Pending Review', inline: true }
+      )
+      .setColor('#1E88E5')
+      .setTimestamp()
+      .setFooter({ text: `Gear Check ID: ${gearCheckId}` });
+    
+    // Create buttons for approve/deny
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`approve_gear_check_${gearCheckId}`)
+          .setLabel('Approve')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`deny_gear_check_${gearCheckId}`)
+          .setLabel('Deny')
+          .setStyle(ButtonStyle.Danger)
+      );
+    
+    // Add gear screenshot if available
+    let attachment = null;
+    if (gearCheck.image_url) {
+      try {
+        // Get the screenshot file path
+        const uploadDir = path.join(__dirname, '..', gearCheck.image_url);
+        if (fs.existsSync(uploadDir)) {
+          attachment = new AttachmentBuilder(uploadDir, { name: 'gear.png' });
+          embed.setImage('attachment://gear.png');
+        }
+      } catch (fileError) {
+        console.error(`Error with gear image file: ${fileError.message}`);
+      }
+    }
+    
+    // Send notification to the configured channel
+    const message = await sendNotificationToConfiguredChannel(
+      guildId, 
+      discordGuildId, 
+      'gear_checks', 
+      embed,
+      null,
+      [row],
+      attachment ? [attachment] : undefined
+    );
+    
+    if (message) {
+      // Store reference to this message for later updates
+      await pool.query(
+        `INSERT INTO discord_gear_check_messages 
+         (guild_id, gear_check_id, channel_id, message_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (gear_check_id) DO UPDATE SET
+         channel_id = $3, message_id = $4`,
+        [guildId, gearCheckId, message.channelId, message.id]
+      );
+      
+      console.log(`[INFO] Gear check notification sent successfully for check ${gearCheckId}`);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`[ERROR] Error processing gear check webhook:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Member join handler
 client.on('guildMemberAdd', async (member) => {
@@ -1926,6 +2161,361 @@ client.on('interactionCreate', async (interaction) => {
           }
         }
       }
+
+      else if (customId.startsWith('approve_application_')) {
+        const applicationId = customId.replace('approve_application_', '');
+        
+        // Immediately acknowledge the interaction
+        await interaction.deferReply({ ephemeral: true });
+        
+        try {
+          // Get application details
+          const applicationResult = await pool.query(
+            `SELECT ga.*, u.username, u.discord_id, g.name as guild_name 
+            FROM guild_applications ga
+            JOIN users u ON ga.user_id = u.id
+            JOIN guilds g ON ga.guild_id = g.id
+            WHERE ga.id = $1`,
+            [applicationId]
+          );
+          
+          if (!applicationResult.rows.length) {
+            return await interaction.editReply({ content: 'Application not found.' });
+          }
+          
+          const application = applicationResult.rows[0];
+          
+          // Verify the application status
+          if (application.status !== 'PENDING') {
+            return await interaction.editReply({ 
+              content: `This application has already been ${application.status.toLowerCase()}.` 
+            });
+          }
+          
+          // Begin transaction for approval
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            
+            // 1. Update application status
+            await client.query(
+              `UPDATE guild_applications 
+              SET status = 'APPROVED', processed_by = $1, updated_at = NOW()
+              WHERE id = $2`,
+              [interaction.user.id, applicationId]
+            );
+            
+            // 2. Add user to guild
+            await client.query(
+              `INSERT INTO guild_members
+              (id, guild_id, user_id, role, created_at, updated_at)
+              VALUES (gen_random_uuid(), $1, $2, 'Guild Member', NOW(), NOW())`,
+              [application.guild_id, application.user_id]
+            );
+            
+            await client.query('COMMIT');
+            
+            // Notify the applicant if they have a Discord ID
+            if (application.discord_id) {
+              try {
+                const user = await client.users.fetch(application.discord_id);
+                await user.send(`✅ Your application to join **${application.guild_name}** has been approved! Welcome to the guild!`);
+              } catch (dmError) {
+                console.error(`Failed to DM user ${application.discord_id}:`, dmError);
+              }
+            }
+            
+            // Update the original message
+            const messageResult = await pool.query(
+              `SELECT channel_id, message_id 
+              FROM discord_application_messages
+              WHERE application_id = $1`,
+              [applicationId]
+            );
+            
+            if (messageResult.rows.length) {
+              try {
+                const { channel_id, message_id } = messageResult.rows[0];
+                const channel = await client.channels.fetch(channel_id);
+                const message = await channel.messages.fetch(message_id);
+                
+                // Update the embed to show approved status
+                const embed = message.embeds[0];
+                const newEmbed = EmbedBuilder.from(embed)
+                  .setColor('#4CAF50')
+                  .setTitle('📝 Guild Application - APPROVED')
+                  .setDescription(`**${application.username}**'s application to join ${application.guild_name} has been approved`)
+                  .addFields({ name: 'Approved By', value: interaction.user.username, inline: true });
+                
+                // Create disabled buttons
+                const disabledRow = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId(`approved_application_${applicationId}`)
+                      .setLabel('Approved')
+                      .setStyle(ButtonStyle.Success)
+                      .setDisabled(true)
+                  );
+                
+                await message.edit({ embeds: [newEmbed], components: [disabledRow] });
+              } catch (messageError) {
+                console.error(`Error updating application message:`, messageError);
+              }
+            }
+            
+            await interaction.editReply({ 
+              content: `✅ Successfully approved ${application.username}'s application to join ${application.guild_name}.`
+            });
+            
+          } catch (error) {
+            await client.query('ROLLBACK');
+            console.error(`Error approving application:`, error);
+            await interaction.editReply({ 
+              content: `❌ Error approving application: ${error.message}`
+            });
+          } finally {
+            client.release();
+          }
+        } catch (error) {
+          console.error(`Error handling application approval:`, error);
+          await interaction.editReply({ 
+            content: `❌ An error occurred: ${error.message}`
+          });
+        }
+      }
+      else if (customId.startsWith('deny_application_')) {
+        const applicationId = customId.replace('deny_application_', '');
+        
+        // Request a reason for denial
+        await interaction.showModal(
+          new ModalBuilder()
+            .setCustomId(`denial_reason_${applicationId}`)
+            .setTitle('Application Denial')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('denial_reason')
+                  .setLabel('Reason for denial')
+                  .setStyle(TextInputStyle.Paragraph)
+                  .setPlaceholder('Please provide a reason for denying this application')
+                  .setRequired(true)
+                  .setMaxLength(1000)
+              )
+            )
+        );
+      }
+      else if (customId.startsWith('waitlist_application_')) {
+        const applicationId = customId.replace('waitlist_application_', '');
+        
+        // Immediately acknowledge the interaction
+        await interaction.deferReply({ ephemeral: true });
+        
+        try {
+          // Get application details
+          const applicationResult = await pool.query(
+            `SELECT ga.*, u.username, u.discord_id, g.name as guild_name 
+            FROM guild_applications ga
+            JOIN users u ON ga.user_id = u.id
+            JOIN guilds g ON ga.guild_id = g.id
+            WHERE ga.id = $1`,
+            [applicationId]
+          );
+          
+          if (!applicationResult.rows.length) {
+            return await interaction.editReply({ content: 'Application not found.' });
+          }
+          
+          const application = applicationResult.rows[0];
+          
+          // Verify the application status
+          if (application.status !== 'PENDING') {
+            return await interaction.editReply({ 
+              content: `This application has already been ${application.status.toLowerCase()}.` 
+            });
+          }
+          
+          // Update application status
+          await pool.query(
+            `UPDATE guild_applications 
+            SET status = 'WAITLISTED', processed_by = $1, waitlisted_at = NOW(), updated_at = NOW()
+            WHERE id = $2`,
+            [interaction.user.id, applicationId]
+          );
+          
+          // Notify the applicant if they have a Discord ID
+          if (application.discord_id) {
+            try {
+              const user = await client.users.fetch(application.discord_id);
+              await user.send(`ℹ️ Your application to join **${application.guild_name}** has been waitlisted. We'll contact you when a spot opens up.`);
+            } catch (dmError) {
+              console.error(`Failed to DM user ${application.discord_id}:`, dmError);
+            }
+          }
+          
+          // Update the original message
+          const messageResult = await pool.query(
+            `SELECT channel_id, message_id 
+            FROM discord_application_messages
+            WHERE application_id = $1`,
+            [applicationId]
+          );
+          
+          if (messageResult.rows.length) {
+            try {
+              const { channel_id, message_id } = messageResult.rows[0];
+              const channel = await client.channels.fetch(channel_id);
+              const message = await channel.messages.fetch(message_id);
+              
+              // Update the embed to show waitlisted status
+              const embed = message.embeds[0];
+              const newEmbed = EmbedBuilder.from(embed)
+                .setColor('#FFC107')
+                .setTitle('📝 Guild Application - WAITLISTED')
+                .setDescription(`**${application.username}**'s application to join ${application.guild_name} has been waitlisted`)
+                .addFields({ name: 'Waitlisted By', value: interaction.user.username, inline: true });
+              
+              // Create disabled buttons
+              const disabledRow = new ActionRowBuilder()
+                .addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`waitlisted_application_${applicationId}`)
+                    .setLabel('Waitlisted')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+                );
+              
+              await message.edit({ embeds: [newEmbed], components: [disabledRow] });
+            } catch (messageError) {
+              console.error(`Error updating application message:`, messageError);
+            }
+          }
+          
+          await interaction.editReply({ 
+            content: `✅ Successfully waitlisted ${application.username}'s application to join ${application.guild_name}.`
+          });
+        } catch (error) {
+          console.error(`Error handling application waitlisting:`, error);
+          await interaction.editReply({ 
+            content: `❌ An error occurred: ${error.message}`
+          });
+        }
+      }
+      else if (customId.startsWith('approve_gear_check_')) {
+        const gearCheckId = customId.replace('approve_gear_check_', '');
+        
+        // Immediately acknowledge the interaction
+        await interaction.deferReply({ ephemeral: true });
+        
+        try {
+          // Get gear check details
+          const gearCheckResult = await pool.query(
+            `SELECT gc.*, u.username, u.discord_id
+            FROM gear_checks gc
+            JOIN users u ON gc.user_id = u.id
+            WHERE gc.id = $1`,
+            [gearCheckId]
+          );
+          
+          if (!gearCheckResult.rows.length) {
+            return await interaction.editReply({ content: 'Gear check not found.' });
+          }
+          
+          const gearCheck = gearCheckResult.rows[0];
+          
+          // Verify the gear check status
+          if (gearCheck.status !== 'pending') {
+            return await interaction.editReply({ 
+              content: `This gear check has already been ${gearCheck.status}.` 
+            });
+          }
+          
+          // Update gear check status
+          await pool.query(
+            `UPDATE gear_checks 
+            SET status = 'approved', reviewed_by = $1, updated_at = NOW()
+            WHERE id = $2`,
+            [interaction.user.id, gearCheckId]
+          );
+          
+          // Notify the user if they have a Discord ID
+          if (gearCheck.discord_id) {
+            try {
+              const user = await client.users.fetch(gearCheck.discord_id);
+              await user.send(`✅ Your gear check has been approved!`);
+            } catch (dmError) {
+              console.error(`Failed to DM user ${gearCheck.discord_id}:`, dmError);
+            }
+          }
+          
+          // Update the original message
+          const messageResult = await pool.query(
+            `SELECT channel_id, message_id 
+            FROM discord_gear_check_messages
+            WHERE gear_check_id = $1`,
+            [gearCheckId]
+          );
+          
+          if (messageResult.rows.length) {
+            try {
+              const { channel_id, message_id } = messageResult.rows[0];
+              const channel = await client.channels.fetch(channel_id);
+              const message = await channel.messages.fetch(message_id);
+              
+              // Update the embed to show approved status
+              const embed = message.embeds[0];
+              const newEmbed = EmbedBuilder.from(embed)
+                .setColor('#4CAF50')
+                .setTitle('⚔️ Gear Check - APPROVED')
+                .setDescription(`**${gearCheck.username}**'s gear check has been approved`)
+                .addFields({ name: 'Approved By', value: interaction.user.username, inline: true });
+              
+              // Create disabled buttons
+              const disabledRow = new ActionRowBuilder()
+                .addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`approved_gear_check_${gearCheckId}`)
+                    .setLabel('Approved')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true)
+                );
+              
+              await message.edit({ embeds: [newEmbed], components: [disabledRow] });
+            } catch (messageError) {
+              console.error(`Error updating gear check message:`, messageError);
+            }
+          }
+          
+          await interaction.editReply({ 
+            content: `✅ Successfully approved ${gearCheck.username}'s gear check.`
+          });
+        } catch (error) {
+          console.error(`Error handling gear check approval:`, error);
+          await interaction.editReply({ 
+            content: `❌ An error occurred: ${error.message}`
+          });
+        }
+      }
+      else if (customId.startsWith('deny_gear_check_')) {
+        const gearCheckId = customId.replace('deny_gear_check_', '');
+        
+        // Request a reason for denial
+        await interaction.showModal(
+          new ModalBuilder()
+            .setCustomId(`gear_denial_reason_${gearCheckId}`)
+            .setTitle('Gear Check Denial')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('denial_reason')
+                  .setLabel('Reason for denial')
+                  .setStyle(TextInputStyle.Paragraph)
+                  .setPlaceholder('Please provide feedback on why this gear check was denied')
+                  .setRequired(true)
+                  .setMaxLength(1000)
+              )
+            )
+        );
+      }
       
       // Handle item request buttons (Need/Greed)
       else if (customId.startsWith('need_item_') || customId.startsWith('need_trait_') || customId.startsWith('greed_item_')) {
@@ -2126,7 +2716,6 @@ client.on('interactionCreate', async (interaction) => {
         }
       }
       
-      // Handle approve_loot button
       // Handle approve_loot button
       else if (customId.startsWith('approve_loot_')) {
         const requestId = customId.replace('approve_loot_', '');
@@ -3068,6 +3657,208 @@ client.on('interactionCreate', async (interaction) => {
             console.error(`Error in loot approval process: ${error.message}`);
             interaction.editReply("An error occurred while processing the request.").catch(() => {});
           });
+      }
+
+      if (interaction.isModalSubmit()) {
+        // Application denial reason
+        if (interaction.customId.startsWith('denial_reason_')) {
+          const applicationId = interaction.customId.replace('denial_reason_', '');
+          const reason = interaction.fields.getTextInputValue('denial_reason');
+          
+          await interaction.deferReply({ ephemeral: true });
+          
+          try {
+            // Get application details
+            const applicationResult = await pool.query(
+              `SELECT ga.*, u.username, u.discord_id, g.name as guild_name 
+               FROM guild_applications ga
+               JOIN users u ON ga.user_id = u.id
+               JOIN guilds g ON ga.guild_id = g.id
+               WHERE ga.id = $1`,
+              [applicationId]
+            );
+            
+            if (!applicationResult.rows.length) {
+              return await interaction.editReply({ content: 'Application not found.' });
+            }
+            
+            const application = applicationResult.rows[0];
+            
+            // Verify the application status
+            if (application.status !== 'PENDING') {
+              return await interaction.editReply({ 
+                content: `This application has already been ${application.status.toLowerCase()}.` 
+              });
+            }
+            
+            // Update application status with reason
+            await pool.query(
+              `UPDATE guild_applications 
+               SET status = 'DENIED', processed_by = $1, updated_at = NOW(), denial_reason = $2
+               WHERE id = $3`,
+              [interaction.user.id, reason, applicationId]
+            );
+            
+            // Notify the applicant if they have a Discord ID
+            if (application.discord_id) {
+              try {
+                const user = await client.users.fetch(application.discord_id);
+                await user.send(`❌ Your application to join **${application.guild_name}** has been denied.\n\n**Reason:** ${reason}`);
+              } catch (dmError) {
+                console.error(`Failed to DM user ${application.discord_id}:`, dmError);
+              }
+            }
+            
+            // Update the original message
+            const messageResult = await pool.query(
+              `SELECT channel_id, message_id 
+               FROM discord_application_messages
+               WHERE application_id = $1`,
+              [applicationId]
+            );
+            
+            if (messageResult.rows.length) {
+              try {
+                const { channel_id, message_id } = messageResult.rows[0];
+                const channel = await client.channels.fetch(channel_id);
+                const message = await channel.messages.fetch(message_id);
+                
+                // Update the embed to show denied status
+                const embed = message.embeds[0];
+                const newEmbed = EmbedBuilder.from(embed)
+                  .setColor('#F44336')
+                  .setTitle('📝 Guild Application - DENIED')
+                  .setDescription(`**${application.username}**'s application to join ${application.guild_name} has been denied`)
+                  .addFields(
+                    { name: 'Denied By', value: interaction.user.username, inline: true },
+                    { name: 'Reason', value: reason, inline: false }
+                  );
+                
+                // Create disabled buttons
+                const disabledRow = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId(`denied_application_${applicationId}`)
+                      .setLabel('Denied')
+                      .setStyle(ButtonStyle.Danger)
+                      .setDisabled(true)
+                  );
+                
+                await message.edit({ embeds: [newEmbed], components: [disabledRow] });
+              } catch (messageError) {
+                console.error(`Error updating application message:`, messageError);
+              }
+            }
+            
+            await interaction.editReply({ 
+              content: `❌ ${application.username}'s application has been denied.\n\n**Reason:** ${reason}`
+            });
+          } catch (error) {
+            console.error(`Error handling application denial:`, error);
+            await interaction.editReply({ 
+              content: `❌ An error occurred: ${error.message}`
+            });
+          }
+        }
+        // Gear check denial reason
+        else if (interaction.customId.startsWith('gear_denial_reason_')) {
+          const gearCheckId = interaction.customId.replace('gear_denial_reason_', '');
+          const reason = interaction.fields.getTextInputValue('denial_reason');
+          
+          await interaction.deferReply({ ephemeral: true });
+          
+          try {
+            // Get gear check details
+            const gearCheckResult = await pool.query(
+              `SELECT gc.*, u.username, u.discord_id
+               FROM gear_checks gc
+               JOIN users u ON gc.user_id = u.id
+               WHERE gc.id = $1`,
+              [gearCheckId]
+            );
+            
+            if (!gearCheckResult.rows.length) {
+              return await interaction.editReply({ content: 'Gear check not found.' });
+            }
+            
+            const gearCheck = gearCheckResult.rows[0];
+            
+            // Verify the gear check status
+            if (gearCheck.status !== 'pending') {
+              return await interaction.editReply({ 
+                content: `This gear check has already been ${gearCheck.status}.` 
+              });
+            }
+            
+            // Update gear check status with reason
+            await pool.query(
+              `UPDATE gear_checks 
+               SET status = 'denied', reviewed_by = $1, updated_at = NOW(), denial_reason = $2
+               WHERE id = $3`,
+              [interaction.user.id, reason, gearCheckId]
+            );
+            
+            // Notify the user if they have a Discord ID
+            if (gearCheck.discord_id) {
+              try {
+                const user = await client.users.fetch(gearCheck.discord_id);
+                await user.send(`❌ Your gear check was not approved.\n\n**Feedback:** ${reason}`);
+              } catch (dmError) {
+                console.error(`Failed to DM user ${gearCheck.discord_id}:`, dmError);
+              }
+            }
+            
+            // Update the original message
+            const messageResult = await pool.query(
+              `SELECT channel_id, message_id 
+               FROM discord_gear_check_messages
+               WHERE gear_check_id = $1`,
+              [gearCheckId]
+            );
+            
+            if (messageResult.rows.length) {
+              try {
+                const { channel_id, message_id } = messageResult.rows[0];
+                const channel = await client.channels.fetch(channel_id);
+                const message = await channel.messages.fetch(message_id);
+                
+                // Update the embed to show denied status
+                const embed = message.embeds[0];
+                const newEmbed = EmbedBuilder.from(embed)
+                  .setColor('#F44336')
+                  .setTitle('⚔️ Gear Check - DENIED')
+                  .setDescription(`**${gearCheck.username}**'s gear check was not approved`)
+                  .addFields(
+                    { name: 'Reviewed By', value: interaction.user.username, inline: true },
+                    { name: 'Feedback', value: reason, inline: false }
+                  );
+                
+                // Create disabled buttons
+                const disabledRow = new ActionRowBuilder()
+                  .addComponents(
+                    new ButtonBuilder()
+                      .setCustomId(`denied_gear_check_${gearCheckId}`)
+                      .setLabel('Denied')
+                      .setStyle(ButtonStyle.Danger)
+                      .setDisabled(true)
+                  );
+                
+                await message.edit({ embeds: [newEmbed], components: [disabledRow] });
+              } catch (messageError) {
+                console.error(`Error updating gear check message:`, messageError);
+              }
+            }
+            
+            await interaction.editReply({ 
+              content: `❌ ${gearCheck.username}'s gear check was not approved.\n\n**Feedback:** ${reason}`
+            });
+          } catch (error) {
+            console.error(`Error handling gear check denial:`, error);
+            await interaction.editReply({ 
+              content: `❌ An error occurred: ${error.message}`
+            });
+          }
+        }
       }
       
       // Handle deny_loot button
@@ -4531,7 +5322,7 @@ async function handleConfigChannelCommand(interaction, appGuildId) {
   }
 }
 
-async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type, embed, content = null, components = []) {
+async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type, embed, content = null, components = [], attachments = []) {
   try {
     console.log(`[INFO] Attempting to send ${type} notification for guild ${guildId}`);
     
@@ -4578,11 +5369,12 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
           return false;
         }
         
-        // THIS IS THE IMPORTANT PART - properly pass the components
+        // Send message with all components and attachments
         const message = await channel.send({
           content: content ? content : `📢 New ${type} notification:`,
           embeds: [embed],
-          components: components
+          components: components,
+          files: attachments
         });
         
         console.log(`[INFO] Sent ${type} notification to fallback channel ${channelId}`);
@@ -4598,11 +5390,12 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
         return false;
       }
       
-      // THIS IS THE IMPORTANT PART - properly pass the components
+      // Send message with all components and attachments
       const message = await generalChannel.send({
         content: content ? content : `📢 New ${type} notification:`,
         embeds: [embed],
-        components: components
+        components: components,
+        files: attachments
       });
       
       console.log(`[INFO] Sent ${type} notification to general channel ${generalChannelId}`);
@@ -4623,12 +5416,13 @@ async function sendNotificationToConfiguredChannel(guildId, discordGuildId, type
       return false;
     }
     
-    // Send notification
-    console.log(`[INFO] Sending message to channel ${channelId} with components:`, JSON.stringify(components));
+    // Send notification with all components and attachments
+    console.log(`[INFO] Sending message to channel ${channelId} with components and attachments`);
     const message = await channel.send({
       content: content || '',
       embeds: [embed],
-      components: components
+      components: components,
+      files: attachments
     });
     
     console.log(`[INFO] Successfully sent ${type} notification to channel ${channelId}`);

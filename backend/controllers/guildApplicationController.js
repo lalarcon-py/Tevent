@@ -26,7 +26,6 @@ const uploadScreenshot = (file) => {
 
 const guildApplicationController = {
   // Submit a new application
-  // Submit a new application
   submit: async (req, res) => {
     try {
       if (!req.isAuthenticated()) {
@@ -81,6 +80,17 @@ const guildApplicationController = {
     } catch (error) {
       console.error('Error submitting application:', error);
       res.status(500).json({ error: 'Failed to submit application' });
+    }
+    try {
+      const webhookURL = `${process.env.BOT_WEBHOOK_URL || 'http://localhost:3300'}/webhook/new-application`;
+      await axios.post(webhookURL, {
+        guildId: application.guild_id,
+        applicationId: application.id,
+        secret: process.env.BOT_WEBHOOK_SECRET
+      });
+    } catch (webhookError) {
+      console.error('Error notifying Discord bot about new application:', webhookError);
+      // Continue even if webhook fails
     }
   },
   
