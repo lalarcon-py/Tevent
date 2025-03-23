@@ -84,8 +84,23 @@ const LandingPage = () => {
       setLoading(true);
       setError(null);
       
-      const response = await axiosInstance.get('/api/guilds/available');
-      setGuilds(response.data);
+      // Explicitly request public guilds only with a clear parameter
+      const response = await axiosInstance.get('/api/guilds/available?publicOnly=true');
+      
+      // Log the raw data for debugging
+      console.log('Raw guilds data:', response.data);
+      
+      // Extra safety filter on the frontend side
+      const filteredGuilds = response.data.filter(guild => {
+        // Check for the private flag in various possible formats
+        return !(
+          guild.private_guild === true || 
+          guild.privateGuild === true
+        );
+      });
+      
+      console.log('Filtered guilds (frontend):', filteredGuilds);
+      setGuilds(filteredGuilds);
     } catch (error) {
       console.error('Failed to fetch guilds:', error);
       setError('Unable to load available guilds. Please try again.');
@@ -727,22 +742,9 @@ const LandingPage = () => {
                       flexDirection: isMobile ? 'column' : 'row'
                     }}>
                     <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
-                        sx={{
-                          flexGrow: 1,
-                          borderColor: '#64748b',
-                          color: '#cbd5e1',
-                          fontSize: isMobile ? '0.75rem' : '0.875rem'
-                        }}
-                      >
-                        Apply
-                      </Button>
-                      <Button
                         variant="contained"
                         size="small"
-                        onClick={() => openGuildJoinDialog(guild)}
+                        onClick={() => navigate(`/guild-apply?guildId=${guild.id}`)}
                         sx={{
                           flexGrow: 1,
                           bgcolor: '#3b82f6',
@@ -753,7 +755,7 @@ const LandingPage = () => {
                           fontSize: isMobile ? '0.75rem' : '0.875rem'
                         }}
                       >
-                        Join
+                        Apply
                       </Button>
                     </Box>
                   </Box>

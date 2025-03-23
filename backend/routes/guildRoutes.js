@@ -115,6 +115,28 @@ router.post('/create', authenticateJWT, async (req, res) => {
   }
 });
 
+router.get('/debug-private-settings', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    // Direct SQL query to bypass any ORM issues
+    const [results] = await db.sequelize.query(
+      `SELECT id, name, private_guild FROM guilds ORDER BY name`,
+      { type: db.sequelize.QueryTypes.SELECT }
+    );
+    
+    res.json({
+      guilds: results,
+      message: "Guild privacy settings for debugging"
+    });
+  } catch (error) {
+    console.error('Debug query error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/join-by-code', async (req, res) => {
   const t = await sequelize.transaction();
   
@@ -486,18 +508,32 @@ router.get('/available', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
+    // Extract the publicOnly parameter
+    const publicOnly = req.query.publicOnly === 'true';
+    
     // Get guilds the user is not already a member of
     const userGuildIds = await db.GuildMember.findAll({
       where: { user_id: req.user.id },
       attributes: ['guild_id']
     }).then(memberships => memberships.map(m => m.guild_id));
     
+    // Build the where clause
+    const whereClause = {
+      status: 'ACTIVE'
+    };
+    
+    // Add condition to exclude user's guilds
+    if (userGuildIds.length > 0) {
+      whereClause.id = { [Op.notIn]: userGuildIds };
+    }
+    
+    // Add condition to show only public guilds
+    whereClause.private_guild = false;
+    
+    // Query guilds with needed attributes including private flag
     const availableGuilds = await db.Guild.findAll({
-      where: {
-        id: { [Op.notIn]: userGuildIds },
-        status: 'ACTIVE'
-      },
-      attributes: ['id', 'name', 'created_at']
+      where: whereClause,
+      attributes: ['id', 'name', 'created_at', 'private_guild']
     });
     
     // Get owner names and member counts
@@ -524,7 +560,8 @@ router.get('/available', async (req, res) => {
         name: guild.name,
         ownerName: owner?.User?.username || 'Unknown',
         memberCount,
-        createdAt: guild.created_at
+        createdAt: guild.created_at,
+        privateGuild: guild.private_guild
       };
     }));
     

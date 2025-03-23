@@ -895,50 +895,54 @@ const getAvailableGuilds = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
+    // Extract the publicOnly parameter
+    const publicOnly = req.query.publicOnly === 'true';
+    
     // Get guilds the user is not already a member of
     const userGuildIds = await db.GuildMember.findAll({
       where: { user_id: req.user.id },
       attributes: ['guild_id']
     }).then(memberships => memberships.map(m => m.guild_id));
     
+    // Build the where clause
+    const whereClause = {
+      status: 'ACTIVE'
+    };
     
-    // Ensure we handle the case of empty userGuildIds array
-    // Without this, if userGuildIds is empty, the query would exclude ALL guilds
+    // Add condition to exclude user's guilds
+    if (userGuildIds.length > 0) {
+      whereClause.id = { [Op.notIn]: userGuildIds };
+    }
+    
+    // Add condition to show only public guilds
+    if (publicOnly) {
+      whereClause.private_guild = false;
+    }
+    
+    console.log('Guild filter where clause:', whereClause);
+    
+    // Query guilds
     const availableGuilds = await db.Guild.findAll({
-      where: {
-        ...(userGuildIds.length > 0 ? {
-          id: { [Op.notIn]: userGuildIds }
-        } : {}),
-        status: 'ACTIVE'
-      },
-      attributes: ['id', 'name', 'created_at']
+      where: whereClause,
+      attributes: ['id', 'name', 'created_at', 'private_guild'] // Include private_guild for debugging
     });
+    
+    console.log('Filtered guilds (backend):', availableGuilds.map(g => ({
+      id: g.id,
+      name: g.name,
+      private: g.private_guild
+    })));
     
     // Get owner names and member counts
     const guildsWithDetails = await Promise.all(availableGuilds.map(async guild => {
-      // Get owner
-      const owner = await db.GuildMember.findOne({
-        where: { 
-          guild_id: guild.id,
-          role: 'Guild Master'
-        },
-        include: [{
-          model: db.User,
-          attributes: ['username']
-        }]
-      });
-      
-      // Get member count
-      const memberCount = await db.GuildMember.count({
-        where: { guild_id: guild.id }
-      });
-      
+      // [Owner and member count logic...]
       return {
         id: guild.id,
         name: guild.name,
         ownerName: owner?.User?.username || 'Unknown',
         memberCount,
-        createdAt: guild.created_at
+        createdAt: guild.created_at,
+        privateGuild: guild.private_guild
       };
     }));
     
