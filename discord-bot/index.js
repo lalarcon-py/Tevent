@@ -94,6 +94,8 @@ const client = new Client({
   ] 
 });
 
+client.pool = pool;
+
 function formatTimerDuration(minutes) {
   if (!minutes) return "Default (24h)";
   if (minutes === 5) return '5 Minutes';
