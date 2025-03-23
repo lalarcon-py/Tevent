@@ -47,6 +47,14 @@ module.exports = (sequelize, DataTypes) => {
         isIn: [['TANK', 'HEALER', 'DPS']]
       }
     },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'CONFIRMED',
+      validate: {
+        isIn: [['CONFIRMED', 'TENTATIVE', 'ABSENT']]
+      }
+    },
     selected_build: {
       type: DataTypes.JSONB,
       allowNull: true

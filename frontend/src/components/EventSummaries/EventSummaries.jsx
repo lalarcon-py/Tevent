@@ -31,6 +31,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -186,6 +187,104 @@ const EventSummaries = () => {
     } catch (error) {
       console.error('Error fetching events:', error);
       setError('Failed to load events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markAsTentative = async (eventId) => {
+    try {
+      setLoading(true);
+      
+      // Ensure eventId is a string
+      const eventIdString = typeof eventId === 'object' ? eventId.id : eventId;
+      
+      if (!eventIdString) {
+        throw new Error('Invalid event ID');
+      }
+      
+      console.log('Marking tentative for event ID:', eventIdString);
+      
+      // Get current user data
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Get guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        throw new Error('Guild ID not found');
+      }
+      
+      // Check if user has builds
+      if (!userData.builds || userData.builds.length === 0) {
+        throw new Error("Could not find your primary build. Please set up your builds first.");
+      }
+      
+      // Determine role based on build spec
+      let role;
+      const primaryBuild = userData.builds[0];
+      if (primaryBuild.spec === 'Tank') {
+        role = 'TANK';
+      } else if (primaryBuild.spec === 'Healer') {
+        role = 'HEALER';
+      } else {
+        role = 'DPS';
+      }
+      
+      // First, remove existing participation if any
+      try {
+        const deleteResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            userId: userData.id,
+            guildId: guildId
+          })
+        });
+      } catch (error) {
+        console.warn('Error removing existing participation:', error);
+        // Continue anyway - they might not be signed up yet
+      }
+      
+      // Sign up with the role and mark as tentative
+      const signupResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          role,
+          status: 'TENTATIVE',  // New status parameter
+          guildId: guildId,
+          selectedBuild: primaryBuild
+        })
+      });
+      
+      if (!signupResponse.ok) {
+        const errorData = await signupResponse.json();
+        console.error('Signup response error:', errorData);
+        throw new Error(errorData.error || 'Failed to mark as tentative');
+      }
+      
+      // Refresh events data
+      await fetchEvents();
+      
+      setSuccessMessage("You've been marked as tentative for this event");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Error marking as tentative:', error);
+      setError(error.message || 'Failed to mark as tentative');
     } finally {
       setLoading(false);
     }
@@ -495,6 +594,7 @@ const EventSummaries = () => {
             const healerCount = event.participants?.filter(p => p.role === 'HEALER').length || 0;
             const dpsCount = event.participants?.filter(p => p.role === 'DPS').length || 0;
             const absentCount = event.absentees?.length || 0;
+            const tentativeCount = event.tentatives?.length || 0;
             
             // Calculate percentage filled
             const tankPercentage = Math.round((tankCount / event.tanks) * 100);
@@ -685,6 +785,30 @@ const EventSummaries = () => {
                       }}
                     >
                       Sign Up with Primary Build
+                    </Button>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      mt: 2
+                    }}>
+                      <Typography variant="subtitle2" sx={{ color: '#ff9800' }}>
+                        Tentative
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {tentativeCount}
+                      </Typography>
+                    </Box>
+
+                    // Add a button for marking as tentative
+                    <Button 
+                      variant="outlined"
+                      color="warning"
+                      startIcon={<HelpOutlineIcon />}
+                      onClick={() => markAsTentative(event.id)}
+                      sx={{ flex: 1 }}
+                    >
+                      Mark as Tentative
                     </Button>
                     
                     <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>

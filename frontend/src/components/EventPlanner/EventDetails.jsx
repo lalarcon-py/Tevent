@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'; // Added for tentative icon
 import { format } from 'date-fns';
 import EventForm from './EventForm';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
@@ -123,6 +124,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [absentees, setAbsentees] = useState([]);
+  const [tentatives, setTentatives] = useState([]); // Added state for tentative participants
   const { simulatedRole } = useSimulatedRole();
   const [buildSelectionOpen, setBuildSelectionOpen] = useState(false);
   const [userBuilds, setUserBuilds] = useState([]);
@@ -197,10 +199,35 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       console.error('Error fetching absentees:', error);
     }
   };
+  
+  // New function to fetch tentative participants
+  const fetchTentatives = async () => {
+    try {
+      if (!event?.id) return;
+      
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) return;
+      
+      console.log('Fetching tentatives for event:', event.id);
+      
+      const response = await fetch(`${API_URL}/api/events/${event.id}/tentatives?guildId=${guildId}`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Tentatives data:', data);
+        setTentatives(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching tentatives:', error);
+    }
+  };
 
   useEffect(() => {
     if (event?.id) {
       fetchAbsentees();
+      fetchTentatives(); // Fetch tentative participants
     }
   }, [event]);
 
@@ -335,6 +362,7 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         body: JSON.stringify({ 
           role,
           selectedBuild,
+          status: 'CONFIRMED', // Explicitly set status to CONFIRMED
           guildId: guildId
         })
       });
@@ -529,6 +557,110 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     } catch (error) {
       console.error('Error marking as absent:', error);
       setError(error.message || 'Failed to mark as absent');
+    }
+  };
+  
+  // New function to mark as tentative
+  const markAsTentative = async (eventIdParam) => {
+    try {
+      setLoading(true);
+      
+      // Ensure eventId is a string
+      const eventIdString = eventIdParam || event.id;
+      
+      if (!eventIdString) {
+        throw new Error('Invalid event ID');
+      }
+      
+      console.log('Marking tentative for event ID:', eventIdString);
+      
+      // Get current user data
+      const userResponse = await fetch(`${API_URL}/api/auth/status`, {
+        credentials: 'include'
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Failed to get user data');
+      }
+      
+      const userData = await userResponse.json();
+      
+      // Get guild ID
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId) {
+        throw new Error('Guild ID not found. Please reload the page.');
+      }
+      
+      // Check if user has builds
+      if (!userData.builds || userData.builds.length === 0) {
+        throw new Error("Could not find your primary build. Please set up your builds first.");
+      }
+      
+      // Determine role based on build spec
+      let role;
+      const primaryBuild = userData.builds[0];
+      if (primaryBuild.spec === 'Tank') {
+        role = 'TANK';
+      } else if (primaryBuild.spec === 'Healer') {
+        role = 'HEALER';
+      } else {
+        role = 'DPS';
+      }
+      
+      // First, remove existing participation if any
+      try {
+        const deleteResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            userId: userData.id,
+            guildId: guildId
+          })
+        });
+      } catch (error) {
+        console.warn('Error removing existing participation:', error);
+        // Continue anyway - they might not be signed up yet
+      }
+      
+      // Sign up with the role and mark as tentative
+      const signupResponse = await fetch(`${API_URL}/api/events/${eventIdString}/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          role,
+          status: 'TENTATIVE',  // New status parameter
+          guildId: guildId,
+          selectedBuild: primaryBuild
+        })
+      });
+      
+      if (!signupResponse.ok) {
+        const errorData = await signupResponse.json();
+        console.error('Signup response error:', errorData);
+        throw new Error(errorData.error || 'Failed to mark as tentative');
+      }
+      
+      // Refresh event data
+      if (onEventUpdate) {
+        await onEventUpdate();
+      }
+      
+      // Fetch updated tentative list
+      await fetchTentatives();
+      
+      setSuccessMessage("You've been marked as tentative for this event");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Error marking as tentative:', error);
+      setError(error.message || 'Failed to mark as tentative');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -839,6 +971,19 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                     }}
                   />
                 </Grid>
+                <Grid item>
+                  <Chip 
+                    label={`Tentative: ${tentatives?.length || 0}`}
+                    color="warning"
+                    sx={{
+                      bgcolor: 'rgba(255, 152, 0, 0.2)',
+                      color: '#ff9800',
+                      '&:hover': {
+                        bgcolor: 'rgba(255, 152, 0, 0.3)'
+                      }
+                    }}
+                  />
+                </Grid>
               </Grid>
               
               {/* New Sign Up with Primary Build Button */}
@@ -855,13 +1000,27 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                 </Button>
               </Grid>
               
-              {/* New Mark as Absent Button */}
+              {/* Mark as Tentative Button */}
+              <Grid item>
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  fullWidth
+                  onClick={() => markAsTentative(event.id)}
+                  startIcon={<HelpOutlineIcon />}
+                  sx={{ mb: 1 }}
+                >
+                  Mark as Tentative
+                </Button>
+              </Grid>
+              
+              {/* Mark as Absent Button */}
               <Grid item>
               <Button
                   variant="outlined"
                   color="error"
                   fullWidth
-                  onClick={() => markAsAbsent(event.id)}  // Use arrow function to pass event ID directly
+                  onClick={() => markAsAbsent(event.id)}
                   startIcon={<DoNotDisturbIcon />}
                 >
                   Mark as Absent
@@ -890,6 +1049,29 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                   }}
                 />
               </Box>
+            )}
+          </Box>
+
+          {/* Tentative Section */}
+          <Box mb={3}>
+            <Typography variant="h6" mb={2}>
+              Tentative ({tentatives?.length || 0})
+            </Typography>
+            {tentatives && tentatives.length > 0 ? (
+              <Box>
+                {tentatives.map(user => (
+                  <Chip
+                    key={user.id || user.User?.id}
+                    avatar={<Avatar src={user.avatar_url || user.User?.avatar_url} />}
+                    label={user.username || user.User?.username}
+                    sx={{ m: 0.5, bgcolor: 'rgba(255, 152, 0, 0.1)', color: '#ff9800', border: '1px solid rgba(255, 152, 0, 0.3)' }}
+                  />
+                ))}
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No tentative participants
+              </Typography>
             )}
           </Box>
 

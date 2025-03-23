@@ -580,6 +580,8 @@ const TeamPlanner = () => {
   const [presetToDelete, setPresetToDelete] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
   const [buildDialogOpen, setBuildDialogOpen] = useState(false);
+  const [tentativeParticipants, setTentativeParticipants] = useState([]);
+  const [memberOriginalStatuses, setMemberOriginalStatuses] = useState({});
 
   // Helper function to determine if user has permission to edit teams
   const hasEditPermission = () => {
@@ -627,6 +629,13 @@ const TeamPlanner = () => {
         color: '#aaaaaa',
         bgGradient: 'linear-gradient(to right, rgba(170, 170, 170, 0.15), rgba(170, 170, 170, 0.05))',
         borderColor: 'rgba(170, 170, 170, 0.3)'
+      };
+    }
+    if (roleUpper === 'TENTATIVE') {
+      return {
+        color: '#ffcc66',
+        bgGradient: 'linear-gradient(to right, rgba(255, 204, 102, 0.15), rgba(255, 204, 102, 0.05))',
+        borderColor: 'rgba(255, 204, 102, 0.3)'
       };
     }
     
@@ -1261,7 +1270,7 @@ const TeamPlanner = () => {
       try {
         logEvent('FETCH_START', { eventId, guildId });
         
-        // Use the new dedicated endpoint
+        // Use the dedicated endpoint
         const response = await fetch(
           `${API_URL}/api/events/${eventId}/team-planner-data?guildId=${guildId}`,
           { credentials: 'include' }
@@ -1274,70 +1283,31 @@ const TeamPlanner = () => {
         const data = await response.json();
         logEvent('DATA_RECEIVED', { 
           teamsCount: data.teams.length, 
-          participantsCount: data.participants.length 
+          participantsCount: data.participants.length,
+          tentativesCount: data.tentatives ? data.tentatives.length : 0
         });
         
         // Process the teams and participants
         setTeams(data.teams || []);
         
-        // Process participants with better error handling
+        // Process confirmed participants
         const processedParticipants = (data.participants || []).map(participant => {
-          console.log('Processing participant:', {
-            id: participant.id,
-            userId: participant.user_id,
-            role: participant.role,
-            hasSelectedBuild: !!participant.selected_build
-          });
-          
-          // Handle builds data
-          let builds = [];
-          if (participant.User?.builds) {
-            if (typeof participant.User.builds === 'string') {
-              try {
-                builds = JSON.parse(participant.User.builds);
-              } catch (e) {
-                console.error('Error parsing builds:', e);
-                builds = [];
-              }
-            } else if (Array.isArray(participant.User.builds)) {
-              builds = participant.User.builds;
-            }
-          }
-          
-          // Handle selected_build data
-          let selectedBuild = null;
-          if (participant.selected_build) {
-            if (typeof participant.selected_build === 'string') {
-              try {
-                selectedBuild = JSON.parse(participant.selected_build);
-              } catch (e) {
-                console.error('Error parsing selected_build:', e);
-              }
-            } else {
-              selectedBuild = participant.selected_build;
-            }
-          }
-          
-          return {
-            id: participant.id,
-            user_id: participant.user_id,
-            User: {
-              ...participant.User,
-              builds: builds
-            },
-            role: participant.role,
-            selected_build: selectedBuild,
-            builds: builds
-          };
+          return formatMemberWithBuilds(participant);
+        });
+        
+        // Process tentative participants
+        const processedTentatives = (data.tentatives || []).map(tentative => {
+          return formatMemberWithBuilds(tentative);
         });
         
         setParticipants(processedParticipants);
+        setTentativeParticipants(processedTentatives); // Store tentative participants
       } catch (error) {
         console.error('Error fetching data:', error);
         setError(error.message || 'Failed to load data');
       }
     };
-
+  
     fetchData();
   }, [eventId, guildId]);
 
@@ -1434,12 +1404,29 @@ const TeamPlanner = () => {
     logEvent('DROP_START', { memberId, teamId });
     
     try {
+      // First check in regular participants
       let member = participants.find(p => 
         p.id === memberId || p.user_id === memberId || 
         (p.User && p.User.id === memberId)
       );
       let sourceTeamId = null;
+      let isTentative = false;
+      
+      // If not found, check in tentative participants
+      if (!member) {
+        const tentativeMatch = tentativeParticipants.find(p => 
+          p.id === memberId || p.user_id === memberId || 
+          (p.User && p.User.id === memberId)
+        );
+        
+        if (tentativeMatch) {
+          member = tentativeMatch;
+          isTentative = true;
+          console.log("Found member in tentative participants:", member);
+        }
+      }
   
+      // If still not found, check in teams
       if (!member) {
         for (const team of teams) {
           const foundMember = team.members?.find(m => 
@@ -1461,6 +1448,7 @@ const TeamPlanner = () => {
       
       logEvent('MEMBER_FOUND', {
         sourceTeamId,
+        isTentative,
         role: member.role,
         selectedBuild: member.selectedBuild || member.selected_build
       });
@@ -1484,6 +1472,7 @@ const TeamPlanner = () => {
                            (member.builds && member.builds.length > 0 ? member.builds[0] : null);
   
       // Preserve the role when making API request
+      // Set status to CONFIRMED when adding to a team, regardless of previous status
       const response = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1493,7 +1482,8 @@ const TeamPlanner = () => {
           role: member.role, // Keep the original role
           sourceTeamId,
           guildId: guildId,
-          selectedBuild: selectedBuild // Include the selected build
+          selectedBuild: selectedBuild, // Include the selected build
+          status: 'CONFIRMED' // Always set status to CONFIRMED when adding to a team
         })
       });
   
@@ -1508,6 +1498,12 @@ const TeamPlanner = () => {
         id: updatedMember.id,
         role: updatedMember.role
       }});
+      
+      // Store the member's original status so we can restore it if they're removed later
+      setMemberOriginalStatuses(prev => ({
+        ...prev,
+        [userId]: isTentative ? 'TENTATIVE' : 'CONFIRMED'
+      }));
   
       // When processing UI updates, ensure we keep the role and build info
       if (sourceTeamId) {
@@ -1535,11 +1531,21 @@ const TeamPlanner = () => {
           return team;
         }));
       } else {
-        setParticipants(prev => prev.filter(p => 
-          p.id !== memberId && 
-          p.user_id !== memberId && 
-          (p.User?.id !== memberId)
-        ));
+        // Remove from regular participants if they came from there
+        if (!isTentative) {
+          setParticipants(prev => prev.filter(p => 
+            p.id !== memberId && 
+            p.user_id !== memberId && 
+            (p.User?.id !== memberId)
+          ));
+        } else {
+          // Remove from tentative participants if they came from there
+          setTentativeParticipants(prev => prev.filter(p => 
+            p.id !== memberId && 
+            p.user_id !== memberId && 
+            (p.User?.id !== memberId)
+          ));
+        }
         
         setTeams(prev => prev.map(team => {
           if (team.id === teamId) {
@@ -1548,7 +1554,8 @@ const TeamPlanner = () => {
               members: [...(team.members || []), {
                 ...member,
                 role: member.role, // Keep the original role
-                selectedBuild: selectedBuild // Keep the selected build
+                selectedBuild: selectedBuild, // Keep the selected build
+                status: 'CONFIRMED' // Make sure status is set to CONFIRMED
               }]
             };
           }
@@ -1557,7 +1564,8 @@ const TeamPlanner = () => {
       }
       
       logEvent('STATE_UPDATED', {
-        action: sourceTeamId ? 'Moved between teams' : 'Moved from participants to team',
+        action: sourceTeamId ? 'Moved between teams' : 
+               (isTentative ? 'Moved from tentative to team' : 'Moved from participants to team'),
         teamId
       });
     } catch (error) {
@@ -1582,6 +1590,10 @@ const TeamPlanner = () => {
       
       // Make sure we capture the member's role BEFORE removing them
       console.log("Removing member with role:", member.role);
+      
+      // Check if the member was originally tentative
+      const wasOriginallyTentative = memberOriginalStatuses[userId] === 'TENTATIVE';
+      console.log("Was originally tentative:", wasOriginallyTentative);
   
       const response = await fetch(`${API_URL}/api/teams/${teamId}/members/${userId}?guildId=${guildId}`, {
         method: 'DELETE',
@@ -1613,14 +1625,53 @@ const TeamPlanner = () => {
         }
       };
       
-      console.log("Adding back to participants:", {
-        userId,
-        role: memberWithBuildData.role,
-        hasSelectedBuild: !!memberWithBuildData.selectedBuild
-      });
+      if (wasOriginallyTentative) {
+        console.log("Adding back to tentative participants:", {
+          userId,
+          role: memberWithBuildData.role,
+          hasSelectedBuild: !!memberWithBuildData.selectedBuild
+        });
+        
+        // Update status back to TENTATIVE on backend
+        try {
+          await fetch(`${API_URL}/api/events/${eventId}/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              userId,
+              role: member.role,
+              status: 'TENTATIVE',
+              selectedBuild: memberWithBuildData.selectedBuild || memberWithBuildData.selected_build,
+              guildId
+            })
+          });
+        } catch (err) {
+          console.error('Error updating member status:', err);
+        }
+        
+        // Add to tentative participants list
+        setTentativeParticipants(prev => [...prev, formatMemberWithBuilds({
+          ...memberWithBuildData,
+          status: 'TENTATIVE'
+        })]);
+      } else {
+        // Add back to regular participants with the preserved role
+        console.log("Adding back to participants:", {
+          userId,
+          role: memberWithBuildData.role,
+          hasSelectedBuild: !!memberWithBuildData.selectedBuild
+        });
+        
+        setParticipants(prev => [...prev, formatMemberWithBuilds(memberWithBuildData)]);
+      }
       
-      // Add back to participants with the preserved role
-      setParticipants(prev => [...prev, formatMemberWithBuilds(memberWithBuildData)]);
+      // Remove from tracking state
+      setMemberOriginalStatuses(prev => {
+        const newState = { ...prev };
+        delete newState[userId];
+        return newState;
+      });
   
       // Remove from team
       setTeams(prev => prev.map(team => {
@@ -1894,7 +1945,7 @@ const TeamPlanner = () => {
       tank: participants.filter(p => getParticipantSpec(p) === 'Tank'),
       healer: participants.filter(p => getParticipantSpec(p) === 'Healer'),
       dps: participants.filter(p => getParticipantSpec(p) === 'DPS'),
-      tentative: participants.filter(p => getParticipantSpec(p) === 'Tentative'),
+      tentative: tentativeParticipants,
       absent: participants.filter(p => getParticipantSpec(p) === 'Absent')
     };
   
@@ -2049,8 +2100,39 @@ const TeamPlanner = () => {
             )}
           </Box>
         </Paper>
-  
-        {/* Add sections for Tentative and Absent if needed */}
+
+        <Paper 
+          elevation={0}
+          sx={{ 
+            bgcolor: '#1e1e1e',
+            borderRadius: 2,
+            overflow: 'hidden',
+            mb: 2,
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}
+        >
+          <RoleCategoryHeader 
+            title="Tentative" 
+            count={roleGroups.tentative.length} 
+            icon={roleIconMap.tentative} 
+            color="#ffcc66" 
+          />
+          <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
+            {roleGroups.tentative.length > 0 ? (
+              roleGroups.tentative.map(member => (
+                <DraggableMember 
+                  key={member.id || member.user_id || (member.User?.id)} 
+                  member={member}
+                  getRoleStyles={getRoleStyles} 
+                />
+              ))
+            ) : (
+              <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
+                No tentative members
+              </Typography>
+            )}
+          </Box>
+        </Paper>
       </Box>
     );
   };
@@ -2206,6 +2288,7 @@ const TeamPlanner = () => {
         <Grid container spacing={3}>
         <Grid item xs={12} md={3}>
           <ParticipantPool participants={participants}
+          tentativeParticipants={tentativeParticipants}
           getRoleStyles={getRoleStyles} 
           />
             

@@ -51,13 +51,24 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    
     const events = await Event.findAll({
       where: { guild_id: guildId },
       include: [
         {
           model: EventParticipant,
           as: 'participants',
+          where: { status: 'CONFIRMED' }, // Only include confirmed participants
+          required: false,
+          include: [{
+            model: User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        },
+        {
+          model: EventParticipant,
+          as: 'tentatives',
+          where: { status: 'TENTATIVE' }, // Include tentative participants
+          required: false,
           include: [{
             model: User,
             attributes: ['id', 'username', 'avatar_url']
@@ -78,6 +89,38 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
+  }
+});
+
+// In backend/routes/events.js, add this new endpoint
+router.get('/:eventId/tentatives', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const guildId = req.guildId || req.query.guildId || req.body?.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    console.log('Fetching tentatives for event:', eventId, 'guild:', guildId);
+    
+    // Query for users who are marked as tentative for this event
+    const tentatives = await db.EventParticipant.findAll({
+      where: { 
+        event_id: eventId,
+        guild_id: guildId,
+        status: 'TENTATIVE'
+      },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username', 'avatar_url']
+      }]
+    });
+    
+    res.json(tentatives);
+  } catch (error) {
+    console.error('Error fetching tentatives:', error);
+    res.status(500).json({ error: 'Failed to fetch tentatives' });
   }
 });
 
@@ -198,12 +241,13 @@ router.post('/:teamId/members', async (req, res) => {
 router.post('/:id/signup', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { role, selectedBuild } = req.body;
+    const { role, selectedBuild, status = 'CONFIRMED' } = req.body; // Default status is CONFIRMED
     const eventId = req.params.id;
     
     // Debug what we're receiving
     console.log('Signup data received:', {
       role,
+      status,
       selectedBuild: selectedBuild ? JSON.stringify(selectedBuild).substring(0, 100) + '...' : null,
       eventId
     });
@@ -233,6 +277,13 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
       await t.rollback();
       return res.status(400).json({ error: 'Invalid role. Must be TANK, HEALER, or DPS' });
     }
+    
+    // Validate status format
+    const validStatuses = ['CONFIRMED', 'TENTATIVE', 'ABSENT'];
+    if (!validStatuses.includes(status)) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Invalid status. Must be CONFIRMED, TENTATIVE, or ABSENT' });
+    }
 
     // IMPORTANT: Ensure selectedBuild is properly formatted for JSONB
     let processedBuild = selectedBuild;
@@ -250,6 +301,7 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
       event_id: eventId,
       user_id: req.body.userId || req.user.id,
       role,
+      status, // New status field
       selected_build: processedBuild // Use the processed build
     }, { transaction: t });
 
@@ -257,6 +309,7 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
     console.log('Participant saved:', {
       id: participant.id,
       role: participant.role,
+      status: participant.status,
       hasSelectedBuild: !!participant.selected_build
     });
 
@@ -279,6 +332,7 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
         username: user.username,
         action: 'signup',
         role,
+        status, // Include status in the notification
         secret: process.env.BOT_WEBHOOK_SECRET
       });
       
@@ -328,11 +382,25 @@ router.get('/:eventId/team-planner-data', async (req, res) => {
       }]
     });
     
-    // Get event participants with selected_build
+    // Get event confirmed participants with selected_build
     const participants = await db.EventParticipant.findAll({
       where: { 
         event_id: eventId,
-        guild_id: guildId
+        guild_id: guildId,
+        status: 'CONFIRMED'
+      },
+      include: [{
+        model: db.User,
+        attributes: ['id', 'username', 'avatar_url', 'builds', 'combat_power']
+      }]
+    });
+    
+    // Get event tentative participants with selected_build
+    const tentatives = await db.EventParticipant.findAll({
+      where: { 
+        event_id: eventId,
+        guild_id: guildId,
+        status: 'TENTATIVE'
       },
       include: [{
         model: db.User,
@@ -349,24 +417,17 @@ router.get('/:eventId/team-planner-data', async (req, res) => {
       !teamMemberIds.has(participant.user_id)
     );
     
-    // Log counts for debugging
-    console.log(`Found ${teams.length} teams and ${availableParticipants.length} available participants`);
+    const availableTentatives = tentatives.filter(tentative => 
+      !teamMemberIds.has(tentative.user_id)
+    );
     
-    // Log a sample participant for debugging
-    if (availableParticipants.length > 0) {
-      const sample = availableParticipants[0];
-      console.log('Sample participant:', {
-        id: sample.id,
-        userId: sample.user_id,
-        role: sample.role,
-        hasSelectedBuild: !!sample.selected_build,
-        selectedBuildType: typeof sample.selected_build
-      });
-    }
+    // Log counts for debugging
+    console.log(`Found ${teams.length} teams, ${availableParticipants.length} available participants, and ${availableTentatives.length} tentative participants`);
     
     res.json({
       teams,
-      participants: availableParticipants
+      participants: availableParticipants,
+      tentatives: availableTentatives
     });
   } catch (error) {
     console.error('Error fetching team planner data:', error);

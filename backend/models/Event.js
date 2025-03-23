@@ -1,3 +1,4 @@
+// backend/models/Event.js
 'use strict';
 const { Model } = require('sequelize');
 
@@ -5,7 +6,16 @@ module.exports = (sequelize, DataTypes) => {
   class Event extends Model {
     static associate(models) {
       Event.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
-      Event.hasMany(models.EventParticipant, { foreignKey: 'event_id', as: 'participants' });
+      Event.hasMany(models.EventParticipant, { 
+        foreignKey: 'event_id', 
+        as: 'participants',
+        scope: { status: 'CONFIRMED' }
+      });
+      Event.hasMany(models.EventParticipant, { 
+        foreignKey: 'event_id', 
+        as: 'tentatives',
+        scope: { status: 'TENTATIVE' }
+      });
       Event.hasMany(models.EventAbsentee, { foreignKey: 'event_id', as: 'absentees' });
     }
   }
