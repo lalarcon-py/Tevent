@@ -1,6 +1,6 @@
 // discord-bot/commands/application.js
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
-const { sequelize } = require('../../../config/database');
+const pool = require('../utils/database');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -112,57 +112,48 @@ module.exports = {
       // Get app guild ID from mapping
       const discordGuildId = interaction.guildId;
       
-      const [mappingResult] = await sequelize.query(
+      const mappingResult = await pool.query(
         `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-        { 
-          bind: [discordGuildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [discordGuildId]
       );
       
-      if (!mappingResult) {
+      if (!mappingResult.rows.length) {
         return await interaction.editReply({ 
           content: 'This Discord server is not linked to an application guild.',
           ephemeral: true
         });
       }
       
-      const guildId = mappingResult.app_guild_id;
+      const guildId = mappingResult.rows[0].app_guild_id;
       
       // Get user from discord ID for non-list commands
       const subcommand = interaction.options.getSubcommand();
       let userId = null;
       
       if (subcommand !== 'list' && subcommand !== 'waitlist') {
-        const [userResult] = await sequelize.query(
+        const userResult = await pool.query(
           `SELECT id, username FROM users WHERE discord_id = $1`,
-          { 
-            bind: [interaction.user.id],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [interaction.user.id]
         );
         
-        if (!userResult) {
+        if (!userResult.rows.length) {
           return await interaction.editReply({
             content: 'You need to register on the website first before using this command.',
             ephemeral: true
           });
         }
         
-        userId = userResult.id;
+        userId = userResult.rows[0].id;
       }
       
       // Check if user has admin role for admin-only commands
       if (['list', 'waitlist', 'approve', 'deny', 'waitlist_app'].includes(subcommand)) {
-        const [memberResult] = await sequelize.query(
+        const memberResult = await pool.query(
           `SELECT role FROM guild_members WHERE guild_id = $1 AND user_id = $2`,
-          { 
-            bind: [guildId, userId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId, userId]
         );
         
-        const hasAdminRole = memberResult && ['Guild Master', 'Guild Advisor'].includes(memberResult.role);
+        const hasAdminRole = memberResult.rows.length && ['Guild Master', 'Guild Advisor'].includes(memberResult.rows[0].role);
         
         if (!hasAdminRole) {
           return await interaction.editReply({
@@ -175,15 +166,12 @@ module.exports = {
       // Handle subcommands
       if (subcommand === 'submit') {
         // Check if user is already a member of this guild
-        const [membershipResult] = await sequelize.query(
+        const membershipResult = await pool.query(
           `SELECT id FROM guild_members WHERE guild_id = $1 AND user_id = $2`,
-          { 
-            bind: [guildId, userId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId, userId]
         );
         
-        if (membershipResult) {
+        if (membershipResult.rows.length) {
           return await interaction.editReply({
             content: 'You are already a member of this guild.',
             ephemeral: true
@@ -191,18 +179,15 @@ module.exports = {
         }
         
         // Check if there's already a pending application
-        const [existingAppResult] = await sequelize.query(
+        const existingAppResult = await pool.query(
           `SELECT id, status FROM guild_applications 
            WHERE user_id = $1 AND guild_id = $2 AND status IN ('PENDING', 'WAITLISTED')`,
-          { 
-            bind: [userId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [userId, guildId]
         );
         
-        if (existingAppResult) {
+        if (existingAppResult.rows.length) {
           return await interaction.editReply({
-            content: `You already have an active application with status: ${existingAppResult.status}.`,
+            content: `You already have an active application with status: ${existingAppResult.rows[0].status}.`,
             ephemeral: true
           });
         }
@@ -240,43 +225,35 @@ module.exports = {
         }
         
         // Create the application
-        const [applicationResult] = await sequelize.query(
+        const applicationResult = await pool.query(
           `INSERT INTO guild_applications 
            (id, guild_id, user_id, in_game_name, questlog_link, previous_guilds, leave_reason, 
             combat_power, screenshot_url, status, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'PENDING', NOW(), NOW())
            RETURNING id`,
-          { 
-            bind: [guildId, userId, inGameName, questlogLink, previousGuilds, leaveReason, 
-                   combatPower, screenshotUrl],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId, userId, inGameName, questlogLink, previousGuilds, leaveReason, 
+                   combatPower, screenshotUrl]
         );
         
         // Update username if different from in-game name
-        await sequelize.query(
+        await pool.query(
           `UPDATE users SET username = $1 WHERE id = $2 AND username != $1`,
-          { 
-            bind: [inGameName, userId]
-          }
+          [inGameName, userId]
         );
         
         // Send notification to configured application channel
-        const [channelConfigResult] = await sequelize.query(
+        const channelConfigResult = await pool.query(
           `SELECT channel_id FROM discord_channel_config 
            WHERE guild_id = $1 AND channel_type = 'applications' AND enabled = true
            LIMIT 1`,
-          { 
-            bind: [guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId]
         );
         
         let notificationSent = false;
         
-        if (channelConfigResult) {
+        if (channelConfigResult.rows.length) {
           try {
-            const channel = await interaction.client.channels.fetch(channelConfigResult.channel_id);
+            const channel = await interaction.client.channels.fetch(channelConfigResult.rows[0].channel_id);
             
             const embed = new EmbedBuilder()
               .setTitle('New Guild Application')
@@ -284,7 +261,7 @@ module.exports = {
               .addFields(
                 { name: 'Combat Power', value: combatPower.toString(), inline: true },
                 { name: 'Previous Guilds', value: previousGuilds, inline: true },
-                { name: 'Application ID', value: applicationResult.id, inline: false }
+                { name: 'Application ID', value: applicationResult.rows[0].id, inline: false }
               )
               .setColor('#0099ff')
               .setTimestamp();
@@ -304,15 +281,15 @@ module.exports = {
             const row = new ActionRowBuilder()
               .addComponents(
                 new ButtonBuilder()
-                  .setCustomId(`approve_app_${applicationResult.id}`)
+                  .setCustomId(`approve_app_${applicationResult.rows[0].id}`)
                   .setLabel('Approve')
                   .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
-                  .setCustomId(`deny_app_${applicationResult.id}`)
+                  .setCustomId(`deny_app_${applicationResult.rows[0].id}`)
                   .setLabel('Deny')
                   .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
-                  .setCustomId(`waitlist_app_${applicationResult.id}`)
+                  .setCustomId(`waitlist_app_${applicationResult.rows[0].id}`)
                   .setLabel('Waitlist')
                   .setStyle(ButtonStyle.Primary)
               );
@@ -328,18 +305,15 @@ module.exports = {
         if (!notificationSent) {
           try {
             // Look for any configured channel
-            const [anyChannelResult] = await sequelize.query(
+            const anyChannelResult = await pool.query(
               `SELECT channel_id FROM discord_channel_config 
                WHERE guild_id = $1 AND enabled = true
                LIMIT 1`,
-              { 
-                bind: [guildId],
-                type: sequelize.QueryTypes.SELECT
-              }
+              [guildId]
             );
             
-            if (anyChannelResult) {
-              const channel = await interaction.client.channels.fetch(anyChannelResult.channel_id);
+            if (anyChannelResult.rows.length) {
+              const channel = await interaction.client.channels.fetch(anyChannelResult.rows[0].channel_id);
               
               const embed = new EmbedBuilder()
                 .setTitle('New Guild Application')
@@ -347,7 +321,7 @@ module.exports = {
                 .addFields(
                   { name: 'Combat Power', value: combatPower.toString(), inline: true },
                   { name: 'Previous Guilds', value: previousGuilds, inline: true },
-                  { name: 'Application ID', value: applicationResult.id, inline: false }
+                  { name: 'Application ID', value: applicationResult.rows[0].id, inline: false }
                 )
                 .setColor('#0099ff')
                 .setTimestamp();
@@ -367,15 +341,15 @@ module.exports = {
               const row = new ActionRowBuilder()
                 .addComponents(
                   new ButtonBuilder()
-                    .setCustomId(`approve_app_${applicationResult.id}`)
+                    .setCustomId(`approve_app_${applicationResult.rows[0].id}`)
                     .setLabel('Approve')
                     .setStyle(ButtonStyle.Success),
                   new ButtonBuilder()
-                    .setCustomId(`deny_app_${applicationResult.id}`)
+                    .setCustomId(`deny_app_${applicationResult.rows[0].id}`)
                     .setLabel('Deny')
                     .setStyle(ButtonStyle.Danger),
                   new ButtonBuilder()
-                    .setCustomId(`waitlist_app_${applicationResult.id}`)
+                    .setCustomId(`waitlist_app_${applicationResult.rows[0].id}`)
                     .setLabel('Waitlist')
                     .setStyle(ButtonStyle.Primary)
                 );
@@ -395,19 +369,16 @@ module.exports = {
       }
       else if (subcommand === 'list') {
         // Get pending applications
-        const applicationsResult = await sequelize.query(
+        const applicationsResult = await pool.query(
           `SELECT ga.*, u.username, u.discord_id 
            FROM guild_applications ga
            JOIN users u ON ga.user_id = u.id
            WHERE ga.guild_id = $1 AND ga.status = 'PENDING'
            ORDER BY ga.created_at DESC`,
-          { 
-            bind: [guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId]
         );
         
-        if (!applicationsResult.length) {
+        if (!applicationsResult.rows.length) {
           return await interaction.editReply({
             content: 'No pending applications found.',
             ephemeral: true
@@ -416,11 +387,11 @@ module.exports = {
         
         const embed = new EmbedBuilder()
           .setTitle('Pending Guild Applications')
-          .setDescription(`Found ${applicationsResult.length} pending applications.`)
+          .setDescription(`Found ${applicationsResult.rows.length} pending applications.`)
           .setColor('#0099ff')
           .setTimestamp();
         
-        applicationsResult.forEach((app, index) => {
+        applicationsResult.rows.forEach((app, index) => {
           embed.addFields({
             name: `#${index + 1} - ${app.in_game_name}`,
             value: `ID: ${app.id}\nCP: ${app.combat_power}\nSubmitted: ${new Date(app.created_at).toLocaleString()}`
@@ -434,19 +405,16 @@ module.exports = {
       }
       else if (subcommand === 'waitlist') {
         // Get waitlisted applications
-        const applicationsResult = await sequelize.query(
+        const applicationsResult = await pool.query(
           `SELECT ga.*, u.username, u.discord_id 
            FROM guild_applications ga
            JOIN users u ON ga.user_id = u.id
            WHERE ga.guild_id = $1 AND ga.status = 'WAITLISTED'
            ORDER BY ga.waitlisted_at DESC`,
-          { 
-            bind: [guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId]
         );
         
-        if (!applicationsResult.length) {
+        if (!applicationsResult.rows.length) {
           return await interaction.editReply({
             content: 'No waitlisted applications found.',
             ephemeral: true
@@ -455,11 +423,11 @@ module.exports = {
         
         const embed = new EmbedBuilder()
           .setTitle('Waitlisted Guild Applications')
-          .setDescription(`Found ${applicationsResult.length} waitlisted applications.`)
+          .setDescription(`Found ${applicationsResult.rows.length} waitlisted applications.`)
           .setColor('#0099ff')
           .setTimestamp();
         
-        applicationsResult.forEach((app, index) => {
+        applicationsResult.rows.forEach((app, index) => {
           embed.addFields({
             name: `#${index + 1} - ${app.in_game_name}`,
             value: `ID: ${app.id}\nCP: ${app.combat_power}\nWaitlisted: ${new Date(app.waitlisted_at).toLocaleString()}`
@@ -475,18 +443,15 @@ module.exports = {
         const applicationId = interaction.options.getString('id');
         
         // Find the application
-        const [applicationResult] = await sequelize.query(
+        const applicationResult = await pool.query(
           `SELECT ga.*, u.username, u.discord_id 
            FROM guild_applications ga
            JOIN users u ON ga.user_id = u.id
            WHERE ga.id = $1 AND ga.guild_id = $2`,
-          { 
-            bind: [applicationId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [applicationId, guildId]
         );
         
-        if (!applicationResult) {
+        if (!applicationResult.rows.length) {
           return await interaction.editReply({
             content: 'Application not found.',
             ephemeral: true
@@ -494,33 +459,29 @@ module.exports = {
         }
         
         // Add user to guild
-        await sequelize.query(
+        await pool.query(
           `INSERT INTO guild_members 
            (id, guild_id, user_id, role, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, 'Guild Member', NOW(), NOW())
            ON CONFLICT (guild_id, user_id) DO NOTHING`,
-          { 
-            bind: [guildId, applicationResult.user_id]
-          }
+          [guildId, applicationResult.rows[0].user_id]
         );
         
         // Update application status
-        await sequelize.query(
+        await pool.query(
           `UPDATE guild_applications 
            SET status = 'APPROVED', processed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userId, applicationId]
-          }
+          [userId, applicationId]
         );
         
         // Try to notify the user
-        if (applicationResult.discord_id) {
+        if (applicationResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(applicationResult.discord_id);
+            const user = await interaction.client.users.fetch(applicationResult.rows[0].discord_id);
             await user.send(`Congratulations! Your application to join the guild has been approved.`);
           } catch (dmError) {
-            console.error(`Could not send DM to user ${applicationResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${applicationResult.rows[0].discord_id}:`, dmError);
           }
         }
         
@@ -541,7 +502,7 @@ module.exports = {
         }
         
         return await interaction.editReply({
-          content: `Application for ${applicationResult.in_game_name} approved successfully.`,
+          content: `Application for ${applicationResult.rows[0].in_game_name} approved successfully.`,
           ephemeral: true
         });
       }
@@ -549,18 +510,15 @@ module.exports = {
         const applicationId = interaction.options.getString('id');
         
         // Find the application
-        const [applicationResult] = await sequelize.query(
+        const applicationResult = await pool.query(
           `SELECT ga.*, u.username, u.discord_id 
            FROM guild_applications ga
            JOIN users u ON ga.user_id = u.id
            WHERE ga.id = $1 AND ga.guild_id = $2`,
-          { 
-            bind: [applicationId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [applicationId, guildId]
         );
         
-        if (!applicationResult) {
+        if (!applicationResult.rows.length) {
           return await interaction.editReply({
             content: 'Application not found.',
             ephemeral: true
@@ -568,22 +526,20 @@ module.exports = {
         }
         
         // Update application status
-        await sequelize.query(
+        await pool.query(
           `UPDATE guild_applications 
            SET status = 'DENIED', processed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userId, applicationId]
-          }
+          [userId, applicationId]
         );
         
         // Try to notify the user
-        if (applicationResult.discord_id) {
+        if (applicationResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(applicationResult.discord_id);
+            const user = await interaction.client.users.fetch(applicationResult.rows[0].discord_id);
             await user.send(`Your application to join the guild has been denied.`);
           } catch (dmError) {
-            console.error(`Could not send DM to user ${applicationResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${applicationResult.rows[0].discord_id}:`, dmError);
           }
         }
         
@@ -604,7 +560,7 @@ module.exports = {
         }
         
         return await interaction.editReply({
-          content: `Application for ${applicationResult.in_game_name} denied successfully.`,
+          content: `Application for ${applicationResult.rows[0].in_game_name} denied successfully.`,
           ephemeral: true
         });
       }
@@ -612,18 +568,15 @@ module.exports = {
         const applicationId = interaction.options.getString('id');
         
         // Find the application
-        const [applicationResult] = await sequelize.query(
+        const applicationResult = await pool.query(
           `SELECT ga.*, u.username, u.discord_id 
            FROM guild_applications ga
            JOIN users u ON ga.user_id = u.id
            WHERE ga.id = $1 AND ga.guild_id = $2`,
-          { 
-            bind: [applicationId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [applicationId, guildId]
         );
         
-        if (!applicationResult) {
+        if (!applicationResult.rows.length) {
           return await interaction.editReply({
             content: 'Application not found.',
             ephemeral: true
@@ -631,22 +584,20 @@ module.exports = {
         }
         
         // Update application status
-        await sequelize.query(
+        await pool.query(
           `UPDATE guild_applications 
            SET status = 'WAITLISTED', waitlisted_at = NOW(), processed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userId, applicationId]
-          }
+          [userId, applicationId]
         );
         
         // Try to notify the user
-        if (applicationResult.discord_id) {
+        if (applicationResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(applicationResult.discord_id);
+            const user = await interaction.client.users.fetch(applicationResult.rows[0].discord_id);
             await user.send(`Your application to join the guild has been waitlisted. You may be contacted when a spot becomes available.`);
           } catch (dmError) {
-            console.error(`Could not send DM to user ${applicationResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${applicationResult.rows[0].discord_id}:`, dmError);
           }
         }
         
@@ -667,23 +618,20 @@ module.exports = {
         }
         
         return await interaction.editReply({
-          content: `Application for ${applicationResult.in_game_name} waitlisted successfully.`,
+          content: `Application for ${applicationResult.rows[0].in_game_name} waitlisted successfully.`,
           ephemeral: true
         });
       }
       else if (subcommand === 'status') {
         // Get status for current user
-        const [applicationResult] = await sequelize.query(
+        const applicationResult = await pool.query(
           `SELECT * FROM guild_applications 
            WHERE user_id = $1 AND guild_id = $2
            ORDER BY created_at DESC LIMIT 1`,
-          { 
-            bind: [userId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [userId, guildId]
         );
         
-        if (!applicationResult) {
+        if (!applicationResult.rows.length) {
           return await interaction.editReply({
             content: 'You have not submitted an application to this guild.',
             ephemeral: true
@@ -697,28 +645,28 @@ module.exports = {
           'WAITLISTED': '📝 Waitlisted - You will be contacted when a spot opens up'
         };
         
-        const statusText = statusMap[applicationResult.status] || applicationResult.status;
+        const statusText = statusMap[applicationResult.rows[0].status] || applicationResult.rows[0].status;
         
         const embed = new EmbedBuilder()
           .setTitle('Your Application Status')
           .setDescription(`Current status: ${statusText}`)
           .addFields(
-            { name: 'In-Game Name', value: applicationResult.in_game_name, inline: true },
-            { name: 'Combat Power', value: applicationResult.combat_power.toString(), inline: true },
-            { name: 'Submitted', value: new Date(applicationResult.created_at).toLocaleString(), inline: true }
+            { name: 'In-Game Name', value: applicationResult.rows[0].in_game_name, inline: true },
+            { name: 'Combat Power', value: applicationResult.rows[0].combat_power.toString(), inline: true },
+            { name: 'Submitted', value: new Date(applicationResult.rows[0].created_at).toLocaleString(), inline: true }
           )
           .setColor(
-            applicationResult.status === 'APPROVED' ? '#00ff00' : 
-            applicationResult.status === 'DENIED' ? '#ff0000' : 
-            applicationResult.status === 'WAITLISTED' ? '#0099ff' : '#ffff00'
+            applicationResult.rows[0].status === 'APPROVED' ? '#00ff00' : 
+            applicationResult.rows[0].status === 'DENIED' ? '#ff0000' : 
+            applicationResult.rows[0].status === 'WAITLISTED' ? '#0099ff' : '#ffff00'
           )
           .setTimestamp();
         
-        if (applicationResult.screenshot_url && applicationResult.screenshot_url !== '') {
+        if (applicationResult.rows[0].screenshot_url && applicationResult.rows[0].screenshot_url !== '') {
           try {
             // Convert relative path to full URL
             const baseUrl = process.env.API_URL || 'https://tevent.app';
-            const imageUrl = `${baseUrl}${applicationResult.screenshot_url}`;
+            const imageUrl = `${baseUrl}${applicationResult.rows[0].screenshot_url}`;
             embed.setImage(imageUrl);
           } catch (imageError) {
             console.error('Error setting image URL:', imageError);
@@ -758,15 +706,12 @@ module.exports = {
       // Get app guild ID from mapping
       const discordGuildId = interaction.guildId;
       
-      const [mappingResult] = await sequelize.query(
+      const mappingResult = await pool.query(
         `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-        { 
-          bind: [discordGuildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [discordGuildId]
       );
       
-      if (!mappingResult) {
+      if (!mappingResult.rows.length) {
         await interaction.editReply({ 
           content: 'This Discord server is not linked to an application guild.',
           ephemeral: true
@@ -774,18 +719,15 @@ module.exports = {
         return true;
       }
       
-      const guildId = mappingResult.app_guild_id;
+      const guildId = mappingResult.rows[0].app_guild_id;
       
       // Get user from discord ID
-      const [userResult] = await sequelize.query(
+      const userResult = await pool.query(
         `SELECT id, username FROM users WHERE discord_id = $1`,
-        { 
-          bind: [interaction.user.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [interaction.user.id]
       );
       
-      if (!userResult) {
+      if (!userResult.rows.length) {
         await interaction.editReply({
           content: 'You need to register on the website first before using this function.',
           ephemeral: true
@@ -794,15 +736,12 @@ module.exports = {
       }
       
       // Check if user has admin role
-      const [memberResult] = await sequelize.query(
+      const memberResult = await pool.query(
         `SELECT role FROM guild_members WHERE guild_id = $1 AND user_id = $2`,
-        { 
-          bind: [guildId, userResult.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [guildId, userResult.rows[0].id]
       );
       
-      const hasAdminRole = memberResult && ['Guild Master', 'Guild Advisor'].includes(memberResult.role);
+      const hasAdminRole = memberResult.rows.length && ['Guild Master', 'Guild Advisor'].includes(memberResult.rows[0].role);
       
       if (!hasAdminRole) {
         await interaction.editReply({
@@ -818,18 +757,15 @@ module.exports = {
                                    .replace('waitlist_app_', '');
       
       // Find the application
-      const [applicationResult] = await sequelize.query(
+      const applicationResult = await pool.query(
         `SELECT ga.*, u.username, u.discord_id 
          FROM guild_applications ga
          JOIN users u ON ga.user_id = u.id
          WHERE ga.id = $1 AND ga.guild_id = $2`,
-        { 
-          bind: [applicationId, guildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [applicationId, guildId]
       );
       
-      if (!applicationResult) {
+      if (!applicationResult.rows.length) {
         await interaction.editReply({
           content: 'Application not found.',
           ephemeral: true
@@ -839,33 +775,29 @@ module.exports = {
       
       if (customId.startsWith('approve_app_')) {
         // Add user to guild
-        await sequelize.query(
+        await pool.query(
           `INSERT INTO guild_members 
            (id, guild_id, user_id, role, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, 'Guild Member', NOW(), NOW())
            ON CONFLICT (guild_id, user_id) DO NOTHING`,
-          { 
-            bind: [guildId, applicationResult.user_id]
-          }
+          [guildId, applicationResult.rows[0].user_id]
         );
         
         // Update application status
-        await sequelize.query(
+        await pool.query(
           `UPDATE guild_applications 
            SET status = 'APPROVED', processed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userResult.id, applicationId]
-          }
+          [userResult.rows[0].id, applicationId]
         );
         
         // Try to notify the user
-        if (applicationResult.discord_id) {
+        if (applicationResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(applicationResult.discord_id);
+            const user = await interaction.client.users.fetch(applicationResult.rows[0].discord_id);
             await user.send(`Congratulations! Your application to join the guild has been approved.`);
           } catch (dmError) {
-            console.error(`Could not send DM to user ${applicationResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${applicationResult.rows[0].discord_id}:`, dmError);
           }
         }
         
@@ -883,7 +815,7 @@ module.exports = {
         }
         
         await interaction.editReply({
-          content: `Application for ${applicationResult.in_game_name} approved successfully.`,
+          content: `Application for ${applicationResult.rows[0].in_game_name} approved successfully.`,
           ephemeral: true
         });
       } 
@@ -911,22 +843,20 @@ module.exports = {
       }
       else if (customId.startsWith('waitlist_app_')) {
         // Update application status
-        await sequelize.query(
+        await pool.query(
           `UPDATE guild_applications 
            SET status = 'WAITLISTED', waitlisted_at = NOW(), processed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userResult.id, applicationId]
-          }
+          [userResult.rows[0].id, applicationId]
         );
         
         // Try to notify the user
-        if (applicationResult.discord_id) {
+        if (applicationResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(applicationResult.discord_id);
+            const user = await interaction.client.users.fetch(applicationResult.rows[0].discord_id);
             await user.send(`Your application to join the guild has been waitlisted. You may be contacted when a spot becomes available.`);
           } catch (dmError) {
-            console.error(`Could not send DM to user ${applicationResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${applicationResult.rows[0].discord_id}:`, dmError);
           }
         }
         
@@ -944,7 +874,7 @@ module.exports = {
         }
         
         await interaction.editReply({
-          content: `Application for ${applicationResult.in_game_name} waitlisted successfully.`,
+          content: `Application for ${applicationResult.rows[0].in_game_name} waitlisted successfully.`,
           ephemeral: true
         });
       }
@@ -980,15 +910,12 @@ module.exports = {
       // Get app guild ID from mapping
       const discordGuildId = interaction.guildId;
       
-      const [mappingResult] = await sequelize.query(
+      const mappingResult = await pool.query(
         `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-        { 
-          bind: [discordGuildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [discordGuildId]
       );
       
-      if (!mappingResult) {
+      if (!mappingResult.rows.length) {
         await interaction.editReply({ 
           content: 'This Discord server is not linked to an application guild.',
           ephemeral: true
@@ -996,18 +923,15 @@ module.exports = {
         return true;
       }
       
-      const guildId = mappingResult.app_guild_id;
+      const guildId = mappingResult.rows[0].app_guild_id;
       
       // Get user from discord ID
-      const [userResult] = await sequelize.query(
+      const userResult = await pool.query(
         `SELECT id FROM users WHERE discord_id = $1`,
-        { 
-          bind: [interaction.user.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [interaction.user.id]
       );
       
-      if (!userResult) {
+      if (!userResult.rows.length) {
         await interaction.editReply({
           content: 'You need to register on the website first before using this function.',
           ephemeral: true
@@ -1019,18 +943,15 @@ module.exports = {
       const reason = interaction.fields.getTextInputValue('denial_reason');
       
       // Find the application
-      const [applicationResult] = await sequelize.query(
+      const applicationResult = await pool.query(
         `SELECT ga.*, u.username, u.discord_id 
          FROM guild_applications ga
          JOIN users u ON ga.user_id = u.id
          WHERE ga.id = $1 AND ga.guild_id = $2`,
-        { 
-          bind: [applicationId, guildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [applicationId, guildId]
       );
       
-      if (!applicationResult) {
+      if (!applicationResult.rows.length) {
         await interaction.editReply({
           content: 'Application not found.',
           ephemeral: true
@@ -1039,26 +960,24 @@ module.exports = {
       }
       
       // Update application status
-      await sequelize.query(
+      await pool.query(
         `UPDATE guild_applications 
          SET status = 'DENIED', processed_by = $1, updated_at = NOW()
          WHERE id = $2`,
-        { 
-          bind: [userResult.id, applicationId]
-        }
+        [userResult.rows[0].id, applicationId]
       );
       
       // Try to notify the user
-      if (applicationResult.discord_id) {
+      if (applicationResult.rows[0].discord_id) {
         try {
-          const user = await interaction.client.users.fetch(applicationResult.discord_id);
+          const user = await interaction.client.users.fetch(applicationResult.rows[0].discord_id);
           let message = `Your application to join the guild has been denied.`;
           if (reason) {
             message += ` Reason: ${reason}`;
           }
           await user.send(message);
         } catch (dmError) {
-          console.error(`Could not send DM to user ${applicationResult.discord_id}:`, dmError);
+          console.error(`Could not send DM to user ${applicationResult.rows[0].discord_id}:`, dmError);
         }
       }
       
@@ -1080,7 +999,7 @@ module.exports = {
       }
       
       await interaction.editReply({
-        content: `Application for ${applicationResult.in_game_name} denied successfully.`,
+        content: `Application for ${applicationResult.rows[0].in_game_name} denied successfully.`,
         ephemeral: true
       });
       

@@ -1,6 +1,6 @@
 // discord-bot/commands/gearcheck.js
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
-const { sequelize } = require('../../../config/database');
+const pool = require('../utils/database');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -83,53 +83,44 @@ module.exports = {
       // Get app guild ID from mapping
       const discordGuildId = interaction.guildId;
       
-      const [mappingResult] = await sequelize.query(
+      const mappingResult = await pool.query(
         `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-        { 
-          bind: [discordGuildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [discordGuildId]
       );
       
-      if (!mappingResult) {
+      if (!mappingResult.rows.length) {
         return await interaction.editReply({ 
           content: 'This Discord server is not linked to an application guild.',
           ephemeral: true
         });
       }
       
-      const guildId = mappingResult.app_guild_id;
+      const guildId = mappingResult.rows[0].app_guild_id;
       
       // Get user from discord ID
-      const [userResult] = await sequelize.query(
+      const userResult = await pool.query(
         `SELECT id, username, role FROM users WHERE discord_id = $1`,
-        { 
-          bind: [interaction.user.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [interaction.user.id]
       );
       
-      if (!userResult) {
+      if (!userResult.rows.length) {
         return await interaction.editReply({
           content: 'You need to register on the website first before using this command.',
           ephemeral: true
         });
       }
       
-      const userId = userResult.id;
+      const userId = userResult.rows[0].id;
       const subcommand = interaction.options.getSubcommand();
       
       // Check if user has admin role for admin-only commands
-      const isAdmin = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(userResult.role);
-      const [memberResult] = await sequelize.query(
+      const isAdmin = ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(userResult.rows[0].role);
+      const memberResult = await pool.query(
         `SELECT role FROM guild_members WHERE guild_id = $1 AND user_id = $2`,
-        { 
-          bind: [guildId, userId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [guildId, userId]
       );
       
-      const hasAdminRole = memberResult && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(memberResult.role);
+      const hasAdminRole = memberResult.rows.length && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(memberResult.rows[0].role);
       
       // Handle subcommands
       if (subcommand === 'request') {
@@ -143,15 +134,12 @@ module.exports = {
         const targetUser = interaction.options.getUser('user');
         
         // Find target user in database
-        const [targetUserResult] = await sequelize.query(
+        const targetUserResult = await pool.query(
           `SELECT id FROM users WHERE discord_id = $1`,
-          { 
-            bind: [targetUser.id],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [targetUser.id]
         );
         
-        if (!targetUserResult) {
+        if (!targetUserResult.rows.length) {
           return await interaction.editReply({
             content: `${targetUser.username} has not registered on the website yet.`,
             ephemeral: true
@@ -159,15 +147,12 @@ module.exports = {
         }
         
         // Check if user is a member of this guild
-        const [membershipResult] = await sequelize.query(
+        const membershipResult = await pool.query(
           `SELECT id FROM guild_members WHERE guild_id = $1 AND user_id = $2`,
-          { 
-            bind: [guildId, targetUserResult.id],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId, targetUserResult.rows[0].id]
         );
         
-        if (!membershipResult) {
+        if (!membershipResult.rows.length) {
           return await interaction.editReply({
             content: `${targetUser.username} is not a member of this guild.`,
             ephemeral: true
@@ -175,31 +160,25 @@ module.exports = {
         }
         
         // Check if there's already an active request
-        const [existingCheckResult] = await sequelize.query(
+        const existingCheckResult = await pool.query(
           `SELECT id, status FROM gear_checks 
            WHERE user_id = $1 AND guild_id = $2 AND status IN ('requested', 'pending')`,
-          { 
-            bind: [targetUserResult.id, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [targetUserResult.rows[0].id, guildId]
         );
         
-        if (existingCheckResult) {
+        if (existingCheckResult.rows.length) {
           return await interaction.editReply({
-            content: `${targetUser.username} already has an active gear check with status: ${existingCheckResult.status}.`,
+            content: `${targetUser.username} already has an active gear check with status: ${existingCheckResult.rows[0].status}.`,
             ephemeral: true
           });
         }
         
         // Create a new gear check request
-        const [newRequestResult] = await sequelize.query(
+        const newRequestResult = await pool.query(
           `INSERT INTO gear_checks (id, user_id, guild_id, status, requested_by, image_url, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, 'requested', $3, '', NOW(), NOW())
            RETURNING id`,
-          { 
-            bind: [targetUserResult.id, guildId, userId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [targetUserResult.rows[0].id, guildId, userId]
         );
         
         // Send a DM to the target user
@@ -239,39 +218,33 @@ module.exports = {
         fs.writeFileSync(filePath, buffer);
         
         // Create a new gear check entry
-        const [newGearCheckResult] = await sequelize.query(
+        const newGearCheckResult = await pool.query(
           `INSERT INTO gear_checks (id, user_id, guild_id, image_url, status, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, $3, 'pending', NOW(), NOW())
            RETURNING id`,
-          { 
-            bind: [userId, guildId, fileUrl],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [userId, guildId, fileUrl]
         );
         
         // Send notification to configured gear check channel
-        const [channelConfigResult] = await sequelize.query(
+        const channelConfigResult = await pool.query(
           `SELECT channel_id FROM discord_channel_config 
            WHERE guild_id = $1 AND channel_type = 'gear_checks' AND enabled = true
            LIMIT 1`,
-          { 
-            bind: [guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId]
         );
         
         let notificationSent = false;
         
-        if (channelConfigResult) {
+        if (channelConfigResult.rows.length) {
           try {
-            const channel = await interaction.client.channels.fetch(channelConfigResult.channel_id);
+            const channel = await interaction.client.channels.fetch(channelConfigResult.rows[0].channel_id);
             
             const embed = new EmbedBuilder()
               .setTitle('New Gear Check Submitted')
               .setDescription(`**${interaction.user.username}** has submitted a gear check.`)
               .addFields(
                 { name: 'Status', value: 'Pending Review', inline: true },
-                { name: 'ID', value: newGearCheckResult.id, inline: true }
+                { name: 'ID', value: newGearCheckResult.rows[0].id, inline: true }
               )
               .setImage(screenshot.url)
               .setColor('#0099ff')
@@ -280,11 +253,11 @@ module.exports = {
             const row = new ActionRowBuilder()
               .addComponents(
                 new ButtonBuilder()
-                  .setCustomId(`approve_gear_${newGearCheckResult.id}`)
+                  .setCustomId(`approve_gear_${newGearCheckResult.rows[0].id}`)
                   .setLabel('Approve')
                   .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
-                  .setCustomId(`deny_gear_${newGearCheckResult.id}`)
+                  .setCustomId(`deny_gear_${newGearCheckResult.rows[0].id}`)
                   .setLabel('Deny')
                   .setStyle(ButtonStyle.Danger)
               );
@@ -300,25 +273,22 @@ module.exports = {
         if (!notificationSent) {
           try {
             // Look for any configured channel
-            const [anyChannelResult] = await sequelize.query(
+            const anyChannelResult = await pool.query(
               `SELECT channel_id FROM discord_channel_config 
                WHERE guild_id = $1 AND enabled = true
                LIMIT 1`,
-              { 
-                bind: [guildId],
-                type: sequelize.QueryTypes.SELECT
-              }
+              [guildId]
             );
             
-            if (anyChannelResult) {
-              const channel = await interaction.client.channels.fetch(anyChannelResult.channel_id);
+            if (anyChannelResult.rows.length) {
+              const channel = await interaction.client.channels.fetch(anyChannelResult.rows[0].channel_id);
               
               const embed = new EmbedBuilder()
                 .setTitle('New Gear Check Submitted')
                 .setDescription(`**${interaction.user.username}** has submitted a gear check.`)
                 .addFields(
                   { name: 'Status', value: 'Pending Review', inline: true },
-                  { name: 'ID', value: newGearCheckResult.id, inline: true }
+                  { name: 'ID', value: newGearCheckResult.rows[0].id, inline: true }
                 )
                 .setImage(screenshot.url)
                 .setColor('#0099ff')
@@ -327,11 +297,11 @@ module.exports = {
               const row = new ActionRowBuilder()
                 .addComponents(
                   new ButtonBuilder()
-                    .setCustomId(`approve_gear_${newGearCheckResult.id}`)
+                    .setCustomId(`approve_gear_${newGearCheckResult.rows[0].id}`)
                     .setLabel('Approve')
                     .setStyle(ButtonStyle.Success),
                   new ButtonBuilder()
-                    .setCustomId(`deny_gear_${newGearCheckResult.id}`)
+                    .setCustomId(`deny_gear_${newGearCheckResult.rows[0].id}`)
                     .setLabel('Deny')
                     .setStyle(ButtonStyle.Danger)
                 );
@@ -360,18 +330,15 @@ module.exports = {
         const gearCheckId = interaction.options.getString('id');
         
         // Find the gear check
-        const [gearCheckResult] = await sequelize.query(
+        const gearCheckResult = await pool.query(
           `SELECT gc.*, u.username, u.discord_id 
            FROM gear_checks gc
            JOIN users u ON gc.user_id = u.id
            WHERE gc.id = $1 AND gc.guild_id = $2 AND gc.status = 'pending'`,
-          { 
-            bind: [gearCheckId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [gearCheckId, guildId]
         );
         
-        if (!gearCheckResult) {
+        if (!gearCheckResult.rows.length) {
           return await interaction.editReply({
             content: 'Gear check not found or not pending.',
             ephemeral: true
@@ -379,37 +346,33 @@ module.exports = {
         }
         
         // Update gear check status
-        await sequelize.query(
+        await pool.query(
           `UPDATE gear_checks 
            SET status = 'approved', reviewed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userId, gearCheckId]
-          }
+          [userId, gearCheckId]
         );
         
         // Update the user's gear_screenshot_url
-        await sequelize.query(
+        await pool.query(
           `UPDATE users 
            SET gear_screenshot_url = $1 
            WHERE id = $2`,
-          { 
-            bind: [gearCheckResult.image_url, gearCheckResult.user_id]
-          }
+          [gearCheckResult.rows[0].image_url, gearCheckResult.rows[0].user_id]
         );
         
         // Try to notify the user
-        if (gearCheckResult.discord_id) {
+        if (gearCheckResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(gearCheckResult.discord_id);
+            const user = await interaction.client.users.fetch(gearCheckResult.rows[0].discord_id);
             await user.send('Your gear check has been approved!');
           } catch (dmError) {
-            console.error(`Could not send DM to user ${gearCheckResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${gearCheckResult.rows[0].discord_id}:`, dmError);
           }
         }
         
         return await interaction.editReply({
-          content: `Gear check for ${gearCheckResult.username} approved successfully.`,
+          content: `Gear check for ${gearCheckResult.rows[0].username} approved successfully.`,
           ephemeral: true
         });
       }
@@ -425,18 +388,15 @@ module.exports = {
         const reason = interaction.options.getString('reason');
         
         // Find the gear check
-        const [gearCheckResult] = await sequelize.query(
+        const gearCheckResult = await pool.query(
           `SELECT gc.*, u.username, u.discord_id 
            FROM gear_checks gc
            JOIN users u ON gc.user_id = u.id
            WHERE gc.id = $1 AND gc.guild_id = $2 AND gc.status = 'pending'`,
-          { 
-            bind: [gearCheckId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [gearCheckId, guildId]
         );
         
-        if (!gearCheckResult) {
+        if (!gearCheckResult.rows.length) {
           return await interaction.editReply({
             content: 'Gear check not found or not pending.',
             ephemeral: true
@@ -444,43 +404,38 @@ module.exports = {
         }
         
         // Update gear check status
-        await sequelize.query(
+        await pool.query(
           `UPDATE gear_checks 
            SET status = 'Denied', denial_reason = $1, reviewed_by = $2, updated_at = NOW()
            WHERE id = $3`,
-          { 
-            bind: [reason, userId, gearCheckId]
-          }
+          [reason, userId, gearCheckId]
         );
         
         // Try to notify the user
-        if (gearCheckResult.discord_id) {
+        if (gearCheckResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(gearCheckResult.discord_id);
+            const user = await interaction.client.users.fetch(gearCheckResult.rows[0].discord_id);
             await user.send(`Your gear check has been denied. Reason: ${reason}`);
           } catch (dmError) {
-            console.error(`Could not send DM to user ${gearCheckResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${gearCheckResult.rows[0].discord_id}:`, dmError);
           }
         }
         
         return await interaction.editReply({
-          content: `Gear check for ${gearCheckResult.username} denied successfully.`,
+          content: `Gear check for ${gearCheckResult.rows[0].username} denied successfully.`,
           ephemeral: true
         });
       }
       else if (subcommand === 'status') {
         // Get status for current user
-        const [gearCheckResult] = await sequelize.query(
+        const gearCheckResult = await pool.query(
           `SELECT * FROM gear_checks 
            WHERE user_id = $1 AND guild_id = $2
            ORDER BY created_at DESC LIMIT 1`,
-          { 
-            bind: [userId, guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [userId, guildId]
         );
         
-        if (!gearCheckResult) {
+        if (!gearCheckResult.rows.length) {
           return await interaction.editReply({
             content: 'You have no gear check history.',
             ephemeral: true
@@ -494,24 +449,24 @@ module.exports = {
           'Denied': '❌ Denied'
         };
         
-        const statusText = statusMap[gearCheckResult.status] || gearCheckResult.status;
+        const statusText = statusMap[gearCheckResult.rows[0].status] || gearCheckResult.rows[0].status;
         
         const embed = new EmbedBuilder()
           .setTitle('Your Gear Check Status')
           .setDescription(`Current status: ${statusText}`)
-          .setColor(gearCheckResult.status === 'approved' ? '#00ff00' : 
-                    gearCheckResult.status === 'Denied' ? '#ff0000' : '#ffff00')
-          .setTimestamp(new Date(gearCheckResult.updated_at));
+          .setColor(gearCheckResult.rows[0].status === 'approved' ? '#00ff00' : 
+                    gearCheckResult.rows[0].status === 'Denied' ? '#ff0000' : '#ffff00')
+          .setTimestamp(new Date(gearCheckResult.rows[0].updated_at));
         
-        if (gearCheckResult.denial_reason) {
-          embed.addFields({ name: 'Denial Reason', value: gearCheckResult.denial_reason });
+        if (gearCheckResult.rows[0].denial_reason) {
+          embed.addFields({ name: 'Denial Reason', value: gearCheckResult.rows[0].denial_reason });
         }
         
-        if (gearCheckResult.image_url && gearCheckResult.image_url !== '') {
+        if (gearCheckResult.rows[0].image_url && gearCheckResult.rows[0].image_url !== '') {
           try {
             // Convert relative path to full URL
             const baseUrl = process.env.API_URL || 'https://tevent.app';
-            const imageUrl = `${baseUrl}${gearCheckResult.image_url}`;
+            const imageUrl = `${baseUrl}${gearCheckResult.rows[0].image_url}`;
             embed.setImage(imageUrl);
           } catch (imageError) {
             console.error('Error setting image URL:', imageError);
@@ -532,20 +487,17 @@ module.exports = {
         }
         
         // Get recent gear checks
-        const gearChecksResult = await sequelize.query(
+        const gearChecksResult = await pool.query(
           `SELECT gc.*, u.username, u.discord_id 
            FROM gear_checks gc
            JOIN users u ON gc.user_id = u.id
            WHERE gc.guild_id = $1 AND gc.status = 'pending'
            ORDER BY gc.created_at DESC
            LIMIT 10`,
-          { 
-            bind: [guildId],
-            type: sequelize.QueryTypes.SELECT
-          }
+          [guildId]
         );
         
-        if (!gearChecksResult.length) {
+        if (!gearChecksResult.rows.length) {
           return await interaction.editReply({
             content: 'No pending gear checks found.',
             ephemeral: true
@@ -554,11 +506,11 @@ module.exports = {
         
         const embed = new EmbedBuilder()
           .setTitle('Pending Gear Checks')
-          .setDescription(`Found ${gearChecksResult.length} pending gear checks.`)
+          .setDescription(`Found ${gearChecksResult.rows.length} pending gear checks.`)
           .setColor('#0099ff')
           .setTimestamp();
         
-        gearChecksResult.forEach((check, index) => {
+        gearChecksResult.rows.forEach((check, index) => {
           embed.addFields({
             name: `#${index + 1} - ${check.username}`,
             value: `ID: ${check.id}\nSubmitted: ${new Date(check.created_at).toLocaleString()}`
@@ -596,15 +548,12 @@ module.exports = {
       // Get app guild ID from mapping
       const discordGuildId = interaction.guildId;
       
-      const [mappingResult] = await sequelize.query(
+      const mappingResult = await pool.query(
         `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-        { 
-          bind: [discordGuildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [discordGuildId]
       );
       
-      if (!mappingResult) {
+      if (!mappingResult.rows.length) {
         await interaction.editReply({ 
           content: 'This Discord server is not linked to an application guild.',
           ephemeral: true
@@ -612,18 +561,15 @@ module.exports = {
         return true;
       }
       
-      const guildId = mappingResult.app_guild_id;
+      const guildId = mappingResult.rows[0].app_guild_id;
       
       // Get user from discord ID
-      const [userResult] = await sequelize.query(
+      const userResult = await pool.query(
         `SELECT id, username FROM users WHERE discord_id = $1`,
-        { 
-          bind: [interaction.user.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [interaction.user.id]
       );
       
-      if (!userResult) {
+      if (!userResult.rows.length) {
         await interaction.editReply({
           content: 'You need to register on the website first before using this function.',
           ephemeral: true
@@ -632,15 +578,12 @@ module.exports = {
       }
       
       // Check if user has admin role
-      const [memberResult] = await sequelize.query(
+      const memberResult = await pool.query(
         `SELECT role FROM guild_members WHERE guild_id = $1 AND user_id = $2`,
-        { 
-          bind: [guildId, userResult.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [guildId, userResult.rows[0].id]
       );
       
-      const hasAdminRole = memberResult && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(memberResult.role);
+      const hasAdminRole = memberResult.rows.length && ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(memberResult.rows[0].role);
       
       if (!hasAdminRole) {
         await interaction.editReply({
@@ -654,18 +597,15 @@ module.exports = {
       const gearCheckId = customId.replace('approve_gear_', '').replace('deny_gear_', '');
       
       // Find the gear check
-      const [gearCheckResult] = await sequelize.query(
+      const gearCheckResult = await pool.query(
         `SELECT gc.*, u.username, u.discord_id 
          FROM gear_checks gc
          JOIN users u ON gc.user_id = u.id
          WHERE gc.id = $1 AND gc.guild_id = $2 AND gc.status = 'pending'`,
-        { 
-          bind: [gearCheckId, guildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [gearCheckId, guildId]
       );
       
-      if (!gearCheckResult) {
+      if (!gearCheckResult.rows.length) {
         await interaction.editReply({
           content: 'Gear check not found or not pending.',
           ephemeral: true
@@ -675,32 +615,28 @@ module.exports = {
       
       if (customId.startsWith('approve_gear_')) {
         // Approve gear check
-        await sequelize.query(
+        await pool.query(
           `UPDATE gear_checks 
            SET status = 'approved', reviewed_by = $1, updated_at = NOW()
            WHERE id = $2`,
-          { 
-            bind: [userResult.id, gearCheckId]
-          }
+          [userResult.rows[0].id, gearCheckId]
         );
         
         // Update the user's gear_screenshot_url
-        await sequelize.query(
+        await pool.query(
           `UPDATE users 
            SET gear_screenshot_url = $1 
            WHERE id = $2`,
-          { 
-            bind: [gearCheckResult.image_url, gearCheckResult.user_id]
-          }
+          [gearCheckResult.rows[0].image_url, gearCheckResult.rows[0].user_id]
         );
         
         // Try to notify the user
-        if (gearCheckResult.discord_id) {
+        if (gearCheckResult.rows[0].discord_id) {
           try {
-            const user = await interaction.client.users.fetch(gearCheckResult.discord_id);
+            const user = await interaction.client.users.fetch(gearCheckResult.rows[0].discord_id);
             await user.send('Your gear check has been approved!');
           } catch (dmError) {
-            console.error(`Could not send DM to user ${gearCheckResult.discord_id}:`, dmError);
+            console.error(`Could not send DM to user ${gearCheckResult.rows[0].discord_id}:`, dmError);
           }
         }
         
@@ -718,7 +654,7 @@ module.exports = {
         }
         
         await interaction.editReply({
-          content: `Gear check for ${gearCheckResult.username} approved successfully.`,
+          content: `Gear check for ${gearCheckResult.rows[0].username} approved successfully.`,
           ephemeral: true
         });
       } else if (customId.startsWith('deny_gear_')) {
@@ -775,15 +711,12 @@ module.exports = {
       // Get app guild ID from mapping
       const discordGuildId = interaction.guildId;
       
-      const [mappingResult] = await sequelize.query(
+      const mappingResult = await pool.query(
         `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-        { 
-          bind: [discordGuildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [discordGuildId]
       );
       
-      if (!mappingResult) {
+      if (!mappingResult.rows.length) {
         await interaction.editReply({ 
           content: 'This Discord server is not linked to an application guild.',
           ephemeral: true
@@ -791,18 +724,15 @@ module.exports = {
         return true;
       }
       
-      const guildId = mappingResult.app_guild_id;
+      const guildId = mappingResult.rows[0].app_guild_id;
       
       // Get user from discord ID
-      const [userResult] = await sequelize.query(
+      const userResult = await pool.query(
         `SELECT id FROM users WHERE discord_id = $1`,
-        { 
-          bind: [interaction.user.id],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [interaction.user.id]
       );
       
-      if (!userResult) {
+      if (!userResult.rows.length) {
         await interaction.editReply({
           content: 'You need to register on the website first before using this function.',
           ephemeral: true
@@ -814,18 +744,15 @@ module.exports = {
       const reason = interaction.fields.getTextInputValue('denial_reason');
       
       // Find the gear check
-      const [gearCheckResult] = await sequelize.query(
+      const gearCheckResult = await pool.query(
         `SELECT gc.*, u.username, u.discord_id 
          FROM gear_checks gc
          JOIN users u ON gc.user_id = u.id
          WHERE gc.id = $1 AND gc.guild_id = $2 AND gc.status = 'pending'`,
-        { 
-          bind: [gearCheckId, guildId],
-          type: sequelize.QueryTypes.SELECT
-        }
+        [gearCheckId, guildId]
       );
       
-      if (!gearCheckResult) {
+      if (!gearCheckResult.rows.length) {
         await interaction.editReply({
           content: 'Gear check not found or not pending.',
           ephemeral: true
@@ -834,22 +761,20 @@ module.exports = {
       }
       
       // Update gear check status
-      await sequelize.query(
+      await pool.query(
         `UPDATE gear_checks 
          SET status = 'Denied', denial_reason = $1, reviewed_by = $2, updated_at = NOW()
          WHERE id = $3`,
-        { 
-          bind: [reason, userResult.id, gearCheckId]
-        }
+        [reason, userResult.rows[0].id, gearCheckId]
       );
       
       // Try to notify the user
-      if (gearCheckResult.discord_id) {
+      if (gearCheckResult.rows[0].discord_id) {
         try {
-          const user = await interaction.client.users.fetch(gearCheckResult.discord_id);
+          const user = await interaction.client.users.fetch(gearCheckResult.rows[0].discord_id);
           await user.send(`Your gear check has been denied. Reason: ${reason}`);
         } catch (dmError) {
-          console.error(`Could not send DM to user ${gearCheckResult.discord_id}:`, dmError);
+          console.error(`Could not send DM to user ${gearCheckResult.rows[0].discord_id}:`, dmError);
         }
       }
       
@@ -870,7 +795,7 @@ module.exports = {
       }
       
       await interaction.editReply({
-        content: `Gear check for ${gearCheckResult.username} denied successfully.`,
+        content: `Gear check for ${gearCheckResult.rows[0].username} denied successfully.`,
         ephemeral: true
       });
       
