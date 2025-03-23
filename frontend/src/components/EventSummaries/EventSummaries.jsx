@@ -203,6 +203,14 @@ const EventSummaries = () => {
         throw new Error('Invalid event ID');
       }
       
+      // Check if user is already tentative
+      if (isUserTentativeForEvent(eventIdString)) {
+        setSuccessMessage("You're already marked as tentative for this event");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
+        return;
+      }
+      
       console.log('Marking tentative for event ID:', eventIdString);
       
       // Get current user data
@@ -418,6 +426,26 @@ const EventSummaries = () => {
         throw new Error('Invalid event ID');
       }
       
+      // Check if user is already absent
+      if (isUserAbsentForEvent(eventIdString)) {
+        setSuccessMessage("You're already marked as absent for this event");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
+        return;
+      }
+
+      const isUserTentativeForEvent = (eventId) => {
+        if (!currentUser?.id) return false;
+        
+        const event = events.find(e => e.id === eventId);
+        if (!event || !event.tentatives) return false;
+        
+        return event.tentatives.some(t => 
+          t.user_id === currentUser.id || 
+          t.User?.id === currentUser.id
+        );
+      };
+      
       console.log('Marking absence for event ID:', eventIdString);
       
       // Get current user data
@@ -520,6 +548,30 @@ const EventSummaries = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isUserAbsentForEvent = (eventId) => {
+    if (!currentUser?.id) return false;
+    
+    const event = events.find(e => e.id === eventId);
+    if (!event || !event.absentees) return false;
+    
+    return event.absentees.some(a => 
+      a.user_id === currentUser.id || 
+      a.User?.id === currentUser.id
+    );
+  };
+
+  const isUserTentativeForEvent = (eventId) => {
+    if (!currentUser?.id) return false;
+    
+    const event = events.find(e => e.id === eventId);
+    if (!event || !event.tentatives) return false;
+    
+    return event.tentatives.some(t => 
+      t.user_id === currentUser.id || 
+      t.User?.id === currentUser.id
+    );
   };
 
   const navigateToTeamPlanner = (eventId) => {
@@ -775,12 +827,21 @@ const EventSummaries = () => {
                       onClick={() => signUpWithPrimaryBuild(event.id)}
                       startIcon={<PersonAddIcon />}
                       sx={{
-                        bgcolor: '#90caf9',
-                        color: '#212121',
-                        fontWeight: 500,
+                        background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                        boxShadow: '0 3px 5px 2px rgba(76, 175, 80, .3)',
+                        color: 'white',
+                        fontSize: '0.95rem',
+                        fontWeight: 'bold',
+                        padding: '10px 16px',
                         mb: 1,
                         '&:hover': {
-                          bgcolor: '#64b5f6'
+                          background: 'linear-gradient(45deg, #388E3C 30%, #689F38 90%)',
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s'
+                        },
+                        '&.Mui-disabled': {
+                          background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                          opacity: 0.7
                         }
                       }}
                     >
@@ -790,7 +851,8 @@ const EventSummaries = () => {
                       display: 'flex', 
                       justifyContent: 'space-between', 
                       alignItems: 'center',
-                      mt: 2
+                      mt: 2,
+                      mb: 1
                     }}>
                       <Typography variant="subtitle2" sx={{ color: '#ff9800' }}>
                         Tentative
@@ -799,17 +861,6 @@ const EventSummaries = () => {
                         {tentativeCount}
                       </Typography>
                     </Box>
-
-                    // Add a button for marking as tentative
-                    <Button 
-                      variant="outlined"
-                      color="warning"
-                      startIcon={<HelpOutlineIcon />}
-                      onClick={() => markAsTentative(event.id)}
-                      sx={{ flex: 1 }}
-                    >
-                      Mark as Tentative
-                    </Button>
                     
                     <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
                       <Button 
@@ -817,15 +868,37 @@ const EventSummaries = () => {
                         color="error"
                         startIcon={<DoNotDisturbIcon />}
                         onClick={() => markAsAbsent(event.id)}
+                        disabled={isUserAbsentForEvent(event.id)}
                         sx={{ flex: 1 }}
                       >
-                        Mark as Absent
+                        {isUserAbsentForEvent(event.id) ? "Already Absent" : "Mark as Absent"}
                       </Button>
-                      
+                      <Button 
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<HelpOutlineIcon />}
+                        onClick={() => markAsTentative(event.id)}
+                        disabled={isUserTentativeForEvent(event.id)}
+                        sx={{ flex: 1 }}
+                      >
+                        {isUserTentativeForEvent(event.id) ? "Already Tentative" : "Mark as Tentative"}
+                      </Button>
                       <Button 
                         variant="outlined"
                         onClick={() => navigateToTeamPlanner(event.id)}
-                        sx={{ flex: 1 }}
+                        sx={{ 
+                          flex: 1,
+                          borderColor: '#2196F3',
+                          color: '#2196F3',
+                          fontWeight: 'bold',
+                          '&:hover': {
+                            backgroundColor: 'rgba(33, 150, 243, 0.08)',
+                            borderColor: '#1976D2',
+                            color: '#1976D2',
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s'
+                          }
+                        }}
                       >
                         View Teams
                       </Button>

@@ -294,6 +294,16 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
         console.error('Error parsing selectedBuild string:', e);
       }
     }
+    
+    // Remove any existing absentee record when signing up (whether confirmed or tentative)
+    await db.EventAbsentee.destroy({
+      where: {
+        event_id: eventId,
+        user_id: req.body.userId || req.user.id,
+        guild_id: guildId
+      },
+      transaction: t
+    });
 
     // Create or update the participant
     const [participant] = await EventParticipant.upsert({
@@ -479,13 +489,26 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
       return res.status(404).json({ error: 'Participant not found' });
     }
 
-    // If marking as absent, create an absentee record
+    // If marking as absent, create an absentee record if it doesn't already exist
     if (isMarkingAbsent) {
-      await db.EventAbsentee.create({
-        event_id: eventId,
-        user_id: userId,
-        guild_id: guildId
-      }, { transaction: t });
+      // Check if an absentee record already exists
+      const existingAbsentee = await db.EventAbsentee.findOne({
+        where: {
+          event_id: eventId,
+          user_id: userId,
+          guild_id: guildId
+        },
+        transaction: t
+      });
+      
+      // Only create a new absentee record if one doesn't already exist
+      if (!existingAbsentee) {
+        await db.EventAbsentee.create({
+          event_id: eventId,
+          user_id: userId,
+          guild_id: guildId
+        }, { transaction: t });
+      }
     }
 
     await t.commit();

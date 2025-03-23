@@ -328,6 +328,22 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     }
   };
 
+  const isCurrentUserAbsent = () => {
+    if (!currentUser) return false;
+    return absentees.some(a => 
+      a.user_id === currentUser.id || 
+      a.User?.id === currentUser.id
+    );
+  };
+
+  const isCurrentUserTentative = () => {
+    if (!currentUser) return false;
+    return tentatives.some(t => 
+      t.user_id === currentUser.id || 
+      t.User?.id === currentUser.id
+    );
+  };
+
   const handleSignUp = async (role, selectedBuild) => {
     try {
       if (!currentUser) {
@@ -446,6 +462,13 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
 
   const markAsAbsent = async (eventIdParam) => {
     try {
+      // Check if user is already absent
+      if (isCurrentUserAbsent()) {
+        setSuccessMessage("You're already marked as absent for this event");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        return;
+      }
+      
       // Use the parameter directly if provided, otherwise use event.id
       const eventIdString = eventIdParam || event.id;
       
@@ -564,6 +587,14 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
   const markAsTentative = async (eventIdParam) => {
     try {
       setLoading(true);
+      
+      // Check if user is already tentative
+      if (isCurrentUserTentative()) {
+        setSuccessMessage("You're already marked as tentative for this event");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
+        return;
+      }
       
       // Ensure eventId is a string
       const eventIdString = eventIdParam || event.id;
@@ -849,11 +880,27 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h5">{event.title}</Typography>
         <Box>
-          <Link 
+        <Link 
             to={`/events/${event.id}/team-planner`}
             style={{ textDecoration: 'none' }}
           >
-            <Button variant="contained" color="primary" sx={{ mr: 1 }}>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              sx={{ 
+                mr: 1,
+                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+                boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                fontSize: '0.95rem',
+                fontWeight: 'bold',
+                padding: '8px 16px',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #1976D2 30%, #00B0FF 90%)',
+                  transform: 'translateY(-2px)',
+                  transition: 'all 0.2s'
+                }
+              }}
+            >
               Team Planner
             </Button>
           </Link>
@@ -988,13 +1035,29 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
               
               {/* New Sign Up with Primary Build Button */}
               <Grid item>
-                <Button
+              <Button
                   variant="contained"
-                  color="primary"
                   fullWidth
                   onClick={signUpWithPrimaryBuild}
                   startIcon={<PersonAddIcon />}
-                  sx={{ mb: 1 }}
+                  sx={{ 
+                    mb: 1,
+                    background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                    boxShadow: '0 3px 5px 2px rgba(76, 175, 80, .3)',
+                    color: 'white',
+                    fontSize: '0.95rem',
+                    fontWeight: 'bold',
+                    padding: '10px 16px',
+                    '&:hover': {
+                      background: 'linear-gradient(45deg, #388E3C 30%, #689F38 90%)',
+                      transform: 'translateY(-2px)',
+                      transition: 'all 0.2s'
+                    },
+                    '&.Mui-disabled': {
+                      background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                      opacity: 0.7
+                    }
+                  }}
                 >
                   Sign Up with Primary Build
                 </Button>
@@ -1002,15 +1065,16 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
               
               {/* Mark as Tentative Button */}
               <Grid item>
-                <Button
+              <Button
                   variant="outlined"
                   color="warning"
                   fullWidth
                   onClick={() => markAsTentative(event.id)}
                   startIcon={<HelpOutlineIcon />}
+                  disabled={isCurrentUserTentative()}
                   sx={{ mb: 1 }}
                 >
-                  Mark as Tentative
+                  {isCurrentUserTentative() ? "Already Marked Tentative" : "Mark as Tentative"}
                 </Button>
               </Grid>
               
@@ -1022,8 +1086,9 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
                   fullWidth
                   onClick={() => markAsAbsent(event.id)}
                   startIcon={<DoNotDisturbIcon />}
+                  disabled={isCurrentUserAbsent()}
                 >
-                  Mark as Absent
+                  {isCurrentUserAbsent() ? "Already Marked Absent" : "Mark as Absent"}
                 </Button>
               </Grid>
             </Grid>
