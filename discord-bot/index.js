@@ -19,8 +19,6 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
-const gearCheckCommand = require('./commands/gearcheck');
-const applicationCommand = require('./commands/application');
 
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
@@ -73,8 +71,6 @@ const pool = new Pool({
   }
 });
 
-module.exports.pool = pool;
-
 // Test database connection
 pool.query('SELECT NOW()')
   .then(result => console.log("Database connection successful, server time:", result.rows[0].now))
@@ -93,8 +89,6 @@ const client = new Client({
     GatewayIntentBits.MessageContent 
   ] 
 });
-
-client.pool = pool;
 
 function formatTimerDuration(minutes) {
   if (!minutes) return "Default (24h)";
@@ -647,8 +641,6 @@ const API_URL = process.env.BACKEND_URL || 'https://tevent.app';
 
 // Collection to store commands
 client.commands = new Collection();
-client.commands.set(gearCheckCommand.data.name, gearCheckCommand);
-client.commands.set(applicationCommand.data.name, applicationCommand);
 
 // Set up a small express server to receive webhook updates
 const app = express();
@@ -678,112 +670,7 @@ client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();
 
-  // Set up button and modal handlers for gearcheck and application commands
-  client.on('interactionCreate', async (interaction) => {
-    if (interaction.isButton()) {
-      try {
-        // Try gearcheck buttons first
-        const handledByGearCheck = await gearCheckCommand.handleButtons(interaction);
-        if (handledByGearCheck) return;
-        
-        // Try application buttons next
-        const handledByApplication = await applicationCommand.handleButtons(interaction);
-        if (handledByApplication) return;
-      } catch (error) {
-        console.error('Error in button handlers:', error);
-      }
-    } 
-    else if (interaction.isModalSubmit()) {
-      try {
-        // Try gearcheck modals first
-        const handledByGearCheck = await gearCheckCommand.handleModals(interaction);
-        if (handledByGearCheck) return;
-        
-        // Try application modals next
-        const handledByApplication = await applicationCommand.handleModals(interaction);
-        if (handledByApplication) return;
-      } catch (error) {
-        console.error('Error in modal handlers:', error);
-      }
-    }
-  });
-
   setupScheduledPostings(client);
-});
-
-app.post('/webhook/new-application', async (req, res) => {
-  try {
-    const { guildId, applicationId, userName, screenhotUrl, secret } = req.body;
-    
-    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-    
-    // Get Discord guild ID from mapping
-    const mappingResult = await pool.query(
-      'SELECT discord_guild_id FROM discord_guild_mappings WHERE app_guild_id = $1',
-      [guildId]
-    );
-    
-    if (!mappingResult.rows.length) {
-      return res.status(404).json({ error: 'Discord guild mapping not found' });
-    }
-    
-    const discordGuildId = mappingResult.rows[0].discord_guild_id;
-    
-    // Get channel for applications
-    const channelConfigResult = await pool.query(
-      `SELECT channel_id FROM discord_channel_config 
-       WHERE guild_id = $1 AND channel_type = 'applications' AND enabled = true`,
-      [guildId]
-    );
-    
-    if (!channelConfigResult.rows.length) {
-      return res.status(404).json({ error: 'No applications channel configured' });
-    }
-    
-    const channelId = channelConfigResult.rows[0].channel_id;
-    const channel = await client.channels.fetch(channelId);
-    
-    if (!channel) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-    
-    // Create embed with application details
-    const embed = new EmbedBuilder()
-      .setTitle('New Guild Application')
-      .setDescription(`**${userName}** has applied to join the guild.`)
-      .setColor('#0099ff')
-      .setTimestamp();
-      
-    // Add screenshot if provided
-    if (screenhotUrl) {
-      embed.setImage(screenhotUrl);
-    }
-    
-    // Create approval buttons
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`approve_app_${applicationId}`)
-          .setLabel('Approve')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`deny_app_${applicationId}`)
-          .setLabel('Deny')
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`waitlist_app_${applicationId}`)
-          .setLabel('Waitlist')
-          .setStyle(ButtonStyle.Primary)
-      );
-    
-    await channel.send({ embeds: [embed], components: [row] });
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error processing new application webhook:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
 });
 
 app.post('/webhook/new-item', async (req, res) => {
@@ -2911,26 +2798,16 @@ client.on('interactionCreate', async (interaction) => {
   try {
     // Handle slash commands
     if (interaction.isCommand()) {
-      const { commandName } = interaction;
-      
-      // Special handling for gearcheck and application commands
-      if (commandName === 'gearcheck') {
-        await gearCheckCommand.execute(interaction);
-        return;
-      }
-      else if (commandName === 'application') {
-        await applicationCommand.execute(interaction);
-        return;
-      }
+      const { commandName, options } = interaction;
       
       // Handle link-guild command (special case)
-      else if (commandName === 'link-guild') {
+      if (commandName === 'link-guild') {
         await handleLinkGuildCommand(interaction);
         return;
       }
       
       // Handle help command (no guild required)
-      else if (commandName === 'help') {
+      if (commandName === 'help') {
         const embed = new EmbedBuilder()
           .setTitle('Tevent Guild Management Bot')
           .setColor('#90caf9')
@@ -2942,8 +2819,6 @@ client.on('interactionCreate', async (interaction) => {
             { name: '/event-signup', value: 'Sign up for an event' },
             { name: '/teams', value: 'View teams for an event' },
             { name: '/members', value: 'View guild members' },
-            { name: '/gearcheck', value: 'Manage gear checks' },
-            { name: '/application', value: 'Manage guild applications' },
             { name: '/help', value: 'Show this help message' }
           ])
           .setFooter({ text: 'Tevent.app - Guild Management Made Easy' });
@@ -2972,7 +2847,7 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
       
-      // Handle the rest of your existing commands
+      // Handle commands with direct DB access
       if (commandName === 'storage') {
         await handleStorageCommand(interaction, appGuildId);
       }
@@ -2997,101 +2872,603 @@ client.on('interactionCreate', async (interaction) => {
     }
     // Handle button interactions
     else if (interaction.isButton()) {
-      // Try to handle with the gearcheck command first
-      try {
-        const handledByGearCheck = await gearCheckCommand.handleButtons(interaction);
-        if (handledByGearCheck) return;
-      } catch (error) {
-        console.error('Error in gearcheck button handler:', error);
-      }
-      
-      // If not handled by gearcheck, try application command
-      try {
-        const handledByApplication = await applicationCommand.handleButtons(interaction);
-        if (handledByApplication) return;
-      } catch (error) {
-        console.error('Error in application button handler:', error);
-      }
-      
-      // If not handled by either, continue with existing button handling
       const customId = interaction.customId;
       
-      if (customId.startsWith('signup_')) {
-        try {
-          // Your signup button handling code
-          // Log the interaction being processed
-          console.log(`[INFO] Processing signup button: ${customId}`);
-          
-          // Immediately defer the reply to prevent timeout
-          await interaction.deferReply({ ephemeral: true }).catch(error => {
-            if (error.code === 10062) {
-              console.log(`[WARN] Interaction ${interaction.id} already acknowledged, continuing processing`);
-              return; // Continue execution even if the interaction was already acknowledged
-            }
-            throw error; // Rethrow any other errors
-          });
-          
-          // Parse event ID and role from the button's custom ID
-          const [_, eventId, role] = customId.split('_');
-          console.log(`[DEBUG] Processing signup for event: ${eventId}, role: ${role}`);
-          
-          // Your existing signup code...
-        } catch (error) {
-          console.error(`Error processing signup button:`, error);
-          
-          // Try to salvage the interaction if possible
-          try {
-            await safeReply(interaction, {
-              content: 'An error occurred while processing your signup. Please try again.',
-              ephemeral: true
-            });
-          } catch (replyError) {
-            console.error(`Failed to send error response: ${replyError.message}`);
-          }
-        }
-      }
-      
       // Handle item request buttons (Need/Greed)
-      else if (customId.startsWith('need_item_') || 
-               customId.startsWith('need_trait_') || 
-               customId.startsWith('greed_item_')) {
-        // Your existing need/greed button handling code...
+      if (customId.startsWith('need_item_') || customId.startsWith('greed_item_')) {
+        const itemId = customId.replace(/^(need_item_|greed_item_)/, '');
+        const isNeed = customId.startsWith('need_item_');
+        const priority = isNeed ? 'Need' : 'Greed';
+        const priorityField = isNeed ? 'need_count' : 'greed_count';
+        
+        await interaction.deferReply({ ephemeral: true });
+        
+        try {
+          // Get Discord server ID and app guild ID
+          const discordGuildId = interaction.guild?.id;
+          
+          // Get appGuildId from database
+          const mappingResult = await pool.query(
+            'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+            [discordGuildId]
+          );
+          
+          if (!mappingResult.rows.length) {
+            return await interaction.editReply('This Discord server is not linked to an application guild.');
+          }
+          
+          const appGuildId = mappingResult.rows[0].app_guild_id;
+          
+          // Get user by Discord ID
+          const userResult = await pool.query(
+            'SELECT id, username FROM users WHERE discord_id = $1',
+            [interaction.user.id]
+          );
+          
+          if (!userResult.rows.length) {
+            return await interaction.editReply('You need to register on the website first before requesting items.');
+          }
+          
+          const userId = userResult.rows[0].id;
+          
+          // Check if item is available
+          const itemResult = await pool.query(
+            `SELECT gsi.*, i.name 
+             FROM guild_storage_items gsi
+             JOIN items i ON gsi.item_id = i.id
+             WHERE gsi.id = $1`,
+            [itemId]
+          );
+          
+          if (!itemResult.rows.length || itemResult.rows[0].quantity < 1) {
+            return await interaction.editReply('This item is no longer available.');
+          }
+          
+          const item = itemResult.rows[0];
+          
+          // Check for existing request
+          const existingRequestResult = await pool.query(
+            `SELECT id, priority FROM loot_requests 
+             WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
+            [itemId, userId]
+          );
+          
+          if (existingRequestResult.rows.length) {
+            const existingPriority = existingRequestResult.rows[0].priority === 1 ? 'Need' : 'Greed';
+            
+            if (existingPriority === priority) {
+              return await interaction.editReply(`You already have a ${priority} request for "${item.name}".`);
+            }
+            
+            // User is changing priority, update the existing request
+            await pool.query(
+              `UPDATE loot_requests 
+               SET priority = $1, updated_at = NOW()
+               WHERE id = $2`,
+              [isNeed ? 1 : 0, existingRequestResult.rows[0].id]
+            );
+            
+            // Update the counter in the tracking table
+            const dbClient = await pool.connect();
+            try {
+              await dbClient.query('BEGIN');
+              
+              // Decrement old priority counter
+              const oldPriorityField = existingPriority === 'Need' ? 'need_count' : 'greed_count';
+              await dbClient.query(
+                `UPDATE item_message_tracking 
+                 SET ${oldPriorityField} = GREATEST(${oldPriorityField} - 1, 0),
+                     ${priorityField} = ${priorityField} + 1,
+                     updated_at = NOW()
+                 WHERE item_id = $1`,
+                [itemId]
+              );
+              
+              await dbClient.query('COMMIT');
+            } catch (error) {
+              await dbClient.query('ROLLBACK');
+              throw error;
+            } finally {
+              dbClient.release();
+            }
+            
+            // Update the embed
+            await updateItemEmbed(itemId);
+            
+            return await interaction.editReply(`Your request for "${item.name}" has been updated from ${existingPriority} to ${priority}.`);
+          }
+          
+          // Create new loot request
+          const requestResult = await pool.query(
+            `INSERT INTO loot_requests
+             (id, guild_id, storage_item_id, user_id, status, priority, created_at, updated_at)
+             VALUES
+             (gen_random_uuid(), $1, $2, $3, 'Pending', $4, NOW(), NOW())
+             RETURNING id`,
+            [appGuildId, itemId, userId, isNeed ? 1 : 0]
+          );
+          
+          const requestId = requestResult.rows[0].id;
+          
+          // Update the counter in the tracking table
+          await pool.query(
+            `UPDATE item_message_tracking 
+             SET ${priorityField} = ${priorityField} + 1,
+                 updated_at = NOW()
+             WHERE item_id = $1`,
+            [itemId]
+          );
+          
+          // Update the item embed with new request count
+          await updateItemEmbed(itemId);
+          
+          // Send notification to loot channel with approve/deny buttons
+          const requestEmbed = new EmbedBuilder()
+            .setTitle('New Loot Request')
+            .setDescription(`**${interaction.user.username}** has requested **${item.name}** (${priority})`)
+            .setColor('#9c27b0')
+            .setTimestamp()
+            .setFooter({ text: `Request ID: ${requestId}` });
+          
+          const row = new ActionRowBuilder()
+            .addComponents(
+              new ButtonBuilder()
+                .setCustomId(`approve_loot_${requestId}`)
+                .setLabel('Approve')
+                .setStyle(ButtonStyle.Success),
+              new ButtonBuilder()
+                .setCustomId(`deny_loot_${requestId}`)
+                .setLabel('Deny')
+                .setStyle(ButtonStyle.Danger)
+            );
+          
+          await sendNotificationToConfiguredChannel(
+            appGuildId, 
+            discordGuildId, 
+            'loot', 
+            requestEmbed,
+            null,
+            [row]
+          );
+          
+          await interaction.editReply(`Your ${priority} request for **${item.name}** has been submitted!`);
+        } catch (error) {
+          console.error(`[ERROR] Error processing item request:`, error);
+          await interaction.editReply('An error occurred while processing your request.');
+        }
       }
       
       // Handle approve_loot button
       else if (customId.startsWith('approve_loot_')) {
-        // Your existing approve_loot button handling code...
+        const requestId = customId.replace('approve_loot_', '');
+        const discordGuildId = interaction.guild?.id;
+        const userId = interaction.user.id;
+        
+        // IMMEDIATELY acknowledge the interaction first - this is critical
+        await interaction.reply({ 
+          content: "Processing loot request...",
+          ephemeral: true 
+        }).catch(error => {
+          console.error(`Initial reply error: ${error.message}`);
+          // Continue anyway since we'll process the request
+        });
+        
+        // Now perform the actual processing - don't wait on this in the interaction handler
+        processLootApproval(requestId, discordGuildId, interaction.channelId, client)
+          .then(result => {
+            // Try to edit the reply, but don't worry if it fails
+            interaction.editReply(result.message).catch(() => {});
+            
+            // Post a public confirmation in the channel
+            interaction.channel.send(result.publicMessage).catch(error => {
+              console.error(`Error sending public confirmation: ${error.message}`);
+            });
+          })
+          .catch(error => {
+            console.error(`Error in loot approval process: ${error.message}`);
+            interaction.editReply("An error occurred while processing the request.").catch(() => {});
+          });
       }
       
+      // Handle deny_loot button
       else if (customId.startsWith('deny_loot_')) {
-        // Your existing deny_loot button handling code...
+        const requestId = customId.replace('deny_loot_', '');
+        await interaction.deferReply();
+        
+        try {
+          const discordGuildId = interaction.guild?.id;
+          const mappingResult = await pool.query(
+            'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+            [discordGuildId]
+          );
+          
+          if (!mappingResult.rows.length) {
+            return await interaction.editReply('This Discord server is not linked to an application guild.');
+          }
+          
+          const appGuildId = mappingResult.rows[0].app_guild_id;
+          
+          // Get request details
+          const requestResult = await pool.query(
+            `SELECT lr.*, 
+                  i.name as item_name,
+                  u.username, u.discord_id
+            FROM loot_requests lr
+            JOIN guild_storage_items gsi ON lr.storage_item_id = gsi.id
+            JOIN items i ON gsi.item_id = i.id
+            JOIN users u ON lr.user_id = u.id
+            WHERE lr.id = $1 AND lr.guild_id = $2`,
+            [requestId, appGuildId]
+          );
+          
+          if (!requestResult.rows || requestResult.rows.length === 0) {
+            return await interaction.editReply('Request not found or already processed.');
+          }
+          
+          const request = requestResult.rows[0];
+          
+          // Update request status
+          await pool.query(
+            `UPDATE loot_requests 
+            SET status = 'Denied', updated_at = NOW()
+            WHERE id = $1`,
+            [requestId]
+          );
+          
+          // Send notification to user
+          if (request.discord_id) {
+            try {
+              const user = await interaction.client.users.fetch(request.discord_id);
+              await user.send(`❌ Your request for **${request.item_name}** has been denied.`);
+            } catch (dmError) {
+              console.error(`Failed to DM user: ${dmError.message}`);
+            }
+          }
+          
+          await interaction.editReply({
+            content: `❌ Loot request from **${request.username}** for **${request.item_name}** has been denied.`
+          });
+        } catch (error) {
+          console.error(`[ERROR] Error denying request:`, error);
+          await interaction.editReply('An error occurred while denying the request.');
+        }
       }
       
       // Handle setup_wizard button
       else if (customId === 'setup_wizard') {
-        // Your existing setup_wizard button handling code...
-      }
-    }
-    // Handle modal submissions
-    else if (interaction.isModalSubmit()) {
-      // Try to handle with the gearcheck command first
-      try {
-        const handledByGearCheck = await gearCheckCommand.handleModals(interaction);
-        if (handledByGearCheck) return;
-      } catch (error) {
-        console.error('Error in gearcheck modal handler:', error);
-      }
-      
-      // If not handled by gearcheck, try application command
-      try {
-        const handledByApplication = await applicationCommand.handleModals(interaction);
-        if (handledByApplication) return;
-      } catch (error) {
-        console.error('Error in application modal handler:', error);
+        const setupUrl = `${process.env.FRONTEND_URL}/discord/setup?guildId=${interaction.guild.id}`;
+        
+        await interaction.reply({
+          content: `Click the link below to connect this Discord server to your application guild:`,
+          components: [
+            new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setURL(setupUrl)
+                  .setLabel('Open Setup Page')
+                  .setStyle(ButtonStyle.Link)
+              )
+          ],
+          ephemeral: true
+        });
       }
       
-      // Add any custom modal handling here if needed
-      console.log(`Unhandled modal submission: ${interaction.customId}`);
+      // Handle event signup buttons
+      client.on('interactionCreate', async (interaction) => {
+        if (interaction.customId && interaction.customId.startsWith('signup_')) {
+          try {
+            // Parse event ID and role from the button's custom ID
+            const [_, eventId, role] = interaction.customId.split('_');
+            console.log(`[DEBUG] Processing signup for event: ${eventId}, role: ${role}`);
+            
+            // Immediately defer the reply to prevent timeout
+            await interaction.deferReply({ ephemeral: true }).catch(error => {
+              if (error.code === 10062) {
+                console.log(`[WARN] Interaction ${interaction.id} already acknowledged, continuing processing`);
+                return;
+              }
+              throw error;
+            });
+            
+            // Check guild mapping
+            const discordGuildId = interaction.guild?.id;
+            if (!discordGuildId) {
+              return await safeReply(interaction, {
+                content: 'This button must be used in a Discord server.',
+                ephemeral: true
+              });
+            }
+            
+            // Get app guild ID from mapping
+            const appGuildId = await getGuildMapping(discordGuildId);
+            if (!appGuildId) {
+              return await safeReply(interaction, {
+                content: 'This Discord server is not linked to an application guild.',
+                ephemeral: true
+              });
+            }
+      
+            // Get user from discord ID
+            const userResult = await pool.query(
+              'SELECT id, username, builds FROM users WHERE discord_id = $1',
+              [interaction.user.id]
+            );
+            
+            if (!userResult.rows || userResult.rows.length === 0) {
+              return await safeReply(interaction, {
+                content: 'You need to register on the website first before signing up for events.',
+                ephemeral: true
+              });
+            }
+            
+            const userId = userResult.rows[0].id;
+            const username = userResult.rows[0].username;
+            const userBuildsStr = userResult.rows[0].builds;
+            
+            // Parse user builds
+            let userBuilds = [];
+            try {
+              userBuilds = typeof userBuildsStr === 'string' ? JSON.parse(userBuildsStr) : userBuildsStr;
+              if (!Array.isArray(userBuilds)) userBuilds = [];
+            } catch (e) {
+              console.error(`Error parsing builds for user ${username}:`, e);
+              userBuilds = [];
+            }
+            
+            console.log(`[DEBUG] User builds: ${JSON.stringify(userBuilds)}`);
+            
+            // Get event details
+            const eventResult = await pool.query(
+              'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
+              [eventId, appGuildId]
+            );
+            
+            if (!eventResult.rows || eventResult.rows.length === 0) {
+              return await safeReply(interaction, {
+                content: 'Event not found.',
+                ephemeral: true
+              });
+            }
+            
+            const eventDetails = eventResult.rows[0];
+            
+            // Special handling for ABSENT and TENTATIVE roles
+            if (role === 'ABSENT') {
+              // Remove from participants
+              await pool.query(
+                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              await pool.query(
+                `INSERT INTO event_absentees 
+                  (id, guild_id, event_id, user_id, created_at, updated_at)
+                VALUES 
+                  (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                ON CONFLICT (event_id, user_id) DO NOTHING`,
+                [appGuildId, eventId, userId]
+              );
+              
+              await safeReply(interaction, {
+                content: `You have been marked as absent for "${eventDetails.title}".`,
+                ephemeral: true
+              });
+              
+              // Update event display
+              await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+              return;
+            } 
+            else if (role === 'TENTATIVE') {
+              // Handle tentative signup
+              try {
+                // Check if we have a tentative table, if not create one
+                await pool.query(`
+                  CREATE TABLE IF NOT EXISTS event_tentative (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    guild_id UUID NOT NULL,
+                    event_id UUID NOT NULL, 
+                    user_id UUID NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(event_id, user_id)
+                  )
+                `);
+                
+                // Remove from participants and absentees
+                await pool.query(
+                  'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+                
+                await pool.query(
+                  'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+                
+                // Add to tentative
+                await pool.query(
+                  `INSERT INTO event_tentative 
+                    (id, guild_id, event_id, user_id, created_at, updated_at)
+                  VALUES
+                    (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                  ON CONFLICT (event_id, user_id) DO UPDATE SET
+                    updated_at = NOW()`,
+                  [appGuildId, eventId, userId]
+                );
+                
+                await safeReply(interaction, {
+                  content: `You have been marked as tentative for "${eventDetails.title}".`,
+                  ephemeral: true
+                });
+                
+                // Update event display
+                await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+              } catch (tentativeError) {
+                console.error('Error handling tentative signup:', tentativeError);
+                await safeReply(interaction, {
+                  content: `An error occurred while marking you as tentative.`,
+                  ephemeral: true
+                });
+              }
+              return;
+            }
+            
+            // For regular signup roles (TANK, HEALER, DPS):
+            
+            // Filter builds by the selected role - CASE INSENSITIVE COMPARISON
+            const roleSpecificBuilds = userBuilds.filter(build => 
+              build.spec && build.spec.toUpperCase() === role.toUpperCase()
+            );
+            
+            console.log(`[DEBUG] Role-specific builds for ${role}: ${JSON.stringify(roleSpecificBuilds)}`);
+            
+            // Also get builds with no spec or "Any" spec as fallbacks
+            const genericBuilds = userBuilds.filter(build => 
+              !build.spec || (build.spec && build.spec.toUpperCase() === 'ANY')
+            );
+            
+            console.log(`[DEBUG] Generic builds: ${JSON.stringify(genericBuilds)}`);
+            
+            // Combine role-specific builds first, then generic builds
+            const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
+            
+            console.log(`[DEBUG] Compatible builds for ${role}: ${JSON.stringify(compatibleBuilds)}`);
+            
+            if (compatibleBuilds.length === 0) {
+              return await safeReply(interaction, {
+                content: `You don't have any builds configured for the ${role} role. Please configure your builds on the website first.`,
+                ephemeral: true
+              });
+            }
+            
+            // If there's exactly one compatible build, use it automatically
+            if (compatibleBuilds.length === 1) {
+              await handleEventSignup(interaction, compatibleBuilds[0], userId, eventId, role, eventDetails, appGuildId);
+            }
+            // Only show selection menu if there are multiple compatible builds
+            else {
+              // Create selection menu for builds
+              const options = compatibleBuilds.map((build, index) => ({
+                label: build.weapon_spec || `Build ${index + 1}`,
+                description: `${build.primary} + ${build.secondary}${build.spec ? ` (${build.spec})` : ''}`,
+                value: `${index}`  // Use index as the value
+              }));
+              
+              const row = new ActionRowBuilder()
+                .addComponents(
+                  new StringSelectMenuBuilder()
+                    .setCustomId(`build_select_${userId}_${eventId}_${role}`)
+                    .setPlaceholder('Select your build')
+                    .addOptions(options)
+                );
+              
+              await safeReply(interaction, {
+                content: `Please select which build to use for ${role}:`,
+                components: [row],
+                ephemeral: true
+              });
+            }
+          } catch (error) {
+            console.error(`Error processing signup button:`, error);
+            await safeReply(interaction, {
+              content: 'An error occurred while processing your signup. Please try again.',
+              ephemeral: true
+            });
+          }
+        }
+        // Handle build selection for signup
+        else if (interaction.isStringSelectMenu() && 
+                 interaction.customId.startsWith('build_select_')) {
+          try {
+            const [_, userId, eventId, role] = interaction.customId.split('_');
+            const selectedBuildIndex = parseInt(interaction.values[0]);
+            
+            console.log(`[DEBUG] Processing build selection - User: ${userId}, Event: ${eventId}, Role: ${role}, Build Index: ${selectedBuildIndex}`);
+            
+            // Get app guild ID
+            const appGuildId = await getGuildMapping(interaction.guild.id);
+            if (!appGuildId) {
+              await interaction.update({
+                content: 'Error: Could not find guild mapping.',
+                components: []
+              });
+              return;
+            }
+            
+            // Get user's builds
+            const userResult = await pool.query(
+              'SELECT builds FROM users WHERE id = $1',
+              [userId]
+            );
+            
+            if (!userResult.rows?.length) {
+              await interaction.update({
+                content: 'Error: User not found.',
+                components: []
+              });
+              return;
+            }
+            
+            // Parse builds
+            let userBuilds = [];
+            try {
+              userBuilds = typeof userResult.rows[0].builds === 'string' 
+                ? JSON.parse(userResult.rows[0].builds) 
+                : userResult.rows[0].builds;
+            } catch (e) {
+              console.error('Error parsing builds:', e);
+            }
+            
+            // Filter builds by the selected role - CASE INSENSITIVE COMPARISON
+            const roleSpecificBuilds = userBuilds.filter(build => 
+              build.spec && build.spec.toUpperCase() === role.toUpperCase()
+            );
+            
+            // Also get builds with no spec or "Any" spec as fallbacks
+            const genericBuilds = userBuilds.filter(build => 
+              !build.spec || (build.spec && build.spec.toUpperCase() === 'ANY')
+            );
+            
+            // Combine role-specific builds first, then generic builds
+            const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
+            
+            if (selectedBuildIndex < 0 || selectedBuildIndex >= compatibleBuilds.length) {
+              await interaction.update({
+                content: 'Error: Invalid build selection.',
+                components: []
+              });
+              return;
+            }
+            
+            const selectedBuild = compatibleBuilds[selectedBuildIndex];
+            
+            // Get event details
+            const eventResult = await pool.query(
+              'SELECT * FROM events WHERE id = $1',
+              [eventId]
+            );
+            
+            if (!eventResult.rows?.length) {
+              await interaction.update({
+                content: 'Error: Event not found.',
+                components: []
+              });
+              return;
+            }
+            
+            const eventDetails = eventResult.rows[0];
+            
+            // Complete the signup process with the selected build
+            await handleEventSignup(interaction, selectedBuild, userId, eventId, role, eventDetails, appGuildId, true);
+          } catch (error) {
+            console.error('Error handling build selection:', error);
+            await interaction.update({
+              content: 'An error occurred while processing your selection. Please try again.',
+              components: []
+            });
+          }
+        }
+      });
     }
     // Handle select menu interactions
     else if (interaction.isSelectMenu()) {
@@ -3105,7 +3482,6 @@ client.on('interactionCreate', async (interaction) => {
           ephemeral: true
         });
       }
-      // Add other select menu handling as needed
     }
   } catch (error) {
     console.error('Error handling interaction:', error);
