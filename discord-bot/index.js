@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
+const timeUtils = require('./utils/timeUtils');
+const calendarEvents = require('./utils/calendarEvents');
 
 
 const WEAPON_SPECS = {
@@ -915,82 +917,79 @@ app.post('/webhook/new-event', async (req, res) => {
     const dps = participantsResult.rows.filter(p => p.role === 'DPS');
     const absentees = absenteesResult.rows;
     
-    const formatDate = (date) => {
-      if (!date) return "Date not set";
-      date = new Date(date);
-      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    };
+    // Get the event time adjusted for server's time zone
+    const serverAdjustedTime = await timeUtils.formatToServerTime(eventData.event_time, discordGuildId);
+    
+    // Format date and time for the event header using Discord timestamp format
+    const unixTimestamp = Math.floor(new Date(eventData.event_time).getTime() / 1000);
+    const discordTimestamp = `<t:${unixTimestamp}:F>`;
+    const discordRelative = `<t:${unixTimestamp}:R>`;
 
     const tankEmoji = '<:Tank:1352736996405022780>';
     const healerEmoji = '<:Healer:1352737011479482468>';
     const dpsEmoji = '<:DPS:1352737043972624518>';
     
-    const formatTime = (date) => {
-      if (!date) return "Time not set";
-      date = new Date(date);
-      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    };
+    const channel = await client.channels.fetch(channelId);
     
-    // Create a simple embed object directly
-    const embed = {
-      title: eventData.title || 'Event',
-      color: 0x0099ff,
-      fields: [
-        {
-          name: '⏰ Time',
-          value: `📅 ${formatDate(eventData.event_time)} ⌚ ${formatTime(eventData.event_time)}`,
-          inline: false
-        },
-        {
-          name: '📍 Location',
-          value: eventData.location || 'Not specified',
-          inline: false
-        },
-        {
-          name: `${tankEmoji} Tanks (${tanks.length}/${eventData.tanks || 0})`,
-          value: tanks.length > 0 ? 
-            tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-            '—',
-          inline: true
-        },
-        {
-          name: `${healerEmoji} Healers (${healers.length}/${eventData.healers || 0})`,
-          value: healers.length > 0 ? 
-            healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-            '—',
-          inline: true
-        },
-        {
-          name: `${dpsEmoji} DPS (${dps.length}/${eventData.dps || 0})`,
-          value: dps.length > 0 ? 
-            dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-            '—',
-          inline: true
-        },
-        {
-          name: `❌ Absent (${absentees.length})`,
-          value: absentees.length > 0 ? 
-            absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
-            '—',
-          inline: true
-        },
-        {
-          name: '⏳ Tentative (0)',
-          value: '—',
-          inline: true
-        }
-      ],
-      footer: {
-        text: `Event ID: ${eventId}`
-      }
-    };
+    if (!channel) {
+      console.error(`[ERROR] Channel not found: ${channelId}`);
+      return res.status(404).json({ error: 'Channel not found' });
+    }
     
     try {
-      const channel = await client.channels.fetch(channelId);
-      
-      if (!channel) {
-        return res.status(404).json({ error: 'Channel not found' });
-      }
+      // Create an embed with the event info
+      const eventEmbed = {
+        title: eventData.title || 'Event',
+        color: 0x0099ff,
+        fields: [
+          {
+            name: '⏰ Time',
+            value: `📅 ${discordTimestamp} ⌚ ${discordRelative}`,
+            inline: false
+          },
+          {
+            name: '📍 Location',
+            value: eventData.location || 'Not specified',
+            inline: false
+          },
+          {
+            name: `${tankEmoji} Tanks (${tanks.length}/${eventData.tanks || 0})`,
+            value: tanks.length > 0 ? 
+              tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: `${healerEmoji} Healers (${healers.length}/${eventData.healers || 0})`,
+            value: healers.length > 0 ? 
+              healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: `${dpsEmoji} DPS (${dps.length}/${eventData.dps || 0})`,
+            value: dps.length > 0 ? 
+              dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: `❌ Absent (${absentees.length})`,
+            value: absentees.length > 0 ? 
+              absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+              '—',
+            inline: true
+          },
+          {
+            name: '⏳ Tentative (0)',
+            value: '—',
+            inline: true
+          }
+        ],
+        footer: {
+          text: `Event ID: ${eventId}`
+        }
+      };
       
       // Create signup buttons
       const row = new ActionRowBuilder()
@@ -1011,6 +1010,11 @@ app.post('/webhook/new-event', async (req, res) => {
             .setEmoji('1352737043972624518')
             .setStyle(ButtonStyle.Danger),
           new ButtonBuilder()
+            .setCustomId(`signup_${eventId}_TENTATIVE`)
+            .setLabel('Tentative')
+            .setEmoji('⏳')
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
             .setCustomId(`signup_${eventId}_ABSENT`)
             .setLabel('Absent')
             .setEmoji('❌')
@@ -1019,7 +1023,7 @@ app.post('/webhook/new-event', async (req, res) => {
       
       const message = await channel.send({
         content: `**${eventData.title || 'New Event'}**`,
-        embeds: [embed],
+        embeds: [eventEmbed],
         components: [row]
       });
 
@@ -1036,6 +1040,18 @@ app.post('/webhook/new-event', async (req, res) => {
         );
       } catch (storeError) {
         console.error(`[ERROR] Failed to store Discord message ID: ${storeError.message}`);
+      }
+      
+      // Create a Discord calendar event
+      try {
+        const guild = await client.guilds.fetch(discordGuildId);
+        if (guild) {
+          await calendarEvents.createDiscordCalendarEvent(guild, eventData);
+          console.log(`[INFO] Created Discord calendar event for event ${eventId}`);
+        }
+      } catch (calendarError) {
+        console.error(`[ERROR] Failed to create Discord calendar event: ${calendarError.message}`);
+        // Non-critical error, continue
       }
       
     } catch (channelError) {
@@ -4603,15 +4619,18 @@ async function recoverEventTracking() {
         const dps = participantsResult.rows.filter(p => p.role === 'DPS');
         const absentees = absenteesResult.rows;
         
-        // Format date and time
-        const eventDate = new Date(message.event_time);
-        const unixTimestamp = Math.floor(eventDate.getTime() / 1000);
+        // Get the event time adjusted for server's time zone
+        const serverAdjustedTime = await timeUtils.formatToServerTime(message.event_time, discordGuildId);
+        
+        // Format date and time using Discord timestamp format
+        const unixTimestamp = Math.floor(new Date(message.event_time).getTime() / 1000);
         const discordTimestamp = `<t:${unixTimestamp}:F>`;
         const discordRelative = `<t:${unixTimestamp}:R>`;
 
         const tankEmoji = '<:Tank:1352736996405022780>';
         const healerEmoji = '<:Healer:1352737011479482468>';
         const dpsEmoji = '<:DPS:1352737043972624518>';
+        
         // Create updated embed
         const updatedEmbed = new EmbedBuilder()
           .setTitle(`${message.title || 'Event'}`)
@@ -4723,6 +4742,31 @@ async function recoverItemTracking() {
   } catch (error) {
     console.error(`[ERROR] Error in recovery function: ${error.message}`);
     console.error(error.stack);
+  }
+}
+
+async function getServerTimeZone(discordGuildId) {
+  try {
+    // Ensure database connection is established
+    if (!pool || !pool.query) {
+      console.error(`[ERROR] Database connection not established for getServerTimeZone`);
+      return DEFAULT_SERVER_TIMEZONE;
+    }
+    
+    // Query the database for server-specific time zone settings
+    const result = await pool.query(
+      `SELECT time_zone FROM discord_server_settings 
+       WHERE discord_guild_id = $1`,
+      [discordGuildId]
+    );
+    
+    // Return the stored time zone or default if not found
+    return (result.rows.length > 0 && result.rows[0].time_zone) 
+      ? result.rows[0].time_zone 
+      : DEFAULT_SERVER_TIMEZONE;
+  } catch (error) {
+    console.error(`[ERROR] Failed to get server time zone: ${error.message}`);
+    return DEFAULT_SERVER_TIMEZONE;
   }
 }
 
