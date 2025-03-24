@@ -1,6 +1,19 @@
 // discord-bot/utils/embed_builder.js
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
+function formatDiscordTimestamp(date, format = 'F') {
+  if (!date) return 'Time not set';
+  
+  // Convert to Date object if it's a string
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  // Convert to Unix timestamp (seconds since epoch)
+  const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
+  
+  // Return formatted Discord timestamp
+  return `<t:${unixTimestamp}:${format}>`;
+}
+
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
   'Crossbow|Greatsword': 'Outrider',

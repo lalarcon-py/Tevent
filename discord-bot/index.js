@@ -913,23 +913,17 @@ app.post('/webhook/new-event', async (req, res) => {
     const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
     const dps = participantsResult.rows.filter(p => p.role === 'DPS');
     const absentees = absenteesResult.rows;
-    
-    const formatDate = (date) => {
-      if (!date) return "Date not set";
-      date = new Date(date);
-      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    };
 
     const tankEmoji = '<:Tank:1352736996405022780>';
     const healerEmoji = '<:Healer:1352737011479482468>';
     const dpsEmoji = '<:DPS:1352737043972624518>';
-    
-    const formatTime = (date) => {
-      if (!date) return "Time not set";
-      date = new Date(date);
-      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  
+    const formatDiscordTimestamp = (date, format = 'F') => {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
+      return `<t:${unixTimestamp}:${format}>`;
     };
-    
+
     // Create a simple embed object directly
     const embed = {
       title: eventData.title || 'Event',
@@ -937,7 +931,7 @@ app.post('/webhook/new-event', async (req, res) => {
       fields: [
         {
           name: '⏰ Time',
-          value: `📅 ${formatDate(eventData.event_time)} ⌚ ${formatTime(eventData.event_time)}`,
+          value: formatDiscordTimestamp(eventData.event_time),
           inline: false
         },
         {
@@ -5885,19 +5879,21 @@ app.post('/webhook/announce-teams-with-images', async (req, res) => {
     
     try {
       // Format date and time for the event header
-      const eventDate = new Date(eventData.event_time);
-      const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      const formatDiscordTimestamp = (date, format = 'F') => {
+        const dateObj = typeof date === 'string' ? new Date(date) : date;
+        const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
+        return `<t:${unixTimestamp}:${format}>`;
+      };
       
       // Create an initial embed with event information
       const eventEmbed = new EmbedBuilder()
         .setTitle(`📋 ${eventData.title} - Team Assignments`)
         .setDescription(
-          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📅 **Event:** ${formatDiscordTimestamp(eventData.event_time)} (${formatDiscordTimestamp(eventData.event_time, 'R')})\n` +
           `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
-          (eventData.description ? `${eventData.description}\n\n` : '') +
-          `👥 **Total Teams:** ${teamImages.length}`
+          (eventData.description ? `${eventData.description}\n\n` : '')
         )
+        .setImage('attachment://teams.jpg')
         .setColor('#1a64f3')
         .setTimestamp();
       
@@ -6300,9 +6296,11 @@ app.post('/webhook/update-event-signup', async (req, res) => {
       
       const event = eventResult.rows[0];
       
-      const eventDate = new Date(event.event_time);
-      const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
-      const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+      const formatDiscordTimestamp = (date, format = 'F') => {
+        const dateObj = typeof date === 'string' ? new Date(date) : date;
+        const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
+        return `<t:${unixTimestamp}:${format}>`;
+      };
       
       const updatedEmbed = new EmbedBuilder()
         .setTitle(`${event.title || 'Event'}`)
@@ -6311,7 +6309,7 @@ app.post('/webhook/update-event-signup', async (req, res) => {
         .addFields(
           {
             name: '⏰ Time',
-            value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+            value: formatDiscordTimestamp(event.event_time),
             inline: false
           },
           {
