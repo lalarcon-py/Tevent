@@ -520,6 +520,7 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
             ))}
 
           <TextField
+            label="Combat Power"
             type="number"
             value={editedMember.combat_power || ''}
             onChange={(e) => {
@@ -548,7 +549,8 @@ const EditMemberDialog = ({ member, currentUser, onClose, onSave }) => {
                 '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
                 '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
                 '&.Mui-focused fieldset': { borderColor: '#90caf9' }
-              }
+              },
+              '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' } // Added styling for the label
             }}
           />
 

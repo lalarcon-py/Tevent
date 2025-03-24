@@ -182,16 +182,36 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
       
       setOpenEditDialog(false);
       
-      // Use the existing members API endpoint instead of a non-existent user update endpoint
+      // Extract guild ID from URL or localStorage
+      let guildId = null;
+      
+      // Try to get from URL first
+      const pathParts = window.location.pathname.split('/');
+      const guildIdIndex = pathParts.indexOf('guilds') + 1;
+      if (guildIdIndex > 0 && guildIdIndex < pathParts.length) {
+        guildId = pathParts[guildIdIndex];
+      }
+      
+      // If not found in URL, try localStorage
+      if (!guildId) {
+        try {
+          guildId = localStorage.getItem('guildId');
+        } catch (e) {
+          console.warn('Failed to access localStorage:', e);
+        }
+      }
+      
+      // Use the existing members API endpoint
       const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/members/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Important for authentication
+        credentials: 'include',
         body: JSON.stringify({
           id: user.id,
           username: username,
+          guildId, // Add the guild ID
           // Preserve other user data
           role: user.role,
           discord_id: user.discord_id,
@@ -206,16 +226,11 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
         throw new Error('Failed to update username');
       }
       
-      // Show success message or update local state if needed
-      console.log('Username updated successfully');
-      
-      // Force refresh to show updated name in MembersList
-      // This approach ensures the MembersList component gets the updated data from the server
+      // Force refresh to show updated name
       window.location.reload();
       
     } catch (error) {
       console.error('Failed to update username:', error);
-      // You could set an error state here to show to the user
     }
   };
   

@@ -73,11 +73,11 @@ const SupportForm = ({ open, handleClose }) => {
       submissionData.append('description', formData.description);
       
       formData.images.forEach(file => {
-        submissionData.append('images', file);
+        submissionData.append('files', file);
       });
       
       // API call to submit ticket
-      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/support/ticket`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/support/submit`, {
         method: 'POST',
         body: submissionData,
         credentials: 'include'
