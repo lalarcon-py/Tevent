@@ -6,6 +6,14 @@ const DEFAULT_SERVER_TIMEZONE = 'America/Los_Angeles'; // Default to Pacific Tim
  * @param {string} discordGuildId - Discord guild ID
  * @returns {string} - Time zone identifier (e.g., 'America/Los_Angeles')
  */
+
+const { Pool } = require('pg');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 async function getServerTimeZone(discordGuildId) {
   try {
     // Query the database for server-specific time zone settings

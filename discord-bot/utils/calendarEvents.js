@@ -8,53 +8,60 @@ const { formatToServerTime, createDiscordTimestamp } = require('./timeUtils');
  * @param {Object} eventData - Event data with title, description, etc.
  * @returns {Promise<ScheduledEvent|null>} - Created Discord scheduled event or null if failed
  */
+
 async function createDiscordCalendarEvent(guild, eventData) {
-  try {
-    // Get the event time formatted for this server's time zone
-    const serverAdjustedTime = await formatToServerTime(
-      eventData.event_time,
-      guild.id
-    );
-    
-    console.log(`[INFO] Creating Discord calendar event: ${eventData.title}`);
-    console.log(`[INFO] Original time (UTC): ${new Date(eventData.event_time).toISOString()}`);
-    console.log(`[INFO] Server-adjusted time: ${serverAdjustedTime.toISOString()}`);
-    
-    // Create the Discord calendar event
-    const discordEvent = await guild.scheduledEvents.create({
-      name: eventData.title,
-      description: eventData.description || 'No description provided',
-      scheduledStartTime: serverAdjustedTime,
-      privacyLevel: 2, // GUILD_ONLY
-      entityType: 3, // EXTERNAL
-      entityMetadata: {
-        location: eventData.location || 'Not specified'
-      }
-    });
-    
-    console.log(`[INFO] Successfully created Discord calendar event: ${discordEvent.id}`);
-    
-    // Store the Discord event ID in our database for later reference
     try {
-      await pool.query(
-        `INSERT INTO discord_event_ids
-         (event_id, discord_event_id, created_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (event_id) DO UPDATE SET
-         discord_event_id = $2, updated_at = NOW()`,
-        [eventData.id, discordEvent.id]
+      // Get the event time formatted for this server's time zone
+      const serverAdjustedTime = await formatToServerTime(
+        eventData.event_time,
+        guild.id
       );
-    } catch (dbError) {
-      console.error(`[ERROR] Failed to store Discord event ID: ${dbError.message}`);
-      // Continue anyway as the event was created successfully
+      
+      // Create an end time 3 hours after start time (adjust as needed)
+      const endTime = new Date(serverAdjustedTime);
+      endTime.setHours(endTime.getHours() + 3);
+      
+      console.log(`[INFO] Creating Discord calendar event: ${eventData.title}`);
+      console.log(`[INFO] Original time (UTC): ${new Date(eventData.event_time).toISOString()}`);
+      console.log(`[INFO] Server-adjusted time: ${serverAdjustedTime.toISOString()}`);
+      console.log(`[INFO] End time: ${endTime.toISOString()}`);
+      
+      // Create the Discord calendar event
+      const discordEvent = await guild.scheduledEvents.create({
+        name: eventData.title,
+        description: eventData.description || 'No description provided',
+        scheduledStartTime: serverAdjustedTime,
+        scheduledEndTime: endTime, // Add end time
+        privacyLevel: 2, // GUILD_ONLY
+        entityType: 3, // EXTERNAL
+        entityMetadata: {
+          location: eventData.location || 'Not specified'
+        }
+      });
+      
+      console.log(`[INFO] Successfully created Discord calendar event: ${discordEvent.id}`);
+      
+      // Store the Discord event ID in our database for later reference
+      try {
+        await pool.query(
+          `INSERT INTO discord_event_ids
+           (event_id, discord_event_id, created_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (event_id) DO UPDATE SET
+           discord_event_id = $2, updated_at = NOW()`,
+          [eventData.id, discordEvent.id]
+        );
+      } catch (dbError) {
+        console.error(`[ERROR] Failed to store Discord event ID: ${dbError.message}`);
+        // Continue anyway as the event was created successfully
+      }
+      
+      return discordEvent;
+    } catch (error) {
+      console.error(`[ERROR] Failed to create Discord calendar event:`, error);
+      return null;
     }
-    
-    return discordEvent;
-  } catch (error) {
-    console.error(`[ERROR] Failed to create Discord calendar event:`, error);
-    return null;
   }
-}
 
 /**
  * Update an existing Discord calendar event
