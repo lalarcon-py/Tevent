@@ -20,6 +20,7 @@ const path = require('path');
 const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
 
+
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
   'Crossbow|Greatsword': 'Outrider',
@@ -4604,8 +4605,9 @@ async function recoverEventTracking() {
         
         // Format date and time
         const eventDate = new Date(message.event_time);
-        const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
-        const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+        const unixTimestamp = Math.floor(eventDate.getTime() / 1000);
+        const discordTimestamp = `<t:${unixTimestamp}:F>`;
+        const discordRelative = `<t:${unixTimestamp}:R>`;
 
         const tankEmoji = '<:Tank:1352736996405022780>';
         const healerEmoji = '<:Healer:1352737011479482468>';
@@ -4618,7 +4620,7 @@ async function recoverEventTracking() {
           .addFields(
             {
               name: '⏰ Time',
-              value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+              value: `📅 ${discordTimestamp} ⌚ ${discordRelative}`,
               inline: false
             },
             {
@@ -5195,38 +5197,54 @@ async function handleEventsCommand(interaction, appGuildId) {
 
 async function safeReply(interaction, options) {
   try {
-    // Check if interaction has been deferred
+    // If the interaction is already deferred, edit the reply
     if (interaction.deferred) {
-      await interaction.editReply(options).catch(error => {
-        if (error.code === 10062) {
-          console.log(`[WARN] Cannot edit reply - interaction ${interaction.id} unknown/expired`);
+      return await interaction.editReply(options).catch(error => {
+        if (error.code === 10062) { // Unknown interaction
+          console.log(`[WARN] Cannot edit reply - interaction ${interaction.id} expired`);
         } else {
-          throw error;
+          console.error(`[ERROR] Edit reply error: ${error.message}`);
         }
+        return null;
       });
     } 
-    // Check if interaction has been replied to
+    // If the interaction has been replied to, use followUp
     else if (interaction.replied) {
-      await interaction.followUp(options).catch(error => {
-        if (error.code === 10062) {
-          console.log(`[WARN] Cannot follow up - interaction ${interaction.id} unknown/expired`);
-        } else {
-          throw error;
-        }
+      return await interaction.followUp({
+        ...options,
+        ephemeral: options.ephemeral ?? true // Default to ephemeral for followups
+      }).catch(error => {
+        console.error(`[ERROR] Follow-up error: ${error.message}`);
+        return null;
       });
     } 
-    // If not deferred or replied, send a new reply
+    // If not yet responded to, defer the reply first (gives us 15 minutes to respond)
     else {
-      await interaction.reply(options).catch(error => {
-        if (error.code === 10062) {
-          console.log(`[WARN] Cannot reply - interaction ${interaction.id} unknown/expired`);
-        } else {
-          throw error;
+      try {
+        await interaction.deferReply({
+          ephemeral: options.ephemeral ?? false
+        });
+        
+        // Small delay to ensure the defer takes effect
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        return await interaction.editReply(options).catch(error => {
+          console.error(`[ERROR] Edit after defer error: ${error.message}`);
+          return null;
+        });
+      } catch (deferError) {
+        // If we can't defer (maybe already acknowledged elsewhere),
+        // try a direct reply as a last resort
+        if (deferError.code === 40060 || deferError.code === 10062) {
+          return await interaction.reply(options).catch(() => null);
         }
-      });
+        console.error(`[ERROR] Defer error: ${deferError.message}`);
+        return null;
+      }
     }
   } catch (error) {
     console.error(`[ERROR] Safe reply failed for interaction ${interaction.id}: ${error.message}`);
+    return null;
   }
 }
 
@@ -5885,15 +5903,16 @@ app.post('/webhook/announce-teams-with-images', async (req, res) => {
     
     try {
       // Format date and time for the event header
-      const eventDate = new Date(eventData.event_time);
-      const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      const eventDate = new Date(message.event_time);
+      const unixTimestamp = Math.floor(eventDate.getTime() / 1000);
+      const discordTimestamp = `<t:${unixTimestamp}:F>`;
+      const discordRelative = `<t:${unixTimestamp}:R>`;
       
       // Create an initial embed with event information
       const eventEmbed = new EmbedBuilder()
         .setTitle(`📋 ${eventData.title} - Team Assignments`)
         .setDescription(
-          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📅 **Event:** ${discordTimestamp} at ${discordRelative}\n` +
           `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
           (eventData.description ? `${eventData.description}\n\n` : '') +
           `👥 **Total Teams:** ${teamImages.length}`
@@ -6028,9 +6047,10 @@ app.post('/webhook/announce-teams-with-images', async (req, res) => {
     
     try {
       // Format date and time for the event header
-      const eventDate = new Date(eventData.event_time);
-      const dateFormatted = eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const timeFormatted = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      const eventDate = new Date(message.event_time);
+      const unixTimestamp = Math.floor(eventDate.getTime() / 1000);
+      const discordTimestamp = `<t:${unixTimestamp}:F>`;
+      const discordRelative = `<t:${unixTimestamp}:R>`;
       
       // Create the team image attachment
       const imageBuffer = Buffer.from(
@@ -6044,7 +6064,7 @@ app.post('/webhook/announce-teams-with-images', async (req, res) => {
       const eventEmbed = new EmbedBuilder()
         .setTitle(`📋 ${eventData.title} - Team Assignments`)
         .setDescription(
-          `📅 **Event:** ${dateFormatted} at ${timeFormatted}\n` +
+          `📅 **Event:** ${discordTimestamp} at ${discordRelative}\n` +
           `📍 **Location:** ${eventData.location || 'Not specified'}\n\n` +
           (eventData.description ? `${eventData.description}\n\n` : '')
         )
@@ -6300,9 +6320,10 @@ app.post('/webhook/update-event-signup', async (req, res) => {
       
       const event = eventResult.rows[0];
       
-      const eventDate = new Date(event.event_time);
-      const dateFormatted = `${eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
-      const timeFormatted = `${eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+      const eventDate = new Date(message.event_time);
+      const unixTimestamp = Math.floor(eventDate.getTime() / 1000);
+      const discordTimestamp = `<t:${unixTimestamp}:F>`;
+      const discordRelative = `<t:${unixTimestamp}:R>`;
       
       const updatedEmbed = new EmbedBuilder()
         .setTitle(`${event.title || 'Event'}`)
@@ -6311,7 +6332,7 @@ app.post('/webhook/update-event-signup', async (req, res) => {
         .addFields(
           {
             name: '⏰ Time',
-            value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+            value: `📅 ${discordTimestamp} ⌚ ${discordRelative}`,
             inline: false
           },
           {
