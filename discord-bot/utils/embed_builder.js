@@ -71,173 +71,221 @@ module.exports = {
   /**
    * Create an embed for an event
    */
-  createEventEmbed: (event) => {
-    try {
-      // Convert event_time to Date if it's a string
-      const eventTime = typeof event.event_time === 'string' 
-        ? new Date(event.event_time) 
-        : event.event_time;
-      
-      // Check if event has passed
-      const now = new Date();
-      const eventHasPassed = eventTime < now;
-      
-      // Calculate time until event
-      const timeUntil = eventTime - now;
-      const daysUntil = Math.floor(timeUntil / (1000 * 60 * 60 * 24));
-      const hoursUntil = Math.floor((timeUntil % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      
-      // Status indicators based on time
-      let statusEmoji = '🔶'; // Default - upcoming
-      let statusColor = '#0099ff'; // Default blue color
-      
-      if (eventHasPassed) {
-        statusEmoji = '✓'; 
-        statusColor = '#808080'; // Gray for past events
-      } else if (timeUntil < 3600000) { // Less than 1 hour
-        statusEmoji = '⚠️';
-        statusColor = '#ff9900'; // Orange for imminent
-      } else if (daysUntil === 0) { // Today
-        statusEmoji = '🔴';
-        statusColor = '#f44336'; // Red for today
-      }
-      
-      // Convert to Unix timestamp (seconds since epoch)
-      const unixTimestamp = Math.floor(eventTime.getTime() / 1000);
-      
-      // Use Discord's timestamp formatting
-      const discordTimestamp = `<t:${unixTimestamp}:F>`; // F = Full date and time
-      const discordRelative = `<t:${unixTimestamp}:R>`; // R = Relative time
-      
-      // Hardcoded emoji strings
-      const tankEmoji = '<:Tank:1352736996405022780>';
-      const healerEmoji = '<:Healer:1352737011479482468>';
-      const dpsEmoji = '<:DPS:1352737043972624518>';
-      
-      // Format countdown using Discord's relative time for consistency
-      let countdownText = discordRelative;
-      
-      // Get participants
-      let participants = event.participants || [];
-      
-      // Count players by role
-      const tanks = participants.filter(p => p.role === 'TANK');
-      const healers = participants.filter(p => p.role === 'HEALER');
-      const dps = participants.filter(p => p.role === 'DPS');
-      
-      // Helper function to get weapon display (unchanged)
-      function getWeaponDisplay(weaponType) {
-        /* existing code - unchanged */
-      }
-      
-      const formatPlayers = (players) => {
-        /* existing code - unchanged */
-      };
-      
-      // Get absentees and tentative (unchanged)
-      let absentees = [];
-      if (Array.isArray(event.absentees)) {
-        absentees = event.absentees;
-      } else if (event.EventAbsentees && Array.isArray(event.EventAbsentees)) {
-        absentees = event.EventAbsentees;
-      }
-      
-      const formatAbsentees = () => {
-        /* existing code - unchanged */
-      };
-      
-      let tentative = [];
-      if (Array.isArray(event.tentative)) {
-        tentative = event.tentative;
-      } else if (event.EventTentative && Array.isArray(event.EventTentative)) {
-        tentative = event.EventTentative;
-      }
-      
-      const formatTentative = () => {
-        /* existing code - unchanged */
-      };
-      
-      // Create embed with simplified title and description
-      const embed = new EmbedBuilder()
-        .setTitle(`${statusEmoji} ${event.title || 'Event'}`)
-        .setColor(statusColor)
-        .setDescription(`${countdownText}${event.description ? `\n\n${event.description}` : ''}`);
-      
-      // Use Discord timestamp for time display
-      embed.addFields(
-        { 
-          name: '⏰ Time & Date', 
-          value: discordTimestamp, 
-          inline: false 
-        }
-      );
-      
-      // Add location if provided
-      if (event.location) {
-        embed.addFields(
-          { 
-            name: '📍 Location', 
-            value: event.location, 
-            inline: false 
-          }
-        );
-      }
-      
-      // Add fields for current signups with hardcoded emoji strings
-      embed.addFields(
-        { 
-          name: `${tankEmoji} Tanks (${tanks.length}/${event.tanks || 0})`, 
-          value: formatPlayers(tanks), 
-          inline: true 
-        },
-        { 
-          name: `${healerEmoji} Healers (${healers.length}/${event.healers || 0})`, 
-          value: formatPlayers(healers), 
-          inline: true 
-        },
-        { 
-          name: `${dpsEmoji} DPS (${dps.length}/${event.dps || 0})`, 
-          value: formatPlayers(dps), 
-          inline: true 
-        }
-      );
-      
-      // Add absentees and tentative stacked vertically
-      embed.addFields(
-        { 
-          name: `❌ Absent (${absentees.length || 0})`, 
-          value: formatAbsentees(), 
-          inline: false
-        },
-        { 
-          name: `⏳ Tentative (${tentative.length || 0})`, 
-          value: formatTentative(), 
-          inline: false
-        }
-      );
-      
-      if (eventHasPassed) {
-        embed.addFields({
-          name: '⚠️ Event Status',
-          value: 'This event has already ended',
-          inline: false
-        });
-      }
-      
-      // Add footer
-      embed.setFooter({ 
-        text: `Use buttons below to sign up • Event ID: ${event.id}` 
-      });
-      
-      return embed;
-    } catch (error) {
-      console.error('Error creating event embed:', error, error.stack);
+  // In embed_builder.js, replace the entire createEventEmbed function
+createEventEmbed: (event) => {
+  try {
+    // Ensure we have an event object
+    if (!event) {
+      console.error('Tried to create event embed with undefined event');
       return new EmbedBuilder()
         .setTitle('Event Details')
         .setDescription('Error creating detailed event information')
         .setColor('#ff0000');
     }
-  },
+    
+    // Convert event_time to Date if it's a string
+    const eventTime = event.event_time ? 
+      (typeof event.event_time === 'string' ? new Date(event.event_time) : event.event_time)
+      : new Date();
+    
+    // Check if event has passed
+    const now = new Date();
+    const eventHasPassed = eventTime < now;
+    
+    // Calculate time until event
+    const timeUntil = eventTime - now;
+    const daysUntil = Math.floor(timeUntil / (1000 * 60 * 60 * 24));
+    const hoursUntil = Math.floor((timeUntil % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    // Status indicators based on time
+    let statusEmoji = '🔶'; // Default - upcoming
+    let statusColor = '#0099ff'; // Default blue color
+    
+    if (eventHasPassed) {
+      statusEmoji = '✓'; 
+      statusColor = '#808080'; // Gray for past events
+    } else if (timeUntil < 3600000) { // Less than 1 hour
+      statusEmoji = '⚠️';
+      statusColor = '#ff9900'; // Orange for imminent
+    } else if (daysUntil === 0) { // Today
+      statusEmoji = '🔴';
+      statusColor = '#f44336'; // Red for today
+    }
+    
+    // Convert to Unix timestamp (seconds since epoch)
+    const unixTimestamp = Math.floor(eventTime.getTime() / 1000);
+    
+    // Use Discord's timestamp formatting
+    const discordTimestamp = `<t:${unixTimestamp}:F>`; // F = Full date and time
+    const discordRelative = `<t:${unixTimestamp}:R>`; // R = Relative time
+    
+    // Hardcoded emoji strings
+    const tankEmoji = '<:Tank:1352736996405022780>';
+    const healerEmoji = '<:Healer:1352737011479482468>';
+    const dpsEmoji = '<:DPS:1352737043972624518>';
+    
+    // Format countdown using Discord's relative time for consistency
+    let countdownText = discordRelative;
+    
+    // Get participants - handle various data formats
+    let participants = [];
+    if (Array.isArray(event.participants)) {
+      participants = event.participants;
+    } else if (event.participants && typeof event.participants === 'object') {
+      // For when participants is an object with counts
+      participants = [];
+    }
+    
+    // Count players by role
+    const tanks = Array.isArray(participants) ? 
+      participants.filter(p => p.role === 'TANK') : [];
+    const healers = Array.isArray(participants) ? 
+      participants.filter(p => p.role === 'HEALER') : [];
+    const dps = Array.isArray(participants) ? 
+      participants.filter(p => p.role === 'DPS') : [];
+    
+    // Format players as a string
+    const formatPlayers = (players) => {
+      if (!Array.isArray(players) || players.length === 0) return '—';
+      
+      return players.map((p, idx) => {
+        const username = p.User?.username || p.username || 'Unknown';
+        return `${idx + 1}. ${username}`;
+      }).join('\n');
+    };
+    
+    // Handle absentees with proper null checking
+    let absentees = [];
+    if (Array.isArray(event.absentees)) {
+      absentees = event.absentees;
+    } else if (event.EventAbsentees && Array.isArray(event.EventAbsentees)) {
+      absentees = event.EventAbsentees;
+    }
+    
+    const formatAbsentees = () => {
+      if (!Array.isArray(absentees) || absentees.length === 0) return '—';
+      
+      return absentees.map((a, idx) => {
+        const username = a.User?.username || a.username || 'Unknown';
+        return `${idx + 1}. ${username}`;
+      }).join('\n');
+    };
+    
+    // Handle tentative participants with proper null checking
+    let tentative = [];
+    if (Array.isArray(event.tentative)) {
+      tentative = event.tentative;
+    } else if (event.EventTentative && Array.isArray(event.EventTentative)) {
+      tentative = event.EventTentative;
+    }
+    
+    const formatTentative = () => {
+      if (!Array.isArray(tentative) || tentative.length === 0) return '—';
+      
+      return tentative.map((t, idx) => {
+        const username = t.User?.username || t.username || 'Unknown';
+        return `${idx + 1}. ${username}`;
+      }).join('\n');
+    };
+    
+    // Get tank, healer, and DPS counts - handle various data formats
+    let tankCount = 0;
+    let healerCount = 0;
+    let dpsCount = 0;
+    
+    if (Array.isArray(participants)) {
+      tankCount = tanks.length;
+      healerCount = healers.length;
+      dpsCount = dps.length;
+    } else if (event.participants && typeof event.participants === 'object') {
+      // Handle the case where participants is an object with counts
+      tankCount = event.participants.tank_count || 0;
+      healerCount = event.participants.healer_count || 0;
+      dpsCount = event.participants.dps_count || 0;
+    } else if (event.tank_count !== undefined || event.healer_count !== undefined || event.dps_count !== undefined) {
+      // Handle the case where counts are directly on the event
+      tankCount = event.tank_count || 0;
+      healerCount = event.healer_count || 0;
+      dpsCount = event.dps_count || 0;
+    }
+    
+    // Create embed with simplified title and description
+    const embed = new EmbedBuilder()
+      .setTitle(`${statusEmoji} ${event.title || 'Event'}`)
+      .setColor(statusColor)
+      .setDescription(`${countdownText}${event.description ? `\n\n${event.description}` : ''}`);
+    
+    // Use Discord timestamp for time display - add individually for safety
+    embed.addFields({
+      name: '⏰ Time & Date', 
+      value: discordTimestamp || 'Time not set', 
+      inline: false 
+    });
+    
+    // Add location if provided
+    embed.addFields({
+      name: '📍 Location', 
+      value: event.location || 'Not specified', 
+      inline: false 
+    });
+    
+    // Add tank field separately
+    embed.addFields({
+      name: `${tankEmoji} Tanks (${tankCount}/${event.tanks || 0})`, 
+      value: formatPlayers(tanks), 
+      inline: true 
+    });
+    
+    // Add healer field separately
+    embed.addFields({
+      name: `${healerEmoji} Healers (${healerCount}/${event.healers || 0})`, 
+      value: formatPlayers(healers), 
+      inline: true 
+    });
+    
+    // Add DPS field separately
+    embed.addFields({
+      name: `${dpsEmoji} DPS (${dpsCount}/${event.dps || 0})`, 
+      value: formatPlayers(dps), 
+      inline: true 
+    });
+    
+    // Add absentees separately
+    embed.addFields({
+      name: `❌ Absent (${absentees.length || 0})`, 
+      value: formatAbsentees(), 
+      inline: true
+    });
+    
+    // Add tentative separately
+    embed.addFields({
+      name: `⏳ Tentative (${tentative.length || 0})`, 
+      value: formatTentative(), 
+      inline: true
+    });
+    
+    if (eventHasPassed) {
+      embed.addFields({
+        name: '⚠️ Event Status',
+        value: 'This event has already ended',
+        inline: false
+      });
+    }
+    
+    // Add footer
+    embed.setFooter({ 
+      text: `Use buttons below to sign up • Event ID: ${event.id}` 
+    });
+    
+    return embed;
+  } catch (error) {
+    console.error('Error creating event embed:', error, error.stack);
+    return new EmbedBuilder()
+      .setTitle('Event Details')
+      .setDescription('Error creating detailed event information')
+      .setColor('#ff0000');
+  }
+},
   
   /**
    * Create an embed for a team
