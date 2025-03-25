@@ -17,6 +17,7 @@ import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import GroupsIcon from '@mui/icons-material/Groups';
+import SummarizeIcon from '@mui/icons-material/Summarize';
 import { useAuth } from '../../contexts/AuthContext';
 import LogoutButton from '../Auth/LogoutButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -257,7 +258,7 @@ const Navigation = ({ guildId }) => {
     },
     {
       text: 'Summaries',
-      icon: <FormatListBulletedIcon />,
+      icon: <SummarizeIcon />,
       path: '/event-summaries'
     },
     {
@@ -453,7 +454,8 @@ const Navigation = ({ guildId }) => {
         top: 'auto',
         bottom: 0,
         bgcolor: '#1a1a1a',
-        borderTop: '1px solid rgba(255, 255, 255, 0.12)'
+        borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+        zIndex: 1200
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-around', minHeight: '56px', px: 1 }}>
