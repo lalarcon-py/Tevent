@@ -1,17 +1,22 @@
 // components/EventPlanner/Calendar.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Box, 
   Grid, 
   Typography, 
   Paper,
-  IconButton 
+  IconButton,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
 const Calendar = ({ events, onEventClick }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
@@ -69,12 +74,12 @@ const Calendar = ({ events, onEventClick }) => {
             elevation={0}
             sx={{
               height: '100%',
-              p: 1.5,
+              p: isMobile ? 0.75 : 1.5,
               bgcolor: isToday ? 'rgba(144, 202, 249, 0.08)' : 'transparent',
               border: '1px solid',
               borderColor: isToday ? '#90caf9' : 'rgba(255, 255, 255, 0.12)',
               borderRadius: 2,
-              minHeight: '120px',
+              minHeight: isMobile ? '80px' : '120px',
               aspectRatio: '1/1',
               position: 'relative',
               transition: 'all 0.2s ease-in-out',
@@ -89,8 +94,8 @@ const Calendar = ({ events, onEventClick }) => {
               sx={{ 
                 color: isToday ? '#90caf9' : 'white',
                 fontWeight: isToday ? 600 : 400,
-                fontSize: '0.9rem',
-                mb: 1
+                fontSize: isMobile ? '0.8rem' : '0.9rem',
+                mb: isMobile ? 0.5 : 1
               }}
             >
               {day}
@@ -103,10 +108,10 @@ const Calendar = ({ events, onEventClick }) => {
                   sx={{
                     bgcolor: 'rgba(144, 202, 249, 0.15)',
                     color: '#90caf9',
-                    p: 0.75,
+                    p: isMobile ? 0.5 : 0.75,
                     borderRadius: 1.5,
                     cursor: 'pointer',
-                    fontSize: '0.75rem',
+                    fontSize: isMobile ? '0.65rem' : '0.75rem',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -131,17 +136,24 @@ const Calendar = ({ events, onEventClick }) => {
   };
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Use shortened day names for mobile
+  const mobileWeekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <Box sx={{ p: 3, borderRadius: 4, bgcolor: '#121212' }}>
+    <Box sx={{ 
+      p: isMobile ? 1 : 3, 
+      borderRadius: 4, 
+      bgcolor: '#121212',
+      overflowX: 'hidden' 
+    }}>
       <Box 
         display="flex" 
         justifyContent="space-between" 
         alignItems="center" 
-        mb={4}
+        mb={isMobile ? 2 : 4}
         sx={{
           borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
-          pb: 2
+          pb: isMobile ? 1 : 2
         }}
       >
         <IconButton 
@@ -156,14 +168,17 @@ const Calendar = ({ events, onEventClick }) => {
           <ArrowBackIcon />
         </IconButton>
         <Typography 
-          variant="h5" 
+          variant={isMobile ? "subtitle1" : "h5"} 
           sx={{ 
             color: 'white',
             fontWeight: 500,
             letterSpacing: 0.5
           }}
         >
-          {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+          {currentDate.toLocaleString('default', { 
+            month: 'long', 
+            year: isMobile ? '2-digit' : 'numeric' 
+          })}
         </Typography>
         <IconButton 
           onClick={() => navigateMonth(1)} 
@@ -178,16 +193,16 @@ const Calendar = ({ events, onEventClick }) => {
         </IconButton>
       </Box>
 
-      <Grid container spacing={2}>
-        {weekDays.map(day => (
+      <Grid container spacing={isMobile ? 1 : 2}>
+        {(isMobile ? mobileWeekDays : weekDays).map(day => (
           <Grid item xs key={day}>
             <Typography 
               align="center" 
               sx={{ 
                 color: 'rgba(255, 255, 255, 0.7)',
-                fontSize: '0.875rem',
+                fontSize: isMobile ? '0.75rem' : '0.875rem',
                 fontWeight: 500,
-                mb: 2,
+                mb: isMobile ? 1 : 2,
                 textTransform: 'uppercase',
                 letterSpacing: 0.5
               }}

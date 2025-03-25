@@ -20,12 +20,19 @@ import {
   List,
   ListItem,
   ListItemText,
-  Tooltip
+  Tooltip,
+  useTheme,
+  useMediaQuery,
+  IconButton,
+  Collapse,
+  Paper
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import GroupIcon from '@mui/icons-material/Group';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { format, parseISO, isPast } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
@@ -37,8 +44,11 @@ const API_URL = process.env.REACT_APP_API_URL;
 
 // BuildSelectionDialog component definition
 const BuildSelectionDialog = ({ open, builds, onClose, onSelectBuild }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
       <DialogTitle sx={{ bgcolor: '#1a1a1a', color: 'white' }}>
         Select Build for Event
       </DialogTitle>
@@ -119,6 +129,12 @@ const EventSummaries = () => {
   const [successMessage, setSuccessMessage] = useState(null);
   const { user: currentUser } = useAuth();
   const { simulatedRole } = useSimulatedRole();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  
+  // New state for expandable cards on mobile
+  const [expandedCards, setExpandedCards] = useState({});
   
   // New state variables for build selection
   const [buildSelectionOpen, setBuildSelectionOpen] = useState(false);
@@ -127,6 +143,14 @@ const EventSummaries = () => {
   
   // Get effective role
   const effectiveRole = simulatedRole || (currentUser ? currentUser.role : null);
+
+  // Toggle card expansion
+  const toggleCardExpansion = (eventId) => {
+    setExpandedCards(prev => ({
+      ...prev,
+      [eventId]: !prev[eventId]
+    }));
+  };
 
   useEffect(() => {
     fetchEvents();
@@ -592,10 +616,155 @@ const EventSummaries = () => {
     );
   }
 
+  // Mobile event card component
+  const MobileEventCard = ({ event }) => {
+    const isExpanded = expandedCards[event.id] || false;
+    
+    // Calculate participation statistics
+    const totalParticipants = event.participants?.length || 0;
+    const tankCount = event.participants?.filter(p => p.role === 'TANK').length || 0;
+    const healerCount = event.participants?.filter(p => p.role === 'HEALER').length || 0;
+    const dpsCount = event.participants?.filter(p => p.role === 'DPS').length || 0;
+    const absentCount = event.absentees?.length || 0;
+    const tentativeCount = event.tentatives?.length || 0;
+    
+    // Calculate percentage filled
+    const totalSpots = event.tanks + event.healers + event.dps;
+    const totalPercentage = Math.round((totalParticipants / totalSpots) * 100);
+    
+    return (
+      <Card sx={{ 
+        mb: 2,
+        bgcolor: '#1e1e1e',
+        borderRadius: 2,
+        overflow: 'hidden'
+      }}>
+        <CardContent sx={{ 
+          pb: 1,
+          '&:last-child': { pb: 1 } 
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="h6" color="white">{event.title}</Typography>
+            <IconButton onClick={() => toggleCardExpansion(event.id)} size="small">
+              {isExpanded ? 
+                <ExpandLessIcon sx={{ color: 'white' }} /> : 
+                <ExpandMoreIcon sx={{ color: 'white' }} />
+              }
+            </IconButton>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <CalendarTodayIcon sx={{ color: '#90caf9', mr: 1, fontSize: '1rem' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+              {format(parseISO(event.event_time), 'EEE, MMM dd, HH:mm')}
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <GroupIcon sx={{ color: '#90caf9', mr: 1, fontSize: '1rem' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+              {totalParticipants}/{totalSpots} ({totalPercentage}%)
+            </Typography>
+          </Box>
+          
+          <Collapse in={isExpanded}>
+            <Box sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+                <Chip
+                  size="small"
+                  label={`Tanks: ${tankCount}/${event.tanks}`}
+                  sx={{ bgcolor: 'rgba(33, 150, 243, 0.2)', color: '#2196f3' }}
+                />
+                <Chip
+                  size="small"
+                  label={`Healers: ${healerCount}/${event.healers}`}
+                  sx={{ bgcolor: 'rgba(76, 175, 80, 0.2)', color: '#4caf50' }}
+                />
+                <Chip
+                  size="small"
+                  label={`DPS: ${dpsCount}/${event.dps}`}
+                  sx={{ bgcolor: 'rgba(244, 67, 54, 0.2)', color: '#f44336' }}
+                />
+              </Box>
+              
+              {event.description && (
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ 
+                    mb: 2,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {event.description}
+                </Typography>
+              )}
+              
+              <Divider sx={{ mb: 2, bgcolor: 'rgba(255, 255, 255, 0.12)' }} />
+              
+              <Button 
+                variant="contained"
+                fullWidth
+                size="small"
+                onClick={() => signUpWithPrimaryBuild(event.id)}
+                startIcon={<PersonAddIcon />}
+                sx={{
+                  background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                  boxShadow: '0 3px 5px 2px rgba(76, 175, 80, .3)',
+                  mb: 1.5
+                }}
+              >
+                Sign Up
+              </Button>
+              
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button 
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  onClick={() => markAsAbsent(event.id)}
+                  disabled={isUserAbsentForEvent(event.id)}
+                  sx={{ flex: 1 }}
+                >
+                  {isUserAbsentForEvent(event.id) ? "Absent" : "Mark Absent"}
+                </Button>
+                <Button 
+                  variant="outlined"
+                  color="warning"
+                  size="small"
+                  onClick={() => markAsTentative(event.id)}
+                  disabled={isUserTentativeForEvent(event.id)}
+                  sx={{ flex: 1 }}
+                >
+                  {isUserTentativeForEvent(event.id) ? "Tentative" : "Mark Tentative"}
+                </Button>
+                <Button 
+                  variant="outlined"
+                  size="small"
+                  onClick={() => navigateToTeamPlanner(event.id)}
+                  sx={{ 
+                    flex: 1,
+                    borderColor: '#2196F3',
+                    color: '#2196F3'
+                  }}
+                >
+                  Teams
+                </Button>
+              </Box>
+            </Box>
+          </Collapse>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: isMobile ? 2 : 3 }}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ color: 'white', mb: 1 }}>
+        <Typography variant="h4" sx={{ color: 'white', mb: 1, fontSize: isMobile ? '1.5rem' : '2.125rem' }}>
           Upcoming Events
         </Typography>
         <Typography variant="subtitle1" color="text.secondary">
@@ -638,277 +807,291 @@ const EventSummaries = () => {
           )}
         </Box>
       ) : (
-        <Grid container spacing={3}>
-          {events.map(event => {
-            // Calculate participation statistics
-            const totalParticipants = event.participants?.length || 0;
-            const tankCount = event.participants?.filter(p => p.role === 'TANK').length || 0;
-            const healerCount = event.participants?.filter(p => p.role === 'HEALER').length || 0;
-            const dpsCount = event.participants?.filter(p => p.role === 'DPS').length || 0;
-            const absentCount = event.absentees?.length || 0;
-            const tentativeCount = event.tentatives?.length || 0;
-            
-            // Calculate percentage filled
-            const tankPercentage = Math.round((tankCount / event.tanks) * 100);
-            const healerPercentage = Math.round((healerCount / event.healers) * 100);
-            const dpsPercentage = Math.round((dpsCount / event.dps) * 100);
-            const totalSpots = event.tanks + event.healers + event.dps;
-            const totalPercentage = Math.round((totalParticipants / totalSpots) * 100);
-            
-            return (
-              <Grid item xs={12} md={6} lg={4} key={event.id}>
-                <Card sx={{ 
-                  height: '100%',
-                  bgcolor: '#1e1e1e',
-                  borderRadius: 2,
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '0 12px 20px rgba(0, 0, 0, 0.2)'
-                  }
-                }}>
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography variant="h5" component="div" sx={{ 
-                      color: 'white', 
-                      mb: 2,
-                      fontWeight: 500,
-                      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-                      pb: 1 
+        <>
+          {/* Mobile view */}
+          {isMobile && (
+            <Box>
+              {events.map(event => (
+                <MobileEventCard key={event.id} event={event} />
+              ))}
+            </Box>
+          )}
+          
+          {/* Desktop view */}
+          {!isMobile && (
+            <Grid container spacing={3}>
+              {events.map(event => {
+                // Calculate participation statistics
+                const totalParticipants = event.participants?.length || 0;
+                const tankCount = event.participants?.filter(p => p.role === 'TANK').length || 0;
+                const healerCount = event.participants?.filter(p => p.role === 'HEALER').length || 0;
+                const dpsCount = event.participants?.filter(p => p.role === 'DPS').length || 0;
+                const absentCount = event.absentees?.length || 0;
+                const tentativeCount = event.tentatives?.length || 0;
+                
+                // Calculate percentage filled
+                const tankPercentage = Math.round((tankCount / event.tanks) * 100);
+                const healerPercentage = Math.round((healerCount / event.healers) * 100);
+                const dpsPercentage = Math.round((dpsCount / event.dps) * 100);
+                const totalSpots = event.tanks + event.healers + event.dps;
+                const totalPercentage = Math.round((totalParticipants / totalSpots) * 100);
+                
+                return (
+                  <Grid item xs={12} md={6} lg={4} key={event.id}>
+                    <Card sx={{ 
+                      height: '100%',
+                      bgcolor: '#1e1e1e',
+                      borderRadius: 2,
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 20px rgba(0, 0, 0, 0.2)'
+                      }
                     }}>
-                      {event.title}
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <CalendarTodayIcon sx={{ color: '#90caf9', mr: 1 }} />
-                      <Typography color="text.secondary">
-                        {format(parseISO(event.event_time), 'EEE, MMM dd, yyyy HH:mm')}
-                      </Typography>
-                    </Box>
-                    
-                    {event.location && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <LocationOnIcon sx={{ color: '#90caf9', mr: 1 }} />
-                        <Typography color="text.secondary">
-                          {event.location}
+                      <CardContent sx={{ flexGrow: 1 }}>
+                        <Typography variant="h5" component="div" sx={{ 
+                          color: 'white', 
+                          mb: 2,
+                          fontWeight: 500,
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                          pb: 1 
+                        }}>
+                          {event.title}
                         </Typography>
-                      </Box>
-                    )}
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <GroupIcon sx={{ color: '#90caf9', mr: 1 }} />
-                      <Typography color="text.secondary">
-                        {totalParticipants} / {totalSpots} participants ({totalPercentage}% filled)
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ mb: 3 }}>
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        mb: 1 
-                      }}>
-                        <Typography variant="subtitle2" sx={{ color: '#2196f3' }}>
-                          Tanks
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {tankCount}/{event.tanks} ({tankPercentage}%)
-                        </Typography>
-                      </Box>
-                      <Box sx={{ 
-                        height: 6, 
-                        bgcolor: 'rgba(33, 150, 243, 0.2)', 
-                        borderRadius: 3, 
-                        mb: 2,
-                        overflow: 'hidden'
-                      }}>
-                        <Box sx={{ 
-                          height: '100%', 
-                          width: `${tankPercentage}%`, 
-                          bgcolor: '#2196f3',
-                          borderRadius: 3
-                        }} />
-                      </Box>
-                      
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        mb: 1 
-                      }}>
-                        <Typography variant="subtitle2" sx={{ color: '#4caf50' }}>
-                          Healers
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {healerCount}/{event.healers} ({healerPercentage}%)
-                        </Typography>
-                      </Box>
-                      <Box sx={{ 
-                        height: 6, 
-                        bgcolor: 'rgba(76, 175, 80, 0.2)', 
-                        borderRadius: 3, 
-                        mb: 2,
-                        overflow: 'hidden'
-                      }}>
-                        <Box sx={{ 
-                          height: '100%', 
-                          width: `${healerPercentage}%`, 
-                          bgcolor: '#4caf50',
-                          borderRadius: 3
-                        }} />
-                      </Box>
-                      
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        mb: 1 
-                      }}>
-                        <Typography variant="subtitle2" sx={{ color: '#f44336' }}>
-                          DPS
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {dpsCount}/{event.dps} ({dpsPercentage}%)
-                        </Typography>
-                      </Box>
-                      <Box sx={{ 
-                        height: 6, 
-                        bgcolor: 'rgba(244, 67, 54, 0.2)', 
-                        borderRadius: 3,
-                        overflow: 'hidden'
-                      }}>
-                        <Box sx={{ 
-                          height: '100%', 
-                          width: `${dpsPercentage}%`, 
-                          bgcolor: '#f44336',
-                          borderRadius: 3
-                        }} />
-                      </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <CalendarTodayIcon sx={{ color: '#90caf9', mr: 1 }} />
+                          <Typography color="text.secondary">
+                            {format(parseISO(event.event_time), 'EEE, MMM dd, yyyy HH:mm')}
+                          </Typography>
+                        </Box>
+                        
+                        {event.location && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <LocationOnIcon sx={{ color: '#90caf9', mr: 1 }} />
+                            <Typography color="text.secondary">
+                              {event.location}
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <GroupIcon sx={{ color: '#90caf9', mr: 1 }} />
+                          <Typography color="text.secondary">
+                            {totalParticipants} / {totalSpots} participants ({totalPercentage}% filled)
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ mb: 3 }}>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            mb: 1 
+                          }}>
+                            <Typography variant="subtitle2" sx={{ color: '#2196f3' }}>
+                              Tanks
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {tankCount}/{event.tanks} ({tankPercentage}%)
+                            </Typography>
+                          </Box>
+                          <Box sx={{ 
+                            height: 6, 
+                            bgcolor: 'rgba(33, 150, 243, 0.2)', 
+                            borderRadius: 3, 
+                            mb: 2,
+                            overflow: 'hidden'
+                          }}>
+                            <Box sx={{ 
+                              height: '100%', 
+                              width: `${tankPercentage}%`, 
+                              bgcolor: '#2196f3',
+                              borderRadius: 3
+                            }} />
+                          </Box>
+                          
+                          <Box sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            mb: 1 
+                          }}>
+                            <Typography variant="subtitle2" sx={{ color: '#4caf50' }}>
+                              Healers
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {healerCount}/{event.healers} ({healerPercentage}%)
+                            </Typography>
+                          </Box>
+                          <Box sx={{ 
+                            height: 6, 
+                            bgcolor: 'rgba(76, 175, 80, 0.2)', 
+                            borderRadius: 3, 
+                            mb: 2,
+                            overflow: 'hidden'
+                          }}>
+                            <Box sx={{ 
+                              height: '100%', 
+                              width: `${healerPercentage}%`, 
+                              bgcolor: '#4caf50',
+                              borderRadius: 3
+                            }} />
+                          </Box>
+                          
+                          <Box sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            mb: 1 
+                          }}>
+                            <Typography variant="subtitle2" sx={{ color: '#f44336' }}>
+                              DPS
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {dpsCount}/{event.dps} ({dpsPercentage}%)
+                            </Typography>
+                          </Box>
+                          <Box sx={{ 
+                            height: 6, 
+                            bgcolor: 'rgba(244, 67, 54, 0.2)', 
+                            borderRadius: 3,
+                            overflow: 'hidden'
+                          }}>
+                            <Box sx={{ 
+                              height: '100%', 
+                              width: `${dpsPercentage}%`, 
+                              bgcolor: '#f44336',
+                              borderRadius: 3
+                            }} />
+                          </Box>
 
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center',
-                        mt: 2
-                      }}>
-                        <Typography variant="subtitle2" sx={{ color: '#aaa' }}>
-                          Absents
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {absentCount}
-                        </Typography>
-                      </Box>
-                    </Box>
-                    
-                    {event.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ 
-                        mt: 2,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        height: '40px'
-                      }}>
-                        {event.description}
-                      </Typography>
-                    )}
-                  </CardContent>
-                  
-                  <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.12)' }} />
-                  
-                  <CardActions sx={{ p: 2, flexDirection: 'column', alignItems: 'stretch' }}>
-                    <Button 
-                      variant="contained" 
-                      fullWidth
-                      onClick={() => signUpWithPrimaryBuild(event.id)}
-                      startIcon={<PersonAddIcon />}
-                      sx={{
-                        background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
-                        boxShadow: '0 3px 5px 2px rgba(76, 175, 80, .3)',
-                        color: 'white',
-                        fontSize: '0.95rem',
-                        fontWeight: 'bold',
-                        padding: '10px 16px',
-                        mb: 1,
-                        '&:hover': {
-                          background: 'linear-gradient(45deg, #388E3C 30%, #689F38 90%)',
-                          transform: 'translateY(-2px)',
-                          transition: 'all 0.2s'
-                        },
-                        '&.Mui-disabled': {
-                          background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
-                          opacity: 0.7
-                        }
-                      }}
-                    >
-                      Sign Up with Primary Build
-                    </Button>
-                    <Box sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      mt: 2,
-                      mb: 1
-                    }}>
-                      <Typography variant="subtitle2" sx={{ color: '#ff9800' }}>
-                        Tentative
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {tentativeCount}
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
-                      <Button 
-                        variant="outlined"
-                        color="error"
-                        startIcon={<DoNotDisturbIcon />}
-                        onClick={() => markAsAbsent(event.id)}
-                        disabled={isUserAbsentForEvent(event.id)}
-                        sx={{ flex: 1 }}
-                      >
-                        {isUserAbsentForEvent(event.id) ? "Already Absent" : "Mark as Absent"}
-                      </Button>
-                      <Button 
-                        variant="outlined"
-                        color="warning"
-                        startIcon={<HelpOutlineIcon />}
-                        onClick={() => markAsTentative(event.id)}
-                        disabled={isUserTentativeForEvent(event.id)}
-                        sx={{ flex: 1 }}
-                      >
-                        {isUserTentativeForEvent(event.id) ? "Already Tentative" : "Mark as Tentative"}
-                      </Button>
-                      <Button 
-                        variant="outlined"
-                        onClick={() => navigateToTeamPlanner(event.id)}
-                        sx={{ 
-                          flex: 1,
-                          borderColor: '#2196F3',
-                          color: '#2196F3',
-                          fontWeight: 'bold',
-                          '&:hover': {
-                            backgroundColor: 'rgba(33, 150, 243, 0.08)',
-                            borderColor: '#1976D2',
-                            color: '#1976D2',
-                            transform: 'translateY(-2px)',
-                            transition: 'all 0.2s'
-                          }
-                        }}
-                      >
-                        View Teams
-                      </Button>
-                    </Box>
-                  </CardActions>
-                </Card>
-              </Grid>
-            );
-          })}
-        </Grid>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center',
+                            mt: 2
+                          }}>
+                            <Typography variant="subtitle2" sx={{ color: '#aaa' }}>
+                              Absents
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {absentCount}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        
+                        {event.description && (
+                          <Typography variant="body2" color="text.secondary" sx={{ 
+                            mt: 2,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            height: '40px'
+                          }}>
+                            {event.description}
+                          </Typography>
+                        )}
+                      </CardContent>
+                      
+                      <Divider sx={{ bgcolor: 'rgba(255, 255, 255, 0.12)' }} />
+                      
+                      <CardActions sx={{ p: 2, flexDirection: 'column', alignItems: 'stretch' }}>
+                        <Button 
+                          variant="contained" 
+                          fullWidth
+                          onClick={() => signUpWithPrimaryBuild(event.id)}
+                          startIcon={<PersonAddIcon />}
+                          sx={{
+                            background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                            boxShadow: '0 3px 5px 2px rgba(76, 175, 80, .3)',
+                            color: 'white',
+                            fontSize: '0.95rem',
+                            fontWeight: 'bold',
+                            padding: '10px 16px',
+                            mb: 1,
+                            '&:hover': {
+                              background: 'linear-gradient(45deg, #388E3C 30%, #689F38 90%)',
+                              transform: 'translateY(-2px)',
+                              transition: 'all 0.2s'
+                            },
+                            '&.Mui-disabled': {
+                              background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
+                              opacity: 0.7
+                            }
+                          }}
+                        >
+                          Sign Up with Primary Build
+                        </Button>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          mt: 2,
+                          mb: 1
+                        }}>
+                          <Typography variant="subtitle2" sx={{ color: '#ff9800' }}>
+                            Tentative
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {tentativeCount}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
+                          <Button 
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DoNotDisturbIcon />}
+                            onClick={() => markAsAbsent(event.id)}
+                            disabled={isUserAbsentForEvent(event.id)}
+                            sx={{ flex: 1 }}
+                          >
+                            {isUserAbsentForEvent(event.id) ? "Already Absent" : "Mark as Absent"}
+                          </Button>
+                          <Button 
+                            variant="outlined"
+                            color="warning"
+                            startIcon={<HelpOutlineIcon />}
+                            onClick={() => markAsTentative(event.id)}
+                            disabled={isUserTentativeForEvent(event.id)}
+                            sx={{ flex: 1 }}
+                          >
+                            {isUserTentativeForEvent(event.id) ? "Already Tentative" : "Mark as Tentative"}
+                          </Button>
+                          <Button 
+                            variant="outlined"
+                            onClick={() => navigateToTeamPlanner(event.id)}
+                            sx={{ 
+                              flex: 1,
+                              borderColor: '#2196F3',
+                              color: '#2196F3',
+                              fontWeight: 'bold',
+                              '&:hover': {
+                                backgroundColor: 'rgba(33, 150, 243, 0.08)',
+                                borderColor: '#1976D2',
+                                color: '#1976D2',
+                                transform: 'translateY(-2px)',
+                                transition: 'all 0.2s'
+                              }
+                            }}
+                          >
+                            View Teams
+                          </Button>
+                        </Box>
+                      </CardActions>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          )}
+        </>
       )}
       
       {/* Build Selection Dialog */}

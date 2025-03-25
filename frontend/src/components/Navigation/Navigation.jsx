@@ -15,6 +15,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import EventIcon from '@mui/icons-material/Event';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import LogoutIcon from '@mui/icons-material/Logout';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import GroupsIcon from '@mui/icons-material/Groups';
 import { useAuth } from '../../contexts/AuthContext';
 import LogoutButton from '../Auth/LogoutButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -203,6 +205,11 @@ const Navigation = ({ guildId }) => {
       path: '/event-summaries'
     },
     {
+      text: 'Team Planner',
+      icon: <GroupsIcon />,
+      path: '/team-planner'
+    },
+    {
       text: 'Gear Check',
       icon: <FormatListBulletedIcon />,
       path: '/gear-check'
@@ -240,6 +247,30 @@ const Navigation = ({ guildId }) => {
       });
     }
   }
+
+  // Define mobile menu items separately - prioritize the most important features for mobile
+  const mobileMenuItems = [
+    {
+      text: 'Events',
+      icon: <CalendarMonthIcon />,
+      path: '/event-planner'
+    },
+    {
+      text: 'Summaries',
+      icon: <FormatListBulletedIcon />,
+      path: '/event-summaries'
+    },
+    {
+      text: 'Teams',
+      icon: <GroupsIcon />,
+      path: '/team-planner'
+    },
+    {
+      text: 'Guild',
+      icon: <GroupIcon />,
+      path: '/guild-management'
+    }
+  ];
 
   const drawer = (
     <>
@@ -413,7 +444,7 @@ const Navigation = ({ guildId }) => {
     </>
   );
 
-  // Mobile Navigation Bar - only show 4 primary icons
+  // Mobile Navigation Bar - use the mobile menu items
   const mobileNavBar = isMobile && (
     <AppBar
       position="fixed"
@@ -426,7 +457,7 @@ const Navigation = ({ guildId }) => {
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-around', minHeight: '56px', px: 1 }}>
-        {baseMenuItems.slice(0, 4).map((item) => (
+        {mobileMenuItems.map((item) => (
           <IconButton
             key={item.text}
             component={item.onClick ? 'div' : Link}
@@ -441,7 +472,7 @@ const Navigation = ({ guildId }) => {
           >
             {item.icon}
             <Typography variant="caption" sx={{ mt: 0.5, fontSize: '0.6rem' }}>
-              {item.text.split(' ')[0]} {/* Just show first word */}
+              {item.text}
             </Typography>
           </IconButton>
         ))}

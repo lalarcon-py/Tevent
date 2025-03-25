@@ -1,8 +1,15 @@
 // EventPlanner/EventPlanner.jsx
 import { useState, useEffect } from 'react';
-import { Box, Button, Dialog, Snackbar, Alert, Typography, DialogActions } from '@mui/material';
+import { 
+  Box, Button, Dialog, Snackbar, Alert, Typography, 
+  DialogActions, useMediaQuery, useTheme, Fab, 
+  BottomNavigation, BottomNavigationAction, Paper 
+} from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import ListIcon from '@mui/icons-material/List';
 import CalendarView from './CalendarView';
+import EventListView from './EventListView';
 import EventForm from './EventForm';
 import EventDetails from './EventDetails';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
@@ -19,7 +26,10 @@ const EventPlanner = () => {
   const [user, setUser] = useState(null);
   const [guildId, setGuildId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { simulatedRole } = useSimulatedRole(); // Added hook
+  const { simulatedRole } = useSimulatedRole();
+  const [viewMode, setViewMode] = useState('calendar');
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -375,6 +385,78 @@ const EventPlanner = () => {
     }
   };
 
+  // Render a floating action button for mobile when user has permission to create events
+  const floatingActionButton = isMobile && hasEventCreationPermission() && (
+    <Fab
+      color="primary"
+      aria-label="add"
+      onClick={() => {
+        setSelectedEvent(null);
+        setIsCreateDialogOpen(true);
+      }}
+      sx={{
+        position: 'fixed',
+        bottom: 80, // Position above bottom navigation
+        right: 16,
+        bgcolor: '#90caf9',
+        '&:hover': { bgcolor: '#64b5f6' },
+        zIndex: 1000
+      }}
+    >
+      <AddIcon />
+    </Fab>
+  );
+
+  // View mode switcher for mobile
+  const viewSwitcher = isMobile && (
+    <Paper 
+      sx={{ 
+        position: 'fixed', 
+        bottom: 0, 
+        left: 0, 
+        right: 0, 
+        zIndex: 1100,
+        borderTop: '1px solid rgba(255, 255, 255, 0.12)'
+      }} 
+      elevation={3}
+    >
+      <BottomNavigation
+        value={viewMode}
+        onChange={(event, newValue) => {
+          setViewMode(newValue);
+        }}
+        showLabels
+        sx={{ 
+          bgcolor: '#1a1a1a',
+          height: 56
+        }}
+      >
+        <BottomNavigationAction 
+          label="Calendar" 
+          icon={<CalendarTodayIcon />} 
+          value="calendar"
+          sx={{ 
+            color: viewMode === 'calendar' ? '#90caf9' : 'rgba(255, 255, 255, 0.7)',
+            '&.Mui-selected': {
+              color: '#90caf9'
+            }
+          }}
+        />
+        <BottomNavigationAction 
+          label="List" 
+          icon={<ListIcon />} 
+          value="list"
+          sx={{ 
+            color: viewMode === 'list' ? '#90caf9' : 'rgba(255, 255, 255, 0.7)',
+            '&.Mui-selected': {
+              color: '#90caf9'
+            }
+          }}
+        />
+      </BottomNavigation>
+    </Paper>
+  );
+
   return (
     <Box>
       {!user ? (
@@ -392,32 +474,47 @@ const EventPlanner = () => {
         </Box>
       ) : (
         <>
-          <Box sx={{ mb: 2 }}>
-            {hasEventCreationPermission() ? (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  setSelectedEvent(null);
-                  setIsCreateDialogOpen(true);
-                }}
-                sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
-              >
-                Create Event
-              </Button>
+          {!isMobile && (
+            <Box sx={{ mb: 2 }}>
+              {hasEventCreationPermission() ? (
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    setSelectedEvent(null);
+                    setIsCreateDialogOpen(true);
+                  }}
+                  sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
+                >
+                  Create Event
+                </Button>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Only Guild Master, Guild Advisor, and Guild Guardian can create events
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          <Box sx={{ mb: isMobile ? 8 : 0 }}>
+            {viewMode === 'calendar' ? (
+              <CalendarView 
+                events={events} 
+                onEventClick={handleEventClick}
+                onSignUp={handleSignUp}
+                onMarkAbsent={handleMarkAbsent}
+              />
             ) : (
-              <Typography variant="body2" color="text.secondary">
-                Only Guild Master, Guild Advisor, and Guild Guardian can create events
-              </Typography>
+              <EventListView 
+                events={events} 
+                onEventSelect={handleEventClick}
+                onEventUpdate={fetchEvents}
+              />
             )}
           </Box>
 
-          <CalendarView 
-            events={events} 
-            onEventClick={handleEventClick}
-            onSignUp={handleSignUp}
-            onMarkAbsent={handleMarkAbsent}
-          />
+          {floatingActionButton}
+          {viewSwitcher}
 
           <Dialog 
             open={isCreateDialogOpen} 
@@ -427,6 +524,7 @@ const EventPlanner = () => {
             }}
             maxWidth="md"
             fullWidth
+            fullScreen={isMobile}
           >
             <EventForm 
               initialData={selectedEvent || {
@@ -464,6 +562,7 @@ const EventPlanner = () => {
               }}
               maxWidth="md"
               fullWidth
+              fullScreen={isMobile}
             >
               {selectedEvent && (
                 <>
