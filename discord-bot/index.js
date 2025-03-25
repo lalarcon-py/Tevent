@@ -64,11 +64,14 @@ const TEST_GUILD_ID = process.env.TEST_GUILD_ID;
 
 
 const { Pool } = require('pg');
+
+const useSSL = process.env.DATABASE_USE_SSL === 'true';
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
+  ssl: useSSL ? {
     rejectUnauthorized: false
-  }
+  } : false
 });
 
 // Test database connection
@@ -669,7 +672,7 @@ app.listen(PORT, () => {
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
   registerCommands();
-
+  recoverEventTracking();
   setupScheduledPostings(client);
 });
 
@@ -3939,40 +3942,48 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       // Handle event signup buttons
+      // Full updated function for handling signup button interactions
       client.on('interactionCreate', async (interaction) => {
-        if (interaction.customId && interaction.customId.startsWith('signup_')) {
+        if (!interaction.isButton()) return;
+        
+        const customId = interaction.customId;
+        
+        if (customId.startsWith('signup_')) {
           try {
-            // Parse event ID and role from the button's custom ID
-            const [_, eventId, role] = interaction.customId.split('_');
-            console.log(`[DEBUG] Processing signup for event: ${eventId}, role: ${role}`);
+            // Log the interaction being processed
+            console.log(`[INFO] Processing signup button: ${customId}`);
             
             // Immediately defer the reply to prevent timeout
             await interaction.deferReply({ ephemeral: true }).catch(error => {
               if (error.code === 10062) {
                 console.log(`[WARN] Interaction ${interaction.id} already acknowledged, continuing processing`);
-                return;
+                return; // Continue execution even if the interaction was already acknowledged
               }
-              throw error;
+              throw error; // Rethrow any other errors
             });
+            
+            // Parse event ID and role from the button's custom ID
+            const [_, eventId, role] = customId.split('_');
+            console.log(`[DEBUG] Processing signup for event: ${eventId}, role: ${role}`);
             
             // Check guild mapping
             const discordGuildId = interaction.guild?.id;
             if (!discordGuildId) {
-              return await safeReply(interaction, {
+              return await interaction.editReply({
                 content: 'This button must be used in a Discord server.',
                 ephemeral: true
-              });
+              }).catch(error => console.error(`Reply error: ${error.message}`));
             }
             
             // Get app guild ID from mapping
             const appGuildId = await getGuildMapping(discordGuildId);
             if (!appGuildId) {
-              return await safeReply(interaction, {
+              return await interaction.editReply({
                 content: 'This Discord server is not linked to an application guild.',
                 ephemeral: true
-              });
+              }).catch(error => console.error(`Reply error: ${error.message}`));
             }
-      
+
             // Get user from discord ID
             const userResult = await pool.query(
               'SELECT id, username, builds FROM users WHERE discord_id = $1',
@@ -3980,27 +3991,13 @@ client.on('interactionCreate', async (interaction) => {
             );
             
             if (!userResult.rows || userResult.rows.length === 0) {
-              return await safeReply(interaction, {
+              return await interaction.editReply({
                 content: 'You need to register on the website first before signing up for events.',
                 ephemeral: true
-              });
+              }).catch(error => console.error(`Reply error: ${error.message}`));
             }
             
             const userId = userResult.rows[0].id;
-            const username = userResult.rows[0].username;
-            const userBuildsStr = userResult.rows[0].builds;
-            
-            // Parse user builds
-            let userBuilds = [];
-            try {
-              userBuilds = typeof userBuildsStr === 'string' ? JSON.parse(userBuildsStr) : userBuildsStr;
-              if (!Array.isArray(userBuilds)) userBuilds = [];
-            } catch (e) {
-              console.error(`Error parsing builds for user ${username}:`, e);
-              userBuilds = [];
-            }
-            
-            console.log(`[DEBUG] User builds: ${JSON.stringify(userBuilds)}`);
             
             // Get event details
             const eventResult = await pool.query(
@@ -4009,15 +4006,15 @@ client.on('interactionCreate', async (interaction) => {
             );
             
             if (!eventResult.rows || eventResult.rows.length === 0) {
-              return await safeReply(interaction, {
+              return await interaction.editReply({
                 content: 'Event not found.',
                 ephemeral: true
-              });
+              }).catch(error => console.error(`Reply error: ${error.message}`));
             }
             
             const eventDetails = eventResult.rows[0];
             
-            // Special handling for ABSENT and TENTATIVE roles
+            // Handle different role types
             if (role === 'ABSENT') {
               // Remove from participants
               await pool.query(
@@ -4025,6 +4022,7 @@ client.on('interactionCreate', async (interaction) => {
                 [eventId, userId]
               );
               
+              // Add to absentees
               await pool.query(
                 `INSERT INTO event_absentees 
                   (id, guild_id, event_id, user_id, created_at, updated_at)
@@ -4034,16 +4032,11 @@ client.on('interactionCreate', async (interaction) => {
                 [appGuildId, eventId, userId]
               );
               
-              await safeReply(interaction, {
+              await interaction.editReply({
                 content: `You have been marked as absent for "${eventDetails.title}".`,
                 ephemeral: true
-              });
-              
-              // Update event display
-              await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
-              return;
-            } 
-            else if (role === 'TENTATIVE') {
+              }).catch(error => console.error(`Reply error: ${error.message}`));
+            } else if (role === 'TENTATIVE') {
               // Handle tentative signup
               try {
                 // Check if we have a tentative table, if not create one
@@ -4081,176 +4074,228 @@ client.on('interactionCreate', async (interaction) => {
                   [appGuildId, eventId, userId]
                 );
                 
-                await safeReply(interaction, {
+                await interaction.editReply({
                   content: `You have been marked as tentative for "${eventDetails.title}".`,
                   ephemeral: true
-                });
-                
-                // Update event display
-                await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+                }).catch(error => console.error(`Reply error: ${error.message}`));
               } catch (tentativeError) {
                 console.error('Error handling tentative signup:', tentativeError);
-                await safeReply(interaction, {
+                await interaction.editReply({
                   content: `An error occurred while marking you as tentative.`,
                   ephemeral: true
-                });
+                }).catch(error => console.error(`Reply error: ${error.message}`));
               }
-              return;
-            }
-            
-            // For regular signup roles (TANK, HEALER, DPS):
-            
-            // Filter builds by the selected role - CASE INSENSITIVE COMPARISON
-            const roleSpecificBuilds = userBuilds.filter(build => 
-              build.spec && build.spec.toUpperCase() === role.toUpperCase()
-            );
-            
-            console.log(`[DEBUG] Role-specific builds for ${role}: ${JSON.stringify(roleSpecificBuilds)}`);
-            
-            // Also get builds with no spec or "Any" spec as fallbacks
-            const genericBuilds = userBuilds.filter(build => 
-              !build.spec || (build.spec && build.spec.toUpperCase() === 'ANY')
-            );
-            
-            console.log(`[DEBUG] Generic builds: ${JSON.stringify(genericBuilds)}`);
-            
-            // Combine role-specific builds first, then generic builds
-            const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
-            
-            console.log(`[DEBUG] Compatible builds for ${role}: ${JSON.stringify(compatibleBuilds)}`);
-            
-            if (compatibleBuilds.length === 0) {
-              return await safeReply(interaction, {
-                content: `You don't have any builds configured for the ${role} role. Please configure your builds on the website first.`,
-                ephemeral: true
-              });
-            }
-            
-            // If there's exactly one compatible build, use it automatically
-            if (compatibleBuilds.length === 1) {
-              await handleEventSignup(interaction, compatibleBuilds[0], userId, eventId, role, eventDetails, appGuildId);
-            }
-            // Only show selection menu if there are multiple compatible builds
-            else {
-              // Create selection menu for builds
-              const options = compatibleBuilds.map((build, index) => ({
-                label: build.weapon_spec || `Build ${index + 1}`,
-                description: `${build.primary} + ${build.secondary}${build.spec ? ` (${build.spec})` : ''}`,
-                value: `${index}`  // Use index as the value
-              }));
+            } else {
+              // Regular role signup
               
-              const row = new ActionRowBuilder()
-                .addComponents(
-                  new StringSelectMenuBuilder()
-                    .setCustomId(`build_select_${userId}_${eventId}_${role}`)
-                    .setPlaceholder('Select your build')
-                    .addOptions(options)
+              // Check if already signed up
+              const existingSignup = await pool.query(
+                'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              if (existingSignup.rows && existingSignup.rows.length > 0) {
+                // Update existing signup
+                await pool.query(
+                  'UPDATE event_participants SET role = $1 WHERE id = $2',
+                  [role, existingSignup.rows[0].id]
                 );
-              
-              await safeReply(interaction, {
-                content: `Please select which build to use for ${role}:`,
-                components: [row],
-                ephemeral: true
-              });
+                
+                await interaction.editReply({
+                  content: `Your role for "${eventDetails.title}" has been updated to ${role}.`,
+                  ephemeral: true
+                }).catch(error => console.error(`Reply error: ${error.message}`));
+              } else {
+                // Check role capacity
+                const roleCountsResult = await pool.query(
+                  `SELECT 
+                    COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+                    COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+                    COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
+                  FROM event_participants
+                  WHERE event_id = $1`,
+                  [eventId]
+                );
+                
+                const roleCounts = roleCountsResult.rows[0];
+                
+                // Verify there's room for this role
+                const roleLimits = {
+                  'TANK': eventDetails.tanks || 0,
+                  'HEALER': eventDetails.healers || 0,
+                  'DPS': eventDetails.dps || 0
+                };
+                
+                const currentCounts = {
+                  'TANK': parseInt(roleCounts?.tank_count || 0),
+                  'HEALER': parseInt(roleCounts?.healer_count || 0),
+                  'DPS': parseInt(roleCounts?.dps_count || 0)
+                };
+                
+                if (currentCounts[role] >= roleLimits[role]) {
+                  return await interaction.editReply({
+                    content: `Sorry, the ${role} spots are full for this event.`,
+                    ephemeral: true
+                  }).catch(error => console.error(`Reply error: ${error.message}`));
+                }
+                
+                // Remove from absentees if marked before
+                await pool.query(
+                  'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+                
+                // Remove from tentative if marked before
+                try {
+                  await pool.query(
+                    'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                    [eventId, userId]
+                  );
+                } catch (e) {
+                  // Table might not exist, ignore
+                }
+                
+                // Create new signup
+                await pool.query(
+                  `INSERT INTO event_participants 
+                    (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                  VALUES
+                    (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                  [appGuildId, eventId, userId, role]
+                );
+                
+                await interaction.editReply({
+                  content: `You have been signed up for "${eventDetails.title}" as ${role}.`,
+                  ephemeral: true
+                }).catch(error => console.error(`Reply error: ${error.message}`));
+              }
+            }
+            
+            // Update the message with new counts - careful error handling
+            try {
+              // Get the original message that contains the embed
+              const message = interaction.message;
+              if (message && message.embeds && message.embeds.length > 0) {
+                // Get updated event data for refreshing the embed
+                try {
+                  // Get all participants with their builds
+                  const participantsResult = await pool.query(
+                    `SELECT ep.role, u.username, u.discord_id, u.builds
+                    FROM event_participants ep
+                    JOIN users u ON ep.user_id = u.id
+                    WHERE ep.event_id = $1
+                    ORDER BY ep.created_at ASC`,
+                    [eventId]
+                  );
+                  
+                  // Get absentees
+                  const absenteesResult = await pool.query(
+                    `SELECT ea.user_id, u.username
+                    FROM event_absentees ea
+                    JOIN users u ON ea.user_id = u.id
+                    WHERE ea.event_id = $1
+                    ORDER BY ea.created_at ASC`,
+                    [eventId]
+                  );
+                  
+                  // Get tentative members if the table exists
+                  let tentativeMembers = [];
+                  try {
+                    const tentativeResult = await pool.query(
+                      `SELECT et.user_id, u.username
+                      FROM event_tentative et
+                      JOIN users u ON et.user_id = u.id
+                      WHERE et.event_id = $1
+                      ORDER BY et.created_at ASC`,
+                      [eventId]
+                    );
+                    
+                    tentativeMembers = tentativeResult.rows || [];
+                  } catch (e) {
+                    // Table might not exist, ignore
+                  }
+                  
+                  // Create updated event object
+                  const updatedEvent = {
+                    ...eventDetails,
+                    participants: participantsResult.rows,
+                    absentees: absenteesResult.rows,
+                    tentative: tentativeMembers
+                  };
+                  
+                  // Create updated embed
+                  const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
+                  
+                  // Create signup buttons with custom role emojis
+                  const row = new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId(`signup_${eventId}_TANK`)
+                        .setLabel('Tank')
+                        .setEmoji('1352736996405022780')
+                        .setStyle(ButtonStyle.Primary),
+                      new ButtonBuilder()
+                        .setCustomId(`signup_${eventId}_HEALER`)
+                        .setLabel('Healer')
+                        .setEmoji('1352737011479482468')
+                        .setStyle(ButtonStyle.Success),
+                      new ButtonBuilder()
+                        .setCustomId(`signup_${eventId}_DPS`)
+                        .setLabel('DPS')
+                        .setEmoji('1352737043972624518')
+                        .setStyle(ButtonStyle.Danger),
+                      new ButtonBuilder()
+                        .setCustomId(`signup_${eventId}_TENTATIVE`)
+                        .setLabel('Tentative')
+                        .setEmoji('⏳')
+                        .setStyle(ButtonStyle.Secondary),
+                      new ButtonBuilder()
+                        .setCustomId(`signup_${eventId}_ABSENT`)
+                        .setLabel('Absent')
+                        .setEmoji('❌')
+                        .setStyle(ButtonStyle.Secondary)
+                    );
+                  
+                  // Update the original message with new embed
+                  await message.edit({
+                    embeds: [updatedEmbed],
+                    components: [row]
+                  }).catch(err => {
+                    console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
+                  });
+                  
+                  console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
+                } catch (updateError) {
+                  console.error(`[ERROR] Error preparing updated embed: ${updateError.message}`);
+                }
+              }
+            } catch (messageError) {
+              console.error(`[ERROR] Error updating event message: ${messageError.message}`);
+              // Don't rethrow - we've already handled the primary interaction
             }
           } catch (error) {
             console.error(`Error processing signup button:`, error);
-            await safeReply(interaction, {
-              content: 'An error occurred while processing your signup. Please try again.',
-              ephemeral: true
-            });
-          }
-        }
-        // Handle build selection for signup
-        else if (interaction.isStringSelectMenu() && 
-                 interaction.customId.startsWith('build_select_')) {
-          try {
-            const [_, userId, eventId, role] = interaction.customId.split('_');
-            const selectedBuildIndex = parseInt(interaction.values[0]);
             
-            console.log(`[DEBUG] Processing build selection - User: ${userId}, Event: ${eventId}, Role: ${role}, Build Index: ${selectedBuildIndex}`);
-            
-            // Get app guild ID
-            const appGuildId = await getGuildMapping(interaction.guild.id);
-            if (!appGuildId) {
-              await interaction.update({
-                content: 'Error: Could not find guild mapping.',
-                components: []
-              });
-              return;
-            }
-            
-            // Get user's builds
-            const userResult = await pool.query(
-              'SELECT builds FROM users WHERE id = $1',
-              [userId]
-            );
-            
-            if (!userResult.rows?.length) {
-              await interaction.update({
-                content: 'Error: User not found.',
-                components: []
-              });
-              return;
-            }
-            
-            // Parse builds
-            let userBuilds = [];
+            // Try to salvage the interaction if possible
             try {
-              userBuilds = typeof userResult.rows[0].builds === 'string' 
-                ? JSON.parse(userResult.rows[0].builds) 
-                : userResult.rows[0].builds;
-            } catch (e) {
-              console.error('Error parsing builds:', e);
+              if (interaction.deferred) {
+                await interaction.editReply({
+                  content: 'An error occurred while processing your signup. Please try again.',
+                  ephemeral: true
+                }).catch(replyError => 
+                  console.error(`Failed to send error message: ${replyError.message}`)
+                );
+              } else {
+                await interaction.reply({
+                  content: 'An error occurred while processing your signup. Please try again.',
+                  ephemeral: true
+                }).catch(replyError => 
+                  console.error(`Failed to send error message: ${replyError.message}`)
+                );
+              }
+            } catch (finalError) {
+              console.error(`Failed completely to respond to user: ${finalError.message}`);
             }
-            
-            // Filter builds by the selected role - CASE INSENSITIVE COMPARISON
-            const roleSpecificBuilds = userBuilds.filter(build => 
-              build.spec && build.spec.toUpperCase() === role.toUpperCase()
-            );
-            
-            // Also get builds with no spec or "Any" spec as fallbacks
-            const genericBuilds = userBuilds.filter(build => 
-              !build.spec || (build.spec && build.spec.toUpperCase() === 'ANY')
-            );
-            
-            // Combine role-specific builds first, then generic builds
-            const compatibleBuilds = [...roleSpecificBuilds, ...genericBuilds];
-            
-            if (selectedBuildIndex < 0 || selectedBuildIndex >= compatibleBuilds.length) {
-              await interaction.update({
-                content: 'Error: Invalid build selection.',
-                components: []
-              });
-              return;
-            }
-            
-            const selectedBuild = compatibleBuilds[selectedBuildIndex];
-            
-            // Get event details
-            const eventResult = await pool.query(
-              'SELECT * FROM events WHERE id = $1',
-              [eventId]
-            );
-            
-            if (!eventResult.rows?.length) {
-              await interaction.update({
-                content: 'Error: Event not found.',
-                components: []
-              });
-              return;
-            }
-            
-            const eventDetails = eventResult.rows[0];
-            
-            // Complete the signup process with the selected build
-            await handleEventSignup(interaction, selectedBuild, userId, eventId, role, eventDetails, appGuildId, true);
-          } catch (error) {
-            console.error('Error handling build selection:', error);
-            await interaction.update({
-              content: 'An error occurred while processing your selection. Please try again.',
-              components: []
-            });
           }
         }
       });
@@ -4355,7 +4400,7 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
     const message = interaction.message;
     if (!message || !message.embeds || message.embeds.length === 0) return;
     
-    // Get updated participant data - REMOVE weapon_spec column from query
+    // Get updated participant data
     const participantsResult = await pool.query(
       `SELECT ep.role, u.username, u.discord_id, u.builds
        FROM event_participants ep
@@ -4365,7 +4410,7 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
       [eventId]
     );
     
-    // Get absentees
+    // Get absentees and tentative members
     const absenteesResult = await pool.query(
       `SELECT ea.user_id, u.username
        FROM event_absentees ea
@@ -4375,7 +4420,6 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
       [eventId]
     );
     
-    // Get tentative members if the table exists
     let tentativeMembers = [];
     try {
       const tentativeResult = await pool.query(
@@ -4400,10 +4444,10 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
       tentative: tentativeMembers
     };
     
-    // Create updated embed
+    // Create updated embed - use embedBuilder which should be updated to not show class names
     const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
     
-    // Create signup buttons with custom role emojis
+    // Create signup buttons
     const row = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
@@ -4570,7 +4614,7 @@ async function recoverEventTracking() {
           continue;
         }
         
-        // Get updated participant data with names
+        // Get updated participant data with names and builds
         const participantsResult = await pool.query(
           `SELECT ep.role, u.username, u.discord_id, u.builds
            FROM event_participants ep
@@ -4590,6 +4634,22 @@ async function recoverEventTracking() {
           [message.event_id]
         );
         
+        // Get tentative members if available
+        let tentativeMembers = [];
+        try {
+          const tentativeResult = await pool.query(
+            `SELECT et.user_id, u.username
+             FROM event_tentative et
+             JOIN users u ON et.user_id = u.id
+             WHERE et.event_id = $1
+             ORDER BY et.created_at ASC`,
+            [message.event_id]
+          );
+          tentativeMembers = tentativeResult.rows;
+        } catch (e) {
+          // Table might not exist, ignore
+        }
+        
         // Group participants by role
         const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
         const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
@@ -4604,6 +4664,46 @@ async function recoverEventTracking() {
         const tankEmoji = '<:Tank:1352736996405022780>';
         const healerEmoji = '<:Healer:1352737011479482468>';
         const dpsEmoji = '<:DPS:1352737043972624518>';
+      
+        const formatDiscordTimestamp = (date, format = 'F') => {
+          const dateObj = typeof date === 'string' ? new Date(date) : date;
+          const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
+          return `<t:${unixTimestamp}:${format}>`;
+        };
+
+        // Create updated embed with NO class names
+        const formatPlayers = (players) => {
+          if (players.length === 0) return '—';
+          
+          return players.map((p, i) => {
+            const name = p.username || 'Unknown';
+            let primaryEmoji = '';
+            let secondaryEmoji = '';
+            
+            try {
+              // Parse builds data
+              let builds = [];
+              if (p.builds) {
+                builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+              }
+              
+              if (Array.isArray(builds) && builds.length > 0) {
+                const build = builds[0];
+                if (build.primary) primaryEmoji = getWeaponEmoji(build.primary);
+                if (build.secondary) secondaryEmoji = getWeaponEmoji(build.secondary);
+                // No class name extraction
+              }
+            } catch (e) {
+              console.error(`Error processing builds for ${name}:`, e);
+            }
+            
+            // Create display with weapon emojis but NO class name
+            const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji} ` : 
+                                primaryEmoji ? `${primaryEmoji} ` : '';
+            return `${i+1}. ${weaponDisplay}**${name}**`;
+          }).join('\n');
+        };
+        
         // Create updated embed
         const updatedEmbed = new EmbedBuilder()
           .setTitle(`${message.title || 'Event'}`)
@@ -4612,7 +4712,7 @@ async function recoverEventTracking() {
           .addFields(
             {
               name: '⏰ Time',
-              value: `📅 ${dateFormatted} ⌚ ${timeFormatted}`,
+              value: formatDiscordTimestamp(message.event_time),
               inline: false
             },
             {
@@ -4622,43 +4722,73 @@ async function recoverEventTracking() {
             },
             {
               name: `${tankEmoji} Tanks (${tanks.length}/${message.tanks || 0})`,
-              value: tanks.length > 0 ? 
-                tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-                '—',
+              value: formatPlayers(tanks),
               inline: true
             },
             {
               name: `${healerEmoji} Healers (${healers.length}/${message.healers || 0})`,
-              value: healers.length > 0 ? 
-                healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-                '—',
+              value: formatPlayers(healers),
               inline: true
             },
             {
               name: `${dpsEmoji} DPS (${dps.length}/${message.dps || 0})`,
-              value: dps.length > 0 ? 
-                dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
-                '—',
+              value: formatPlayers(dps),
               inline: true
             },
             {
               name: `❌ Absent (${absentees.length})`,
               value: absentees.length > 0 ? 
-                absentees.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+                absentees.map((a, i) => `${i+1}. ~~**${a.username}**~~`).join('\n') : 
                 '—',
               inline: true
             },
             {
               name: '⏳ Tentative (0)',
-              value: '—',
+              value: tentativeMembers.length > 0 ?
+                tentativeMembers.map((t, i) => `${i+1}. **${t.username}**`).join('\n') :
+                '—',
               inline: true
             }
           )
           .setFooter({ text: `Event ID: ${message.event_id}` });
         
-        // Update the embed
-        await discordMessage.edit({ embeds: [updatedEmbed] });
-        console.log(`[INFO] Recovered tracking for event "${message.title}" (${message.event_id})`);
+        // Create signup buttons
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`signup_${message.event_id}_TANK`)
+              .setLabel('Tank')
+              .setEmoji('1352736996405022780')
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId(`signup_${message.event_id}_HEALER`)
+              .setLabel('Healer')
+              .setEmoji('1352737011479482468')
+              .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+              .setCustomId(`signup_${message.event_id}_DPS`)
+              .setLabel('DPS')
+              .setEmoji('1352737043972624518')
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId(`signup_${message.event_id}_TENTATIVE`)
+              .setLabel('Tentative')
+              .setEmoji('⏳')
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setCustomId(`signup_${message.event_id}_ABSENT`)
+              .setLabel('Absent')
+              .setEmoji('❌')
+              .setStyle(ButtonStyle.Secondary)
+          );
+        
+        // Update the message with refreshed data
+        await discordMessage.edit({
+          embeds: [updatedEmbed],
+          components: [row]
+        });
+        
+        console.log(`[INFO] Successfully recovered event message for event ${message.event_id}`);
       } catch (eventError) {
         console.error(`[ERROR] Error recovering event ${message.event_id}: ${eventError.message}`);
       }
@@ -4845,6 +4975,55 @@ const handleLinkGuildCommand = async (interaction) => {
     });
   }
 };
+
+app.get('/webhook/channels', async (req, res) => {
+  try {
+    const { discordGuildId, secret } = req.query;
+    
+    // Verify secret
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Check if guild ID is provided
+    if (!discordGuildId) {
+      return res.status(400).json({ error: 'Discord Guild ID is required' });
+    }
+    
+    // Fetch the guild from Discord API
+    try {
+      const guild = await client.guilds.fetch(discordGuildId);
+      
+      if (!guild) {
+        return res.status(404).json({ error: 'Discord guild not found' });
+      }
+      
+      // Fetch and return all channels
+      const channels = await guild.channels.fetch();
+      
+      // Convert the channels collection to an array and format it
+      const channelList = Array.from(channels.values()).map(channel => ({
+        id: channel.id,
+        name: channel.name,
+        type: channel.type,
+        parent_id: channel.parentId,
+        position: channel.position
+      }));
+      
+      console.log(`Returning ${channelList.length} channels for guild ${discordGuildId}`);
+      return res.json(channelList);
+    } catch (discordError) {
+      console.error('Error fetching Discord guild or channels:', discordError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch Discord channels',
+        details: discordError.message
+      });
+    }
+  } catch (error) {
+    console.error('Error in /webhook/channels endpoint:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Setup command handler
 async function handleStorageCommand(interaction, appGuildId) {
@@ -6375,83 +6554,7 @@ const itemRequestMessages = new Map();
 client.on('ready', async () => {
   console.log(`Logged in as ${client.user.tag}!`);
   
-  // Create required database tables if they don't exist
   try {
-    // Create item tracking table for button interactions
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS item_message_tracking (
-        id SERIAL PRIMARY KEY,
-        item_id UUID NOT NULL,
-        guild_id UUID NOT NULL,
-        channel_id VARCHAR(255) NOT NULL,
-        message_id VARCHAR(255) NOT NULL,
-        need_count INTEGER DEFAULT 0,
-        greed_count INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(item_id)
-      )
-    `);
-    console.log('Item message tracking table verified');
-    
-    // Create event message tracking table if it doesn't exist already
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS discord_event_messages (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          guild_id UUID NOT NULL,
-          event_id UUID NOT NULL,
-          channel_id VARCHAR(255) NOT NULL,
-          message_id VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(event_id)
-        )
-      `);
-      console.log('Event message tracking table verified');
-    } catch (tableError) {
-      console.error(`[ERROR] Error creating discord_event_messages table: ${tableError.message}`);
-      // Continue even if table creation fails
-    }
-    
-    // Create absentees table if it doesn't exist
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS event_absentees (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          guild_id UUID NOT NULL,
-          event_id UUID NOT NULL,
-          user_id UUID NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(event_id, user_id)
-        )
-      `);
-      console.log('Event absentees table verified');
-    } catch (tableError) {
-      console.error(`[ERROR] Error creating event_absentees table: ${tableError.message}`);
-      // Continue even if table creation fails
-    }
-    
-    // Create channel config table if it doesn't exist
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS discord_channel_config (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          guild_id UUID NOT NULL,
-          discord_guild_id VARCHAR(255) NOT NULL,
-          channel_id VARCHAR(255) NOT NULL,
-          channel_type VARCHAR(50) NOT NULL,
-          enabled BOOLEAN DEFAULT true,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        )
-      `);
-      console.log('Channel configuration table verified');
-    } catch (tableError) {
-      console.error(`[ERROR] Error creating discord_channel_config table: ${tableError.message}`);
-      // Continue even if table creation fails
-    }
-    
     // Recover item tracking after restart
     console.log('Recovering item tracking after restart...');
     await recoverItemTracking();
@@ -6461,7 +6564,7 @@ client.on('ready', async () => {
     await recoverEventTracking();
     
   } catch (error) {
-    console.error('Error setting up database tables:', error);
+    console.error('Error recovering data after restart:', error);
   }
   
   // Register slash commands

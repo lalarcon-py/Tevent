@@ -173,7 +173,6 @@ createEventEmbed: (event) => {
         const name = p.User?.username || p.username || 'Unknown';
         let primaryEmoji = '';
         let secondaryEmoji = '';
-        let className = '';
         
         try {
           // Get the player's build (assuming only 1)
@@ -196,18 +195,15 @@ createEventEmbed: (event) => {
           if (build) {
             primaryEmoji = getWeaponEmoji(build.primary || '');
             secondaryEmoji = getWeaponEmoji(build.secondary || '');
-            className = build.weapon_spec || '';
-            
-            console.log(`[DEBUG] Player ${name} weapons: ${build.primary} + ${build.secondary}, class: ${className}`);
+            // Removed className variable and display
           }
         } catch (e) {
           console.error(`Error processing builds for player ${name}:`, e);
         }
         
-        // Create display with weapon emojis and class name
+        // Create display with weapon emojis but WITHOUT class name
         const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
-        const classDisplay = className ? ` (${className})` : '';
-        return `${idx + 1}. ${weaponDisplay} **${name}**${classDisplay}`;
+        return `${idx + 1}. ${weaponDisplay} **${name}**`;
       }).join('\n');
     };
     

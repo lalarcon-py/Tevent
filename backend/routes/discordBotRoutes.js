@@ -213,11 +213,11 @@ router.get('/channels', async (req, res) => {
     
     try {
       console.log(`Fetching channels from Discord bot webhook endpoint`);
-      const discordBotResponse = await axios.post(`${DISCORD_BOT_URL}/webhook/channels`, {
-        guildId: guildId,
-        discordGuildId: discordGuildId,
-        secret: DISCORD_BOT_AUTH
-      });
+      
+      // CHANGED FROM POST TO GET and using query parameters
+      const discordBotResponse = await axios.get(
+        `${DISCORD_BOT_URL}/webhook/channels?discordGuildId=${discordGuildId}&secret=${DISCORD_BOT_AUTH}`
+      );
       
       if (discordBotResponse.data && Array.isArray(discordBotResponse.data)) {
         // Filter and format channels
