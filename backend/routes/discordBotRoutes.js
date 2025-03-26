@@ -5,6 +5,10 @@ const db = require('../models');
 const axios = require('axios');
 const { Pool } = require('pg');
 
+
+const DISCORD_NOTIFICATIONS_ENABLED = process.env.DISCORD_NOTIFICATIONS_ENABLED === 'true';
+const DISCORD_TEAM_NOTIFICATIONS_ENABLED = process.env.DISCORD_TEAM_NOTIFICATIONS_ENABLED === 'true';
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? {
@@ -77,8 +81,14 @@ router.post('/announce-teams-with-images', async (req, res) => {
 
     const { eventId, guildId, teams, teamImages } = req.body;
     
-    if (!eventId || !guildId || !teams || !teamImages) {
+    if (!eventId || !guildId || !teams) {
       return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    // Check if Discord notifications are globally enabled
+    if (!DISCORD_NOTIFICATIONS_ENABLED || !DISCORD_TEAM_NOTIFICATIONS_ENABLED) {
+      console.log(`Discord notifications disabled by environment variable, skipping image announcement`);
+      return res.json({ success: true, notificationsSent: false });
     }
     
     console.log(`Starting team screenshot announcement for event ${eventId} in guild ${guildId}`);
@@ -114,7 +124,7 @@ router.post('/announce-teams-with-images', async (req, res) => {
       console.log(`Sending team screenshots to Discord bot: ${discordBotUrl}/webhook/announce-teams-with-images`);
       
       // Send just the first image from teamImages array if there are multiple images
-      const singleImage = teamImages.length > 0 ? teamImages[0] : null;
+      const singleImage = teamImages && teamImages.length > 0 ? teamImages[0] : null;
       
       // Send to Discord bot
       await axios.post(`${discordBotUrl}/webhook/announce-teams-with-images`, {
@@ -651,6 +661,12 @@ router.post('/announce-teams', async (req, res) => {
     
     if (!eventId || !guildId || !teams) {
       return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    // Check if Discord notifications are globally enabled
+    if (!DISCORD_NOTIFICATIONS_ENABLED || !DISCORD_TEAM_NOTIFICATIONS_ENABLED) {
+      console.log(`Discord notifications disabled by environment variable, skipping team announcement`);
+      return res.json({ success: true, notificationsSent: false });
     }
     
     console.log(`Starting team announcement for event ${eventId} in guild ${guildId}`);
