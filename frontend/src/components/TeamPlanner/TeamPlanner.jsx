@@ -582,6 +582,12 @@ const TeamPlanner = () => {
   const [buildDialogOpen, setBuildDialogOpen] = useState(false);
   const [tentativeParticipants, setTentativeParticipants] = useState([]);
   const [memberOriginalStatuses, setMemberOriginalStatuses] = useState({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState({
+    showWeaponIcons: true,
+    showWeaponSpecs: true,
+    showRoleCounts: true
+  });
 
   // Helper function to determine if user has permission to edit teams
   const hasEditPermission = () => {
@@ -641,12 +647,48 @@ const TeamPlanner = () => {
     
     return { color: 'white', bgGradient: 'linear-gradient(to right, #2c2c2c, #1a1a1a)' };
   };
+  // Add this component to the top of your TeamPlanner component's render method
+  const NotificationBanner = () => {
+    return (
+      <Box 
+        sx={{ 
+          width: '100%', 
+          mb: 3,
+          borderRadius: 2,
+          overflow: 'hidden'
+        }}
+      >
+        <Alert 
+          severity="warning" 
+          variant="filled"
+          sx={{ 
+            borderLeft: '4px solid #ff9800',
+            bgcolor: 'rgba(255, 152, 0, 0.15)',
+            color: 'white',
+            '& .MuiAlert-icon': {
+              color: '#ff9800'
+            }
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 0.5 }}>
+              System Notice
+            </Typography>
+            <Typography variant="body2">
+              I am aware of the issue(s) with event sign ups and have temporarily disabled discord team/event use. 
+              Please report any issues to @skrinkz on discord or submit a formal ticket above.
+            </Typography>
+          </Box>
+        </Alert>
+      </Box>
+    );
+  };
 
   // New function to capture and send team screenshots
-  const captureAndSendTeamImages = async () => {
+  const captureTeamImagesForClipboard = async () => {
     if (teams.length === 0) return;
     
-    setIsAnnouncingTeams(true); // Reuse the loading state
+    setIsAnnouncingTeams(true);
     
     try {
       // Create a single container for all teams
@@ -977,7 +1019,7 @@ const TeamPlanner = () => {
                         textAlign: 'center',
                         mt: 4
                       }}>
-                        Drag members here to add to the team
+                        Empty team
                       </Typography>
                     )}
                   </Box>
@@ -992,51 +1034,54 @@ const TeamPlanner = () => {
       // Use html2canvas to capture the entire grid
       const canvas = await html2canvas(teamsGridRef.firstChild, {
         backgroundColor: '#121212',
-        scale: 1, // Lower scale for reduced size
+        scale: 2, // Higher scale for better quality
         logging: false,
         useCORS: true
       });
       
-      // Convert to image data with JPEG format and medium quality
-      const imageData = canvas.toDataURL('image/jpeg', 0.75);
+      // Convert canvas to blob
+      canvas.toBlob(async (blob) => {
+        try {
+          // Check if the Clipboard API is supported
+          if (!navigator.clipboard || !navigator.clipboard.write) {
+            throw new Error('Clipboard API not supported in this browser');
+          }
+          
+          // Create a ClipboardItem and write to clipboard
+          const item = new ClipboardItem({ 'image/png': blob });
+          await navigator.clipboard.write([item]);
+          
+          setAnnounceSuccess({
+            success: true,
+            message: "Teams screenshot copied to clipboard!"
+          });
+        } catch (error) {
+          console.error('Error copying to clipboard:', error);
+          
+          // Fallback: create a download link
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'team-screenshot.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          
+          setAnnounceSuccess({
+            success: true,
+            message: "Teams screenshot downloaded (clipboard copy failed)"
+          });
+        }
+      }, 'image/png', 0.9);
       
       // Clean up
       document.body.removeChild(teamsGridRef);
       
-      // Send the single image to the server
-      const response = await fetch(`${API_URL}/api/discord-bot/announce-teams-with-images`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          eventId,
-          guildId,
-          teams: teams.map(team => ({
-            id: team.id,
-            name: team.name,
-            members: team.members.map(member => ({
-              id: member.user_id || member.id || (member.User?.id),
-              username: member.User?.username || member.username,
-              role: member.role
-            }))
-          })),
-          teamImages: [{ name: 'All Teams', image: imageData }]
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to send team screenshots');
-      }
-      
-      setAnnounceSuccess({
-        success: true,
-        message: "Teams announced with screenshot to Discord!"
-      });
     } catch (error) {
-      console.error('Error capturing or sending team screenshots:', error);
+      console.error('Error capturing team screenshot:', error);
       setAnnounceSuccess({
         success: false,
-        message: error.message || 'Failed to send team screenshots'
+        message: error.message || 'Failed to capture team screenshot'
       });
     } finally {
       setIsAnnouncingTeams(false);
@@ -2213,7 +2258,7 @@ const TeamPlanner = () => {
                 {/* Screenshot Teams button */}
                 <Button
                   variant="contained"
-                  onClick={captureAndSendTeamImages}
+                  onClick={captureTeamImagesForClipboard}
                   disabled={isAnnouncingTeams || teams.length === 0}
                   startIcon={<PhotoCameraIcon />}
                   sx={{
@@ -2222,68 +2267,26 @@ const TeamPlanner = () => {
                     '&.Mui-disabled': { bgcolor: 'rgba(255, 152, 0, 0.3)' }
                   }}
                 >
-                  {isAnnouncingTeams ? 'Processing...' : 'Announce Teams'}
+                  {isAnnouncingTeams ? 'Processing...' : 'Copy Teams Screenshot'}
                 </Button>
                 
-                {/* Announce Teams button */}
-                <Button
-                  variant="contained"
-                  onClick={() => {
-                    setIsAnnouncingTeams(true);
-                    
-                    // Format teams data
-                    const teamsData = teams.map(team => ({
-                      id: team.id,
-                      name: team.name,
-                      members: team.members.map(member => ({
-                        id: member.user_id || member.id || (member.User?.id),
-                        username: member.User?.username || member.username,
-                        role: member.role
-                      }))
-                    }));
-                    
-                    fetch(`${API_URL}/api/discord-bot/announce-teams`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      credentials: 'include',
-                      body: JSON.stringify({
-                        eventId,
-                        guildId,
-                        teams: teamsData
-                      })
-                    })
-                    .then(response => {
-                      if (!response.ok) throw new Error('Failed to announce teams');
-                      setAnnounceSuccess({
-                        success: true,
-                        message: "Teams announced successfully to Discord!"
-                      });
-                    })
-                    .catch(error => {
-                      console.error('Error announcing teams:', error);
-                      setAnnounceSuccess({
-                        success: false,
-                        message: error.message || 'Failed to announce teams'
-                      });
-                    })
-                    .finally(() => {
-                      setIsAnnouncingTeams(false);
-                    });
-                  }}
-                  disabled={isAnnouncingTeams || teams.length === 0}
-                  startIcon={<SendIcon />}
-                  sx={{
-                    bgcolor: '#9c27b0',
-                    '&:hover': { bgcolor: '#7B1FA2' },
-                    '&.Mui-disabled': { bgcolor: 'rgba(156, 39, 176, 0.3)' }
+                {/* Settings button */}
+                <IconButton
+                  onClick={() => setSettingsOpen(true)}
+                  sx={{ 
+                    color: 'white',
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                    '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.2)' }
                   }}
                 >
-                  {isAnnouncingTeams ? 'Sending...' : 'Announce Teams'}
-                </Button>
+                  <SettingsIcon />
+                </IconButton>
               </>
             )}
           </Box>
         </Box>
+
+        <NotificationBanner />
     
         <Grid container spacing={3}>
         <Grid item xs={12} md={3}>

@@ -206,11 +206,6 @@ const Navigation = ({ guildId }) => {
       path: '/event-summaries'
     },
     {
-      text: 'Team Planner',
-      icon: <GroupsIcon />,
-      path: '/team-planner'
-    },
-    {
       text: 'Gear Check',
       icon: <FormatListBulletedIcon />,
       path: '/gear-check'
