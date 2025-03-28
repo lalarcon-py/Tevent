@@ -81,6 +81,8 @@ pool.query('SELECT NOW()')
 
 // Log connection info
 console.log("Database connection configured");
+const recentInteractions = new Map();
+const INTERACTION_COOLDOWN_MS = 5000;
 
 // Create client with necessary intents
 const client = new Client({ 
@@ -3954,6 +3956,28 @@ client.on('interactionCreate', async (interaction) => {
             // Log the interaction being processed
             console.log(`[INFO] Processing signup button: ${customId}`);
             
+            // Check for duplicate interactions (mobile users often tap multiple times)
+            const interactionKey = `${interaction.user.id}:${customId}`;
+            const lastInteraction = recentInteractions.get(interactionKey);
+            const now = Date.now();
+            
+            if (lastInteraction && now - lastInteraction < INTERACTION_COOLDOWN_MS) {
+              console.log(`[INFO] Ignoring duplicate interaction from ${interaction.user.id} (cooldown active)`);
+              return await interaction.deferUpdate().catch(() => {}); // Silently acknowledge without processing
+            }
+            
+            // Track this interaction
+            recentInteractions.set(interactionKey, now);
+            
+            // Clean up old interactions periodically
+            if (recentInteractions.size > 1000) {
+              for (const [key, timestamp] of recentInteractions.entries()) {
+                if (now - timestamp > INTERACTION_COOLDOWN_MS) {
+                  recentInteractions.delete(key);
+                }
+              }
+            }
+            
             // Immediately defer the reply to prevent timeout
             await interaction.deferReply({ ephemeral: true }).catch(error => {
               if (error.code === 10062) {
@@ -3984,7 +4008,7 @@ client.on('interactionCreate', async (interaction) => {
                 ephemeral: true
               });
             }
-
+      
             // Get user from discord ID
             const userResult = await pool.query(
               'SELECT id, username, builds FROM users WHERE discord_id = $1',
@@ -4182,20 +4206,20 @@ client.on('interactionCreate', async (interaction) => {
                   // Get all participants with their builds
                   const participantsResult = await pool.query(
                     `SELECT ep.role, u.username, u.discord_id, u.builds
-                    FROM event_participants ep
-                    JOIN users u ON ep.user_id = u.id
-                    WHERE ep.event_id = $1
-                    ORDER BY ep.created_at ASC`,
+                     FROM event_participants ep
+                     JOIN users u ON ep.user_id = u.id
+                     WHERE ep.event_id = $1
+                     ORDER BY ep.created_at ASC`,
                     [eventId]
                   );
                   
                   // Get absentees
                   const absenteesResult = await pool.query(
                     `SELECT ea.user_id, u.username
-                    FROM event_absentees ea
-                    JOIN users u ON ea.user_id = u.id
-                    WHERE ea.event_id = $1
-                    ORDER BY ea.created_at ASC`,
+                     FROM event_absentees ea
+                     JOIN users u ON ea.user_id = u.id
+                     WHERE ea.event_id = $1
+                     ORDER BY ea.created_at ASC`,
                     [eventId]
                   );
                   
@@ -4204,10 +4228,10 @@ client.on('interactionCreate', async (interaction) => {
                   try {
                     const tentativeResult = await pool.query(
                       `SELECT et.user_id, u.username
-                      FROM event_tentative et
-                      JOIN users u ON et.user_id = u.id
-                      WHERE et.event_id = $1
-                      ORDER BY et.created_at ASC`,
+                       FROM event_tentative et
+                       JOIN users u ON et.user_id = u.id
+                       WHERE et.event_id = $1
+                       ORDER BY et.created_at ASC`,
                       [eventId]
                     );
                     
