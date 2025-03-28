@@ -1810,6 +1810,7 @@ client.on('interactionCreate', async (interaction) => {
         await handleCheckConnectionCommand(interaction, appGuildId);
       }
     }
+
     // Handle button interactions
     else if (interaction.isButton()) {
       const customId = interaction.customId;
@@ -3969,19 +3970,19 @@ client.on('interactionCreate', async (interaction) => {
             // Check guild mapping
             const discordGuildId = interaction.guild?.id;
             if (!discordGuildId) {
-              return await interaction.editReply({
+              return await safeReply(interaction, {
                 content: 'This button must be used in a Discord server.',
                 ephemeral: true
-              }).catch(error => console.error(`Reply error: ${error.message}`));
+              });
             }
             
             // Get app guild ID from mapping
             const appGuildId = await getGuildMapping(discordGuildId);
             if (!appGuildId) {
-              return await interaction.editReply({
+              return await safeReply(interaction, {
                 content: 'This Discord server is not linked to an application guild.',
                 ephemeral: true
-              }).catch(error => console.error(`Reply error: ${error.message}`));
+              });
             }
 
             // Get user from discord ID
@@ -3991,10 +3992,10 @@ client.on('interactionCreate', async (interaction) => {
             );
             
             if (!userResult.rows || userResult.rows.length === 0) {
-              return await interaction.editReply({
+              return await safeReply(interaction, {
                 content: 'You need to register on the website first before signing up for events.',
                 ephemeral: true
-              }).catch(error => console.error(`Reply error: ${error.message}`));
+              });
             }
             
             const userId = userResult.rows[0].id;
@@ -4006,10 +4007,10 @@ client.on('interactionCreate', async (interaction) => {
             );
             
             if (!eventResult.rows || eventResult.rows.length === 0) {
-              return await interaction.editReply({
+              return await safeReply(interaction, {
                 content: 'Event not found.',
                 ephemeral: true
-              }).catch(error => console.error(`Reply error: ${error.message}`));
+              });
             }
             
             const eventDetails = eventResult.rows[0];
@@ -4032,10 +4033,10 @@ client.on('interactionCreate', async (interaction) => {
                 [appGuildId, eventId, userId]
               );
               
-              await interaction.editReply({
+              await safeReply(interaction, {
                 content: `You have been marked as absent for "${eventDetails.title}".`,
                 ephemeral: true
-              }).catch(error => console.error(`Reply error: ${error.message}`));
+              });
             } else if (role === 'TENTATIVE') {
               // Handle tentative signup
               try {
@@ -4074,16 +4075,16 @@ client.on('interactionCreate', async (interaction) => {
                   [appGuildId, eventId, userId]
                 );
                 
-                await interaction.editReply({
+                await safeReply(interaction, {
                   content: `You have been marked as tentative for "${eventDetails.title}".`,
                   ephemeral: true
-                }).catch(error => console.error(`Reply error: ${error.message}`));
+                });
               } catch (tentativeError) {
                 console.error('Error handling tentative signup:', tentativeError);
-                await interaction.editReply({
+                await safeReply(interaction, {
                   content: `An error occurred while marking you as tentative.`,
                   ephemeral: true
-                }).catch(error => console.error(`Reply error: ${error.message}`));
+                });
               }
             } else {
               // Regular role signup
@@ -4101,10 +4102,10 @@ client.on('interactionCreate', async (interaction) => {
                   [role, existingSignup.rows[0].id]
                 );
                 
-                await interaction.editReply({
+                await safeReply(interaction, {
                   content: `Your role for "${eventDetails.title}" has been updated to ${role}.`,
                   ephemeral: true
-                }).catch(error => console.error(`Reply error: ${error.message}`));
+                });
               } else {
                 // Check role capacity
                 const roleCountsResult = await pool.query(
@@ -4133,10 +4134,10 @@ client.on('interactionCreate', async (interaction) => {
                 };
                 
                 if (currentCounts[role] >= roleLimits[role]) {
-                  return await interaction.editReply({
+                  return await safeReply(interaction, {
                     content: `Sorry, the ${role} spots are full for this event.`,
                     ephemeral: true
-                  }).catch(error => console.error(`Reply error: ${error.message}`));
+                  });
                 }
                 
                 // Remove from absentees if marked before
@@ -4164,10 +4165,10 @@ client.on('interactionCreate', async (interaction) => {
                   [appGuildId, eventId, userId, role]
                 );
                 
-                await interaction.editReply({
+                await safeReply(interaction, {
                   content: `You have been signed up for "${eventDetails.title}" as ${role}.`,
                   ephemeral: true
-                }).catch(error => console.error(`Reply error: ${error.message}`));
+                });
               }
             }
             
@@ -4278,23 +4279,12 @@ client.on('interactionCreate', async (interaction) => {
             
             // Try to salvage the interaction if possible
             try {
-              if (interaction.deferred) {
-                await interaction.editReply({
-                  content: 'An error occurred while processing your signup. Please try again.',
-                  ephemeral: true
-                }).catch(replyError => 
-                  console.error(`Failed to send error message: ${replyError.message}`)
-                );
-              } else {
-                await interaction.reply({
-                  content: 'An error occurred while processing your signup. Please try again.',
-                  ephemeral: true
-                }).catch(replyError => 
-                  console.error(`Failed to send error message: ${replyError.message}`)
-                );
-              }
-            } catch (finalError) {
-              console.error(`Failed completely to respond to user: ${finalError.message}`);
+              await safeReply(interaction, {
+                content: 'An error occurred while processing your signup. Please try again.',
+                ephemeral: true
+              });
+            } catch (replyError) {
+              console.error(`Failed to send error response: ${replyError.message}`);
             }
           }
         }
@@ -4675,32 +4665,41 @@ async function recoverEventTracking() {
         const formatPlayers = (players) => {
           if (players.length === 0) return '—';
           
-          return players.map((p, i) => {
-            const name = p.username || 'Unknown';
+          return players.map((p, idx) => {
+            const name = p.User?.username || p.username || 'Unknown';
             let primaryEmoji = '';
             let secondaryEmoji = '';
             
             try {
-              // Parse builds data
-              let builds = [];
+              // Get the player's build (assuming only 1)
+              let build = null;
+              
+              // Try to get build from various properties
               if (p.builds) {
-                builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+                const builds = typeof p.builds === 'string' ? JSON.parse(p.builds) : p.builds;
+                if (Array.isArray(builds) && builds.length > 0) {
+                  build = builds[0];
+                }
+              } else if (p.User?.builds) {
+                const builds = typeof p.User.builds === 'string' ? JSON.parse(p.User.builds) : p.User.builds;
+                if (Array.isArray(builds) && builds.length > 0) {
+                  build = builds[0];
+                }
               }
               
-              if (Array.isArray(builds) && builds.length > 0) {
-                const build = builds[0];
-                if (build.primary) primaryEmoji = getWeaponEmoji(build.primary);
-                if (build.secondary) secondaryEmoji = getWeaponEmoji(build.secondary);
-                // No class name extraction
+              // Extract display information from the build
+              if (build) {
+                primaryEmoji = getWeaponEmoji(build.primary || '');
+                secondaryEmoji = getWeaponEmoji(build.secondary || '');
+                // Removed className variable and display
               }
             } catch (e) {
-              console.error(`Error processing builds for ${name}:`, e);
+              console.error(`Error processing builds for player ${name}:`, e);
             }
             
-            // Create display with weapon emojis but NO class name
-            const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji} ` : 
-                                primaryEmoji ? `${primaryEmoji} ` : '';
-            return `${i+1}. ${weaponDisplay}**${name}**`;
+            // Create display with weapon emojis but WITHOUT class name
+            const weaponDisplay = secondaryEmoji ? `${primaryEmoji}${secondaryEmoji}` : primaryEmoji;
+            return `${idx + 1}. ${weaponDisplay} **${name}**`;
           }).join('\n');
         };
         

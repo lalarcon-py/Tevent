@@ -18,9 +18,10 @@ const pool = new Pool({
 
 
 // Discord bot service configuration
-const DISCORD_BOT_URL = process.env.NODE_ENV === 'production' 
-  ? "http://heartfelt-sparkle.railway.internal:3300" 
-  : "http://localhost:3300";
+const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 
+  (process.env.NODE_ENV === 'production' 
+    ? "http://heartfelt-sparkle.railway.internal:3300" 
+    : "http://localhost:5000");
 
 const DISCORD_BOT_AUTH = process.env.BOT_WEBHOOK_SECRET || 'default-secret';
 
@@ -230,9 +231,8 @@ router.get('/channels', async (req, res) => {
       );
       
       if (discordBotResponse.data && Array.isArray(discordBotResponse.data)) {
-        // Filter and format channels
         channelsData = discordBotResponse.data
-          .filter(channel => channel.type === 0) // Only text channels
+          .filter(channel => channel.type === 0)
           .map(channel => ({
             id: channel.id,
             name: channel.name,
