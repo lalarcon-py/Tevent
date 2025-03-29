@@ -1067,57 +1067,238 @@ const StaticTeams = () => {
     setIsScreenshotting(true);
     
     try {
-      // Create a temporary element for the screenshot
-      const tempDiv = document.createElement('div');
-      tempDiv.style.position = 'absolute';
-      tempDiv.style.left = '-9999px';
-      tempDiv.style.width = '1200px';
-      document.body.appendChild(tempDiv);
+      // Create a clean container for the screenshot
+      const screenshotContainer = document.createElement('div');
+      screenshotContainer.style.padding = '20px';
+      screenshotContainer.style.backgroundColor = '#121212';
+      screenshotContainer.style.borderRadius = '8px';
+      screenshotContainer.style.position = 'absolute';
+      screenshotContainer.style.left = '-9999px';
+      screenshotContainer.style.width = '1200px';
       
-      // Add content to the element
-      tempDiv.innerHTML = `
-        <div style="padding: 20px; background-color: #121212; border-radius: 8px;">
-          <h2 style="color: white; margin-bottom: 20px;">Static Teams</h2>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-            ${teams.map(team => `
-              <div style="background-color: #1e1e1e; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08);">
-                <div style="padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background-color: rgba(0, 0, 0, 0.2);">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="color: white; margin: 0; font-size: 16px;">${team.name}</h3>
-                    <div>
-                      <span style="background-color: rgba(102, 179, 255, 0.2); border-radius: 16px; padding: 4px 8px; margin-right: 4px; color: #66b3ff; font-size: 12px;">
-                        Tank: ${team.members?.filter(m => m.role?.toUpperCase() === 'TANK').length || 0}
-                      </span>
-                      <span style="background-color: rgba(102, 255, 102, 0.2); border-radius: 16px; padding: 4px 8px; margin-right: 4px; color: #66ff66; font-size: 12px;">
-                        Healer: ${team.members?.filter(m => m.role?.toUpperCase() === 'HEALER').length || 0}
-                      </span>
-                      <span style="background-color: rgba(255, 102, 102, 0.2); border-radius: 16px; padding: 4px 8px; color: #ff6666; font-size: 12px;">
-                        DPS: ${team.members?.filter(m => m.role?.toUpperCase() === 'DPS').length || 0}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div style="padding: 12px; min-height: 150px;">
-                  ${team.members?.length ? team.members.map(member => {
-                    const roleStyles = getRoleStyles(member.role);
-                    return `
-                      <div style="margin-bottom: 8px; padding: 8px; border-radius: 6px; background-color: rgba(24, 24, 27, 0.7); border: 1px solid ${roleStyles.borderColor || 'rgba(255, 255, 255, 0.1)'}; display: flex; align-items: center;">
-                        <div style="margin-right: 12px; display: flex;">
-                          <span style="color: white; font-weight: 500;">${member.User?.username || member.username}</span>
-                        </div>
-                        <div style="margin-left: auto; color: ${roleStyles.color};">${member.role}</div>
-                      </div>
-                    `;
-                  }).join('') : `<div style="color: rgba(255, 255, 255, 0.5); text-align: center; padding: 20px;">Empty team</div>`}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
+      // Add title
+      const title = document.createElement('h2');
+      title.textContent = 'Static Teams';
+      title.style.color = 'white';
+      title.style.marginBottom = '20px';
+      screenshotContainer.appendChild(title);
       
-      // Capture screenshot
-      const canvas = await html2canvas(tempDiv.firstChild, {
+      // Create grid container
+      const gridContainer = document.createElement('div');
+      gridContainer.style.display = 'grid';
+      gridContainer.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      gridContainer.style.gap = '16px';
+      
+      // Add each team
+      teams.forEach(team => {
+        const teamElement = document.createElement('div');
+        teamElement.style.backgroundColor = '#1e1e1e';
+        teamElement.style.borderRadius = '8px';
+        teamElement.style.overflow = 'hidden';
+        teamElement.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+        
+        // Team header
+        const header = document.createElement('div');
+        header.style.padding = '12px';
+        header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.1)';
+        header.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+        
+        const headerContent = document.createElement('div');
+        headerContent.style.display = 'flex';
+        headerContent.style.justifyContent = 'space-between';
+        headerContent.style.alignItems = 'center';
+        
+        const teamName = document.createElement('h3');
+        teamName.textContent = team.name;
+        teamName.style.color = 'white';
+        teamName.style.margin = '0';
+        teamName.style.fontSize = '16px';
+        
+        headerContent.appendChild(teamName);
+        
+        // Role counts
+        const roleCounts = document.createElement('div');
+        
+        const tankCount = document.createElement('span');
+        tankCount.textContent = `Tank: ${team.members?.filter(m => m.role?.toUpperCase() === 'TANK').length || 0}`;
+        tankCount.style.backgroundColor = 'rgba(102, 179, 255, 0.2)';
+        tankCount.style.borderRadius = '16px';
+        tankCount.style.padding = '4px 8px';
+        tankCount.style.marginRight = '4px';
+        tankCount.style.color = '#66b3ff';
+        tankCount.style.fontSize = '12px';
+        
+        const healerCount = document.createElement('span');
+        healerCount.textContent = `Healer: ${team.members?.filter(m => m.role?.toUpperCase() === 'HEALER').length || 0}`;
+        healerCount.style.backgroundColor = 'rgba(102, 255, 102, 0.2)';
+        healerCount.style.borderRadius = '16px';
+        healerCount.style.padding = '4px 8px';
+        healerCount.style.marginRight = '4px';
+        healerCount.style.color = '#66ff66';
+        healerCount.style.fontSize = '12px';
+        
+        const dpsCount = document.createElement('span');
+        dpsCount.textContent = `DPS: ${team.members?.filter(m => m.role?.toUpperCase() === 'DPS').length || 0}`;
+        dpsCount.style.backgroundColor = 'rgba(255, 102, 102, 0.2)';
+        dpsCount.style.borderRadius = '16px';
+        dpsCount.style.padding = '4px 8px';
+        dpsCount.style.color = '#ff6666';
+        dpsCount.style.fontSize = '12px';
+        
+        roleCounts.appendChild(tankCount);
+        roleCounts.appendChild(healerCount);
+        roleCounts.appendChild(dpsCount);
+        
+        headerContent.appendChild(roleCounts);
+        header.appendChild(headerContent);
+        teamElement.appendChild(header);
+        
+        // Team members
+        const membersContainer = document.createElement('div');
+        membersContainer.style.padding = '12px';
+        membersContainer.style.minHeight = '150px';
+        
+        if (team.members?.length) {
+          team.members.forEach(member => {
+            const memberEl = document.createElement('div');
+            memberEl.style.marginBottom = '8px';
+            memberEl.style.padding = '10px 12px';
+            memberEl.style.borderRadius = '8px';
+            memberEl.style.position = 'relative';
+            memberEl.style.display = 'flex';
+            memberEl.style.alignItems = 'center';
+            memberEl.style.backgroundColor = 'rgba(24, 24, 27, 0.7)';
+            
+            // Get role-specific styles
+            const role = member.role || 'DPS';
+            let roleColor, bgGradient, borderColor;
+            
+            if (role.toUpperCase() === 'TANK') {
+              roleColor = '#66b3ff';
+              bgGradient = 'linear-gradient(to right, rgba(102, 179, 255, 0.15), rgba(102, 179, 255, 0.05))';
+              borderColor = 'rgba(102, 179, 255, 0.3)';
+            } else if (role.toUpperCase() === 'HEALER') {
+              roleColor = '#66ff66';
+              bgGradient = 'linear-gradient(to right, rgba(102, 255, 102, 0.15), rgba(102, 255, 102, 0.05))';
+              borderColor = 'rgba(102, 255, 102, 0.3)';
+            } else {
+              roleColor = '#ff6666';
+              bgGradient = 'linear-gradient(to right, rgba(255, 102, 102, 0.15), rgba(255, 102, 102, 0.05))';
+              borderColor = 'rgba(255, 102, 102, 0.3)';
+            }
+            
+            // Apply the styles
+            memberEl.style.border = `1px solid ${borderColor}`;
+            memberEl.style.background = bgGradient;
+            
+            // Add the role indicator bar
+            const roleBar = document.createElement('div');
+            roleBar.style.position = 'absolute';
+            roleBar.style.left = '0';
+            roleBar.style.top = '0';
+            roleBar.style.bottom = '0';
+            roleBar.style.width = '4px';
+            roleBar.style.backgroundColor = roleColor;
+            roleBar.style.borderRadius = '8px 0 0 8px';
+            memberEl.appendChild(roleBar);
+            
+            // Member content
+            const contentContainer = document.createElement('div');
+            contentContainer.style.marginLeft = '12px';
+            contentContainer.style.flexGrow = '1';
+            contentContainer.style.overflow = 'hidden';
+            
+            // Username
+            const username = document.createElement('div');
+            username.style.fontSize = '0.95rem';
+            username.style.fontWeight = '500';
+            username.style.color = 'white';
+            username.style.whiteSpace = 'nowrap';
+            username.style.overflow = 'hidden';
+            username.style.textOverflow = 'ellipsis';
+            username.textContent = member.User?.username || member.username;
+            contentContainer.appendChild(username);
+            
+            // Role and spec
+            const roleSpecContainer = document.createElement('div');
+            roleSpecContainer.style.display = 'flex';
+            roleSpecContainer.style.alignItems = 'center';
+            
+            const roleText = document.createElement('div');
+            roleText.style.color = roleColor;
+            roleText.style.fontSize = '0.8rem';
+            roleText.style.fontWeight = '500';
+            roleText.textContent = role;
+            roleSpecContainer.appendChild(roleText);
+            
+            // Add weapon spec if available
+            const primaryWeapon = member.selectedBuild?.primary || '';
+            const secondaryWeapon = member.selectedBuild?.secondary || '';
+            const weaponSpec = getWeaponSpec(primaryWeapon, secondaryWeapon);
+            
+            if (weaponSpec && weaponSpec !== 'Unknown') {
+              // Dot separator
+              const dot = document.createElement('div');
+              dot.style.width = '4px';
+              dot.style.height = '4px';
+              dot.style.borderRadius = '50%';
+              dot.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              dot.style.margin = '0 5px';
+              roleSpecContainer.appendChild(dot);
+              
+              // Spec text
+              const specText = document.createElement('div');
+              specText.style.color = 'rgba(255, 255, 255, 0.7)';
+              specText.style.fontSize = '0.8rem';
+              specText.textContent = weaponSpec;
+              roleSpecContainer.appendChild(specText);
+            }
+            
+            contentContainer.appendChild(roleSpecContainer);
+            memberEl.appendChild(contentContainer);
+            
+            // Combat power if available
+            if (member.combat_power) {
+              const cpContainer = document.createElement('div');
+              cpContainer.style.marginLeft = '1.5rem';
+              cpContainer.style.padding = '0.5rem 1.5rem';
+              cpContainer.style.borderRadius = '50px';
+              cpContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+              cpContainer.style.border = '1px solid rgba(255, 215, 0, 0.3)';
+              
+              const cpText = document.createElement('div');
+              cpText.style.color = '#ffd700';
+              cpText.style.fontSize = '0.75rem';
+              cpText.style.fontWeight = '600';
+              cpText.textContent = `CP ${member.combat_power}`;
+              
+              cpContainer.appendChild(cpText);
+              memberEl.appendChild(cpContainer);
+            }
+            
+            membersContainer.appendChild(memberEl);
+          });
+        } else {
+          const emptyMessage = document.createElement('div');
+          emptyMessage.style.color = 'rgba(255, 255, 255, 0.5)';
+          emptyMessage.style.textAlign = 'center';
+          emptyMessage.style.padding = '20px';
+          emptyMessage.textContent = 'Empty team';
+          membersContainer.appendChild(emptyMessage);
+        }
+        
+        teamElement.appendChild(membersContainer);
+        gridContainer.appendChild(teamElement);
+      });
+      
+      // Add the grid to the container
+      screenshotContainer.appendChild(gridContainer);
+      
+      // Add to document
+      document.body.appendChild(screenshotContainer);
+      
+      // Capture the screenshot
+      const canvas = await html2canvas(screenshotContainer, {
         backgroundColor: '#121212',
         scale: 2,
         logging: false,
@@ -1160,12 +1341,13 @@ const StaticTeams = () => {
       }, 'image/png', 0.9);
       
       // Clean up
-      document.body.removeChild(tempDiv);
+      document.body.removeChild(screenshotContainer);
+      
     } catch (error) {
       console.error('Error capturing screenshot:', error);
       setScreenshotSuccess({
         success: false,
-        message: "Failed to capture screenshot"
+        message: "Failed to capture screenshot: " + (error.message || "Unknown error")
       });
     } finally {
       setIsScreenshotting(false);
