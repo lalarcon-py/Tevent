@@ -154,6 +154,38 @@ const checkForExpiredRequests = async () => {
         }
       }
       
+      // Create roll history entry - THIS IS THE NEW CODE THAT FIXES THE ISSUE
+      try {
+        const rollResults = requests.map(req => ({
+          id: req.id,
+          user_id: req.user_id,
+          username: req.user.username,
+          avatar_url: req.user.avatar_url,
+          roll_value: req.roll_value,
+          need_or_greed: req.need_or_greed,
+          winner: req.id === winner.id
+        }));
+        
+        await db.RollHistory.create({
+          guild_id: guildId,
+          item_name: storageItem.Item?.name || 'Unknown Item',
+          item_type: storageItem.Item?.type || 'Unknown Type',
+          item_icon: storageItem.Item?.icon || null,
+          item_trait: storageItem.trait || null,
+          winner_id: winner.user_id,
+          winner_name: winner.user.username,
+          winner_roll: winner.roll_value,
+          winner_need_type: winner.need_or_greed,
+          roll_results: rollResults,
+          roll_time: now
+        });
+        
+        console.log(`🎲 Created roll history entry for ${itemName}`);
+      } catch (historyError) {
+        console.error('Failed to create roll history entry:', historyError);
+        // Continue processing even if history creation fails
+      }
+      
       // Decrement item quantity
       if (storageItem.quantity > 0) {
         await storageItem.update({
@@ -205,6 +237,160 @@ const checkForExpiredRequests = async () => {
   }
 };
 
+const processRollForItem = async (storageItemId, guildId) => {
+  const t = await sequelize.transaction();
+  
+  try {
+    // Get all pending requests for this item
+    const pendingRequests = await db.LootRequest.findAll({
+      where: {
+        storage_item_id: storageItemId,
+        guild_id: guildId,
+        status: 'Pending'
+      },
+      include: [
+        {
+          model: db.GuildStorageItem,
+          as: 'storageItem',
+          include: [{ model: db.Item }]
+        },
+        { model: db.User, as: 'user' }
+      ],
+      transaction: t
+    });
+    
+    if (pendingRequests.length === 0) {
+      await t.commit();
+      return { success: false, message: 'No pending requests found' };
+    }
+    
+    // Sort by need/greed priority
+    const sortedRequests = pendingRequests.sort((a, b) => {
+      // First by need/greed priority
+      const priorityOrder = { 'NEED_ITEM': 0, 'NEED_TRAIT': 1, 'GREED': 2 };
+      const aPriority = priorityOrder[a.need_or_greed] || 3;
+      const bPriority = priorityOrder[b.need_or_greed] || 3;
+      
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      
+      // Then by request time (first come, first served)
+      return new Date(a.request_time) - new Date(b.request_time);
+    });
+    
+    // Generate roll values for each request
+    const rollResults = sortedRequests.map(request => {
+      return {
+        ...request.toJSON(),
+        roll_value: Math.floor(Math.random() * 100) + 1 // 1-100 roll
+      };
+    });
+    
+    // Sort by priority first, then by roll value
+    rollResults.sort((a, b) => {
+      // First by need/greed priority
+      const priorityOrder = { 'NEED_ITEM': 0, 'NEED_TRAIT': 1, 'GREED': 2 };
+      const aPriority = priorityOrder[a.need_or_greed] || 3;
+      const bPriority = priorityOrder[b.need_or_greed] || 3;
+      
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      
+      // Then by roll value (highest wins)
+      return b.roll_value - a.roll_value;
+    });
+    
+    // Get the winner (first after sorting)
+    const winner = rollResults[0];
+    
+    // Update all requests with their roll values
+    for (const result of rollResults) {
+      await db.LootRequest.update({
+        roll_value: result.roll_value,
+        roll_time: new Date(),
+        won_roll: result.id === winner.id,
+        status: result.id === winner.id ? 'Approved' : 'Denied - Lost Roll'
+      }, {
+        where: { id: result.id },
+        transaction: t
+      });
+    }
+    
+    // Get item details for roll history
+    const storageItem = await db.GuildStorageItem.findByPk(storageItemId, {
+      include: [{ model: db.Item }],
+      transaction: t
+    });
+    
+    if (!storageItem) {
+      throw new Error('Storage item not found');
+    }
+    
+    // Create roll history entry
+    const rollHistory = await db.RollHistory.create({
+      guild_id: guildId,
+      item_name: storageItem.Item.name,
+      item_type: storageItem.Item.type,
+      item_icon: storageItem.Item.icon,
+      item_trait: storageItem.trait,
+      winner_id: winner.user_id,
+      winner_name: winner.user.username,
+      winner_roll: winner.roll_value,
+      winner_need_type: winner.need_or_greed,
+      roll_results: rollResults.map(r => ({
+        id: r.id,
+        user_id: r.user_id,
+        username: r.user.username,
+        avatar_url: r.user.avatar_url,
+        roll_value: r.roll_value,
+        need_or_greed: r.need_or_greed,
+        winner: r.id === winner.id
+      })),
+      roll_time: new Date()
+    }, { transaction: t });
+    
+    // Update storage item quantity
+    const newQuantity = Math.max(0, storageItem.quantity - 1);
+    
+    if (newQuantity === 0) {
+      // Delete the item if quantity is now 0
+      await db.GuildStorageItem.destroy({
+        where: { id: storageItemId },
+        transaction: t
+      });
+      
+      // Update all remaining pending requests for this item
+      await db.LootRequest.update({
+        status: 'Denied - Out of Stock',
+        storage_item_id: null
+      }, {
+        where: {
+          storage_item_id: storageItemId,
+          status: 'Pending'
+        },
+        transaction: t
+      });
+    } else {
+      // Just update the quantity
+      await storageItem.update({ quantity: newQuantity }, { transaction: t });
+    }
+    
+    await t.commit();
+    
+    return {
+      success: true,
+      results: {
+        winner: winner,
+        allRolls: rollResults,
+        rollHistory: rollHistory
+      }
+    };
+  } catch (error) {
+    await t.rollback();
+    console.error('Roll processing error:', error);
+    throw error;
+  }
+};
+
 module.exports = {
-  checkForExpiredRequests
+  checkForExpiredRequests,
+  processRollForItem
 };
