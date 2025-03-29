@@ -77,6 +77,45 @@ const getWeaponSpec = (primary, secondary) => {
   return WEAPON_SPECS[combo1] || WEAPON_SPECS[combo2] || 'Unknown';
 };
 
+// Function to determine a member's combat role based on their build data
+const getMemberSpec = (member) => {
+  if (!member) return 'Unknown';
+  
+  // First check builds from the member or User object
+  let builds = [];
+  
+  if (member.User?.builds && Array.isArray(member.User.builds)) {
+    builds = member.User.builds;
+  } else if (member.builds && Array.isArray(member.builds)) {
+    builds = member.builds;
+  } else if (member.User?.builds && typeof member.User.builds === 'string') {
+    try {
+      builds = JSON.parse(member.User.builds);
+    } catch (e) {
+      console.error('Error parsing builds string:', e);
+      builds = [];
+    }
+  } else if (member.builds && typeof member.builds === 'string') {
+    try {
+      builds = JSON.parse(member.builds);
+    } catch (e) {
+      console.error('Error parsing builds string:', e);
+      builds = [];
+    }
+  }
+  
+  // Ensure builds is an array
+  builds = Array.isArray(builds) ? builds : [];
+  
+  // If we have at least one build, return its spec
+  if (builds.length > 0 && builds[0]?.spec) {
+    return builds[0].spec;
+  }
+  
+  // Default to DPS if no spec found
+  return 'DPS';
+};
+
 // Component to show when player's build selection is needed
 const BuildSelectionDialog = ({ open, member, onClose, onSelectBuild }) => {
   const builds = member?.builds || [];
@@ -663,28 +702,47 @@ const StaticTeams = () => {
   // Fetch static teams and members when guildId is available
   useEffect(() => {
     if (!guildId) return;
-
+  
     const fetchStaticTeams = async () => {
       try {
         // Fetch static teams
         const teamsResponse = await axiosInstance.get(`/api/static-teams?guildId=${guildId}`);
         if (teamsResponse.status === 200) {
-          setTeams(teamsResponse.data || []);
-        }
-
-        // Fetch all guild members
-        const membersResponse = await axiosInstance.get(`/api/guilds/${guildId}/members`);
-        if (membersResponse.status === 200) {
-          // Process members to ensure they have the correct structure
-          const processedMembers = membersResponse.data.map(formatMemberWithBuilds);
-          setMembers(processedMembers);
+          const fetchedTeams = teamsResponse.data || [];
+          setTeams(fetchedTeams);
+          
+          // Collect all member IDs already assigned to teams
+          const assignedMemberIds = new Set();
+          fetchedTeams.forEach(team => {
+            team.members?.forEach(member => {
+              const memberId = member.user_id || member.id || (member.User?.id);
+              if (memberId) {
+                assignedMemberIds.add(memberId);
+              }
+            });
+          });
+  
+          // Fetch all guild members
+          const membersResponse = await axiosInstance.get(`/api/guilds/${guildId}/members`);
+          if (membersResponse.status === 200) {
+            // Process members to ensure they have the correct structure
+            // AND filter out members who are already in teams
+            const processedMembers = membersResponse.data
+              .map(formatMemberWithBuilds)
+              .filter(member => {
+                const memberId = member.user_id || member.id || (member.User?.id);
+                return !assignedMemberIds.has(memberId);
+              });
+              
+            setMembers(processedMembers);
+          }
         }
       } catch (error) {
         console.error('Error fetching data:', error);
         setError('Failed to load static teams data');
       }
     };
-
+  
     fetchStaticTeams();
   }, [guildId]);
 
@@ -806,14 +864,20 @@ const StaticTeams = () => {
 
       const userId = member.user_id || member.id || (member.User && member.User.id);
       
+      // Extract the member's role from their builds data
+      const spec = getMemberSpec(member);
+      // Convert spec to role format expected by API
+      const role = spec === 'Tank' ? 'TANK' : 
+                  spec === 'Healer' ? 'HEALER' : 'DPS';
+      
       // Extract selected build
       const selectedBuild = member.selectedBuild || member.selected_build || 
-                           (member.builds && member.builds.length > 0 ? member.builds[0] : null);
+                          (member.builds && member.builds.length > 0 ? member.builds[0] : null);
 
       // Make API call to update team membership
       const response = await axiosInstance.post(`/api/static-teams/${teamId}/members`, {
         memberId: userId,
-        role: member.role,
+        role: role,
         sourceTeamId,
         guildId,
         selectedBuild
@@ -839,7 +903,7 @@ const StaticTeams = () => {
                 ...team,
                 members: [...(team.members || []), {
                   ...member,
-                  role: member.role,
+                  role: role,
                   selectedBuild
                 }]
               };
@@ -860,7 +924,7 @@ const StaticTeams = () => {
                 ...team,
                 members: [...(team.members || []), {
                   ...member,
-                  role: member.role,
+                  role: role,
                   selectedBuild
                 }]
               };
@@ -1331,11 +1395,11 @@ const StaticTeams = () => {
 
   // MemberPool component
   const MemberPool = ({ members, getRoleStyles }) => {
-    // Group members by role
+    // Group members by their build specs
     const roleGroups = {
-      tank: members.filter(m => m.role?.toUpperCase() === 'TANK'),
-      healer: members.filter(m => m.role?.toUpperCase() === 'HEALER'),
-      dps: members.filter(m => m.role?.toUpperCase() === 'DPS')
+      tank: members.filter(m => getMemberSpec(m) === 'Tank'),
+      healer: members.filter(m => getMemberSpec(m) === 'Healer'),
+      dps: members.filter(m => !['Tank', 'Healer'].includes(getMemberSpec(m)))
     };
   
     const roleIconMap = {
@@ -1406,13 +1470,22 @@ const StaticTeams = () => {
           />
           <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
             {roleGroups.tank.length > 0 ? (
-              roleGroups.tank.map(member => (
-                <DraggableMember 
-                  key={member.id || member.user_id || (member.User?.id)} 
-                  member={member} 
-                  getRoleStyles={getRoleStyles}
-                />
-              ))
+              roleGroups.tank.map(member => {
+                // Create a new member object with combat role properly set
+                const memberWithCombatRole = {
+                  ...member,
+                  // Set the role to TANK for display purposes
+                  role: 'TANK'
+                };
+                
+                return (
+                  <DraggableMember 
+                    key={member.id || member.user_id || (member.User?.id)} 
+                    member={memberWithCombatRole}
+                    getRoleStyles={getRoleStyles} 
+                  />
+                );
+              })
             ) : (
               <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
                 No tanks available
@@ -1438,13 +1511,22 @@ const StaticTeams = () => {
           />
           <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
             {roleGroups.healer.length > 0 ? (
-              roleGroups.healer.map(member => (
-                <DraggableMember 
-                  key={member.id || member.user_id || (member.User?.id)} 
-                  member={member}
-                  getRoleStyles={getRoleStyles} 
-                />
-              ))
+              roleGroups.healer.map(member => {
+                // Create a new member object with combat role properly set
+                const memberWithCombatRole = {
+                  ...member,
+                  // Set the role to HEALER for display purposes
+                  role: 'HEALER'
+                };
+                
+                return (
+                  <DraggableMember 
+                    key={member.id || member.user_id || (member.User?.id)} 
+                    member={memberWithCombatRole}
+                    getRoleStyles={getRoleStyles} 
+                  />
+                );
+              })
             ) : (
               <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
                 No healers available
@@ -1470,13 +1552,22 @@ const StaticTeams = () => {
           />
           <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
             {roleGroups.dps.length > 0 ? (
-              roleGroups.dps.map(member => (
-                <DraggableMember 
-                  key={member.id || member.user_id || (member.User?.id)} 
-                  member={member}
-                  getRoleStyles={getRoleStyles} 
-                />
-              ))
+              roleGroups.dps.map(member => {
+                // Create a new member object with combat role properly set
+                const memberWithCombatRole = {
+                  ...member,
+                  // Set the role to DPS for display purposes
+                  role: 'DPS'
+                };
+                
+                return (
+                  <DraggableMember 
+                    key={member.id || member.user_id || (member.User?.id)} 
+                    member={memberWithCombatRole}
+                    getRoleStyles={getRoleStyles} 
+                  />
+                );
+              })
             ) : (
               <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
                 No DPS available
