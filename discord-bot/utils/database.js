@@ -785,15 +785,49 @@ module.exports = {
       throw error;
     }
   },
-  
-  /**
-   * Update event participants with transaction locking
-   */
+
   updateEventParticipants: async (eventId, userId, guildId, role, isAbsent) => {
     // Use a database transaction for atomic operations
     const dbClient = await pool.connect();
     try {
       await dbClient.query('BEGIN');
+      
+      // First, ensure the necessary constraints exist
+      try {
+        // Make sure event_absentees has proper constraints
+        await dbClient.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint 
+              WHERE conname = 'event_absentees_event_user_unique'
+            ) THEN
+              ALTER TABLE event_absentees ADD CONSTRAINT event_absentees_event_user_unique 
+              UNIQUE (event_id, user_id);
+            END IF;
+          END $$;
+        `);
+        
+        // Make sure event_tentative has proper constraints (if it exists)
+        await dbClient.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_name = 'event_tentative'
+            ) AND NOT EXISTS (
+              SELECT 1 FROM pg_constraint 
+              WHERE conname = 'event_tentative_event_user_unique'
+            ) THEN
+              ALTER TABLE event_tentative ADD CONSTRAINT event_tentative_event_user_unique 
+              UNIQUE (event_id, user_id);
+            END IF;
+          END $$;
+        `);
+      } catch (constraintError) {
+        console.warn(`[WARN] Could not verify constraints: ${constraintError.message}`);
+        // Continue anyway - we'll handle errors individually
+      }
       
       // If marking as absent
       if (isAbsent) {
@@ -803,15 +837,44 @@ module.exports = {
           [eventId, userId]
         );
         
-        // Add to absentees
-        await dbClient.query(
-          `INSERT INTO event_absentees 
-            (id, guild_id, event_id, user_id, created_at, updated_at)
-          VALUES 
-            (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-          ON CONFLICT (event_id, user_id) DO NOTHING`,
-          [guildId, eventId, userId]
-        );
+        // Remove from tentative if it exists
+        try {
+          await dbClient.query(
+            'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+            [eventId, userId]
+          );
+        } catch (err) {
+          // Table might not exist or other error - continue anyway
+        }
+        
+        // Add to absentees - try different approaches if needed
+        try {
+          // First try with ON CONFLICT
+          await dbClient.query(
+            `INSERT INTO event_absentees 
+              (id, guild_id, event_id, user_id, created_at, updated_at)
+            VALUES 
+              (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+            ON CONFLICT (event_id, user_id) DO NOTHING`,
+            [guildId, eventId, userId]
+          );
+        } catch (insertError) {
+          console.warn(`[WARN] Initial absentee insert failed: ${insertError.message}`);
+          
+          // Try delete + insert without ON CONFLICT
+          await dbClient.query(
+            'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+            [eventId, userId]
+          );
+          
+          await dbClient.query(
+            `INSERT INTO event_absentees 
+              (id, guild_id, event_id, user_id, created_at, updated_at)
+            VALUES 
+              (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
+            [guildId, eventId, userId]
+          );
+        }
       } 
       // If tentative
       else if (role === 'TENTATIVE') {
@@ -826,43 +889,70 @@ module.exports = {
           [eventId, userId]
         );
         
-        // Add to tentative
-        await dbClient.query(
-          `INSERT INTO event_tentative 
-            (id, guild_id, event_id, user_id, created_at, updated_at)
-          VALUES
-            (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-          ON CONFLICT (event_id, user_id) DO UPDATE SET
-            updated_at = NOW()`,
-          [guildId, eventId, userId]
-        );
+        // Create tentative table if it doesn't exist
+        try {
+          await dbClient.query(`
+            CREATE TABLE IF NOT EXISTS event_tentative (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              guild_id UUID NOT NULL,
+              event_id UUID NOT NULL, 
+              user_id UUID NOT NULL,
+              created_at TIMESTAMP DEFAULT NOW(),
+              updated_at TIMESTAMP DEFAULT NOW()
+            )
+          `);
+          
+          // Add constraint if needed
+          await dbClient.query(`
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint 
+                WHERE conname = 'event_tentative_event_user_unique'
+              ) THEN
+                ALTER TABLE event_tentative ADD CONSTRAINT event_tentative_event_user_unique 
+                UNIQUE (event_id, user_id);
+              END IF;
+            END $$;
+          `);
+        } catch (tableError) {
+          console.warn(`[WARN] Error checking/creating tentative table: ${tableError.message}`);
+          // Continue anyway
+        }
+        
+        // Add to tentative - try different approaches if needed
+        try {
+          // First try with ON CONFLICT
+          await dbClient.query(
+            `INSERT INTO event_tentative 
+              (id, guild_id, event_id, user_id, created_at, updated_at)
+            VALUES
+              (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+            ON CONFLICT (event_id, user_id) DO UPDATE SET
+              updated_at = NOW()`,
+            [guildId, eventId, userId]
+          );
+        } catch (insertError) {
+          console.warn(`[WARN] Initial tentative insert failed: ${insertError.message}`);
+          
+          // Try delete + insert without ON CONFLICT
+          await dbClient.query(
+            'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+            [eventId, userId]
+          );
+          
+          await dbClient.query(
+            `INSERT INTO event_tentative 
+              (id, guild_id, event_id, user_id, created_at, updated_at)
+            VALUES
+              (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
+            [guildId, eventId, userId]
+          );
+        }
       }
       // Regular role signup
       else {
-        // Check if already signed up
-        const existingResult = await dbClient.query(
-          'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
-          [eventId, userId]
-        );
-        
-        if (existingResult.rows && existingResult.rows.length > 0) {
-          // Update existing
-          await dbClient.query(
-            'UPDATE event_participants SET role = $1 WHERE id = $2',
-            [role, existingResult.rows[0].id]
-          );
-        } else {
-          // Create new signup
-          await dbClient.query(
-            `INSERT INTO event_participants 
-              (id, guild_id, event_id, user_id, role, created_at, updated_at)
-            VALUES
-              (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
-            [guildId, eventId, userId, role]
-          );
-        }
-        
-        // Remove from absentees and tentative if needed
+        // Remove from absentees and tentative first
         await dbClient.query(
           'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
           [eventId, userId]
@@ -877,9 +967,51 @@ module.exports = {
         } catch (e) {
           // Tentative table might not exist - safely ignore this error
         }
+        
+        // Check if already signed up
+        const existingResult = await dbClient.query(
+          'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        
+        if (existingResult.rows && existingResult.rows.length > 0) {
+          // Update existing signup if role has changed
+          if (existingResult.rows[0].role !== role) {
+            await dbClient.query(
+              'UPDATE event_participants SET role = $1, updated_at = NOW() WHERE id = $2',
+              [role, existingResult.rows[0].id]
+            );
+          }
+        } else {
+          // Create new signup with proper error handling for UUID generation
+          try {
+            await dbClient.query(
+              `INSERT INTO event_participants 
+                (id, guild_id, event_id, user_id, role, created_at, updated_at)
+              VALUES
+                (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+              [guildId, eventId, userId, role]
+            );
+          } catch (insertError) {
+            console.warn(`[WARN] Initial participant insert failed: ${insertError.message}`);
+            
+            // Try with explicit UUID generation
+            const uuidResult = await dbClient.query('SELECT gen_random_uuid() as uuid');
+            const uuid = uuidResult.rows[0].uuid;
+            
+            await dbClient.query(
+              `INSERT INTO event_participants 
+                (id, guild_id, event_id, user_id, role, created_at, updated_at)
+              VALUES
+                ($1, $2, $3, $4, $5, NOW(), NOW())`,
+              [uuid, guildId, eventId, userId, role]
+            );
+          }
+        }
       }
       
       await dbClient.query('COMMIT');
+      console.log(`[INFO] Successfully updated participation for user ${userId} in event ${eventId}`);
       return { success: true };
     } catch (error) {
       await dbClient.query('ROLLBACK');

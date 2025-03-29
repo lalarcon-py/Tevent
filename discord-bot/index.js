@@ -21,6 +21,7 @@ const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
+const cooldownMap = new Map();
 
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
@@ -3264,48 +3265,341 @@ const registerCommands = async () => {
 };
 
 client.on('interactionCreate', async (interaction) => {
-  // Check if it's a select menu interaction for class selection
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('class_select_')) {
-    try {
-      const userId = interaction.customId.replace('class_select_', '');
-      const selectedWeaponCombo = interaction.values[0];
-      const selectedClassName = WEAPON_SPECS[selectedWeaponCombo] || 'Unknown';
-      
-      // Save the preference
-      await pool.query(
-        `INSERT INTO user_preferences (user_id, preferred_weapon_spec)
-         VALUES ($1, $2)
-         ON CONFLICT (user_id) 
-         DO UPDATE SET 
-           preferred_weapon_spec = $2,
-           updated_at = NOW()`,
-        [userId, selectedWeaponCombo]
-      );
-      
-      const weapons = selectedWeaponCombo.split('|');
-      const embed = new EmbedBuilder()
-        .setTitle(`Class Preference Set`)
-        .setDescription(`You've selected the **${selectedClassName}** class.`)
-        .addFields(
-          { name: 'Weapons', value: `${weapons[0]} + ${weapons[1]}`, inline: true },
-          { name: 'Applied To', value: 'This will be used for future event signups.', inline: true }
-        )
-        .setColor('#4CAF50');
-      
-      await interaction.update({ 
-        content: 'Class preference saved!',
-        embeds: [embed],
-        components: [] 
+  if (!interaction.isButton() || !interaction.customId.startsWith('signup_')) return;
+  
+  // Handle basic duplicate prevention
+  const cooldownKey = `${interaction.user.id}:${interaction.customId}`;
+  const now = Date.now();
+  const cooldownTime = cooldownMap.get(cooldownKey);
+  
+  if (cooldownTime && now - cooldownTime < 5000) {
+    console.log(`[INFO] Ignoring duplicate sign-up from ${interaction.user.id} (cooldown active)`);
+    return await interaction.deferUpdate().catch(() => {});
+  }
+  
+  // Mark this interaction as in progress
+  cooldownMap.set(cooldownKey, now);
+  
+  // Always defer first - if it's already acknowledged, this will fail gracefully
+  try {
+    await interaction.deferReply({ ephemeral: true });
+  } catch (error) {
+    if (error.code === 40060) { 
+      console.log(`[WARN] Interaction ${interaction.id} already acknowledged`);
+    } else {
+      console.error(`[ERROR] Failed to defer interaction: ${error.message}`);
+    }
+    // Continue anyway - we'll handle the response differently
+  }
+  
+  try {
+    const [_, eventId, role] = interaction.customId.split('_');
+    const isAbsent = role === 'ABSENT';
+    
+    // Get app guild ID
+    const appGuildId = await getGuildMapping(interaction.guild.id);
+    if (!appGuildId) {
+      return await safeReply(interaction, { content: 'Server not linked to a guild.', ephemeral: true });
+    }
+    
+    // Get user from discord ID
+    const userResult = await pool.query(
+      'SELECT id, username FROM users WHERE discord_id = $1',
+      [interaction.user.id]
+    );
+    
+    if (!userResult.rows?.length) {
+      return await safeReply(interaction, { 
+        content: 'You need to register on the website first.', 
+        ephemeral: true 
       });
-    } catch (error) {
-      console.error('Error handling class selection:', error);
-      await interaction.update({ 
-        content: 'Error saving class preference.',
-        components: [] 
-      });
+    }
+    
+    const userId = userResult.rows[0].id;
+    
+    // Process signup with our improved function
+    await database.updateEventParticipants(eventId, userId, appGuildId, role, isAbsent);
+    
+    // Get event details for the response message
+    const eventResult = await pool.query(
+      'SELECT title FROM events WHERE id = $1',
+      [eventId]
+    );
+    
+    const eventTitle = eventResult.rows?.[0]?.title || 'event';
+    
+    // Send appropriate response
+    let responseMessage = '';
+    if (isAbsent) {
+      responseMessage = `You are now marked as absent for "${eventTitle}".`;
+    } else if (role === 'TENTATIVE') {
+      responseMessage = `You are now tentative for "${eventTitle}".`;
+    } else {
+      responseMessage = `You are signed up as ${role} for "${eventTitle}".`;
+    }
+    
+    await safeReply(interaction, { content: responseMessage, ephemeral: true });
+    
+    // Update the message in the background, don't block user response
+    setTimeout(async () => {
+      try {
+        await updateEventDisplay(interaction, eventId, appGuildId);
+      } catch (updateError) {
+        console.error(`[ERROR] Failed to update event display: ${updateError.message}`);
+      }
+    }, 100);
+    
+  } catch (error) {
+    console.error(`[ERROR] Error processing signup button:`, error);
+    await safeReply(interaction, {
+      content: 'There was an error processing your signup. Please try again.',
+      ephemeral: true
+    });
+  } finally {
+    // Set a reasonable cooldown to prevent spam
+    cooldownMap.set(cooldownKey, Date.now());
+    
+    // Clean up old cooldowns periodically
+    if (cooldownMap.size > 1000) {
+      const now = Date.now();
+      for (const [key, time] of cooldownMap.entries()) {
+        if (now - time > 10000) { // 10 seconds
+          cooldownMap.delete(key);
+        }
+      }
     }
   }
 });
+
+// Helper function for safe replies
+async function safeReply(interaction, options) {
+  try {
+    if (interaction.deferred) {
+      await interaction.editReply(options).catch(() => {});
+    } else if (interaction.replied) {
+      await interaction.followUp(options).catch(() => {});
+    } else {
+      await interaction.reply(options).catch(() => {});
+    }
+  } catch (error) {
+    console.error(`[ERROR] Failed to reply to interaction: ${error.message}`);
+  }
+}
+
+// Simplified function to update the event display in the background
+async function updateEventDisplay(interaction, eventId, appGuildId) {
+  // Don't block on getting the message - if we can't find it, that's fine
+  const message = interaction.message;
+  if (!message) return;
+  
+  // Get all the participant data with one efficient query
+  const participantsQuery = `
+    SELECT 
+      'PARTICIPANT' as type, role, username, discord_id, builds
+    FROM event_participants ep
+    JOIN users u ON ep.user_id = u.id
+    WHERE ep.event_id = $1
+    
+    UNION ALL
+    
+    SELECT 
+      'ABSENT' as type, NULL as role, username, discord_id, builds
+    FROM event_absentees ea
+    JOIN users u ON ea.user_id = u.id
+    WHERE ea.event_id = $1
+    
+    UNION ALL
+    
+    SELECT 
+      'TENTATIVE' as type, NULL as role, username, discord_id, builds
+    FROM event_tentative et
+    JOIN users u ON et.user_id = u.id
+    WHERE et.event_id = $1
+  `;
+  
+  const participantsResult = await pool.query(participantsQuery, [eventId]);
+  
+  // Get event details
+  const eventResult = await pool.query(
+    'SELECT * FROM events WHERE id = $1',
+    [eventId]
+  );
+  
+  if (!eventResult.rows?.length) return;
+  
+  const eventDetails = eventResult.rows[0];
+  
+  // Process participants
+  const participants = participantsResult.rows.filter(p => p.type === 'PARTICIPANT');
+  const absentees = participantsResult.rows.filter(p => p.type === 'ABSENT');
+  const tentative = participantsResult.rows.filter(p => p.type === 'TENTATIVE');
+  
+  // Create updated event object
+  const updatedEvent = {
+    ...eventDetails,
+    participants,
+    absentees,
+    tentative
+  };
+  
+  // Create updated embed
+  const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
+  
+  // Create signup buttons with custom role emojis
+  const row = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId(`signup_${eventId}_TANK`)
+        .setLabel('Tank')
+        .setEmoji('1352736996405022780')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`signup_${eventId}_HEALER`)
+        .setLabel('Healer')
+        .setEmoji('1352737011479482468')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`signup_${eventId}_DPS`)
+        .setLabel('DPS')
+        .setEmoji('1352737043972624518')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`signup_${eventId}_TENTATIVE`)
+        .setLabel('Tentative')
+        .setEmoji('⏳')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`signup_${eventId}_ABSENT`)
+        .setLabel('Absent')
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  
+  // Update the original message with new embed
+  try {
+    await message.edit({
+      embeds: [updatedEmbed],
+      components: [row]
+    });
+  } catch (err) {
+    console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
+  }
+}
+
+  // Helper function for safe replies
+  async function safeReply(interaction, options) {
+    try {
+      if (interaction.deferred) {
+        await interaction.editReply(options).catch(() => {});
+      } else if (interaction.replied) {
+        await interaction.followUp(options).catch(() => {});
+      } else {
+        await interaction.reply(options).catch(() => {});
+      }
+    } catch (error) {
+      console.error(`[ERROR] Failed to reply to interaction: ${error.message}`);
+    }
+  }
+
+  // Simplified function to update the event display in the background
+  async function updateEventDisplay(interaction, eventId, appGuildId) {
+    // Don't block on getting the message - if we can't find it, that's fine
+    const message = interaction.message;
+    if (!message) return;
+    
+    // Get all the participant data with one efficient query
+    const participantsQuery = `
+      SELECT 
+        'PARTICIPANT' as type, role, username, discord_id, builds
+      FROM event_participants ep
+      JOIN users u ON ep.user_id = u.id
+      WHERE ep.event_id = $1
+      
+      UNION ALL
+      
+      SELECT 
+        'ABSENT' as type, NULL as role, username, discord_id, builds
+      FROM event_absentees ea
+      JOIN users u ON ea.user_id = u.id
+      WHERE ea.event_id = $1
+      
+      UNION ALL
+      
+      SELECT 
+        'TENTATIVE' as type, NULL as role, username, discord_id, builds
+      FROM event_tentative et
+      JOIN users u ON et.user_id = u.id
+      WHERE et.event_id = $1
+    `;
+    
+    const participantsResult = await pool.query(participantsQuery, [eventId]);
+    
+    // Get event details
+    const eventResult = await pool.query(
+      'SELECT * FROM events WHERE id = $1',
+      [eventId]
+    );
+    
+    if (!eventResult.rows?.length) return;
+    
+    const eventDetails = eventResult.rows[0];
+    
+    // Process participants
+    const participants = participantsResult.rows.filter(p => p.type === 'PARTICIPANT');
+    const absentees = participantsResult.rows.filter(p => p.type === 'ABSENT');
+    const tentative = participantsResult.rows.filter(p => p.type === 'TENTATIVE');
+    
+    // Create updated event object
+    const updatedEvent = {
+      ...eventDetails,
+      participants,
+      absentees,
+      tentative
+    };
+    
+    // Create updated embed
+    const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
+    
+    // Create signup buttons with custom role emojis
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_TANK`)
+          .setLabel('Tank')
+          .setEmoji('1352736996405022780')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_HEALER`)
+          .setLabel('Healer')
+          .setEmoji('1352737011479482468')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_DPS`)
+          .setLabel('DPS')
+          .setEmoji('1352737043972624518')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_TENTATIVE`)
+          .setLabel('Tentative')
+          .setEmoji('⏳')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_ABSENT`)
+          .setLabel('Absent')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Secondary)
+      );
+    
+    // Update the original message with new embed
+    try {
+      await message.edit({
+        embeds: [updatedEmbed],
+        components: [row]
+      });
+    } catch (err) {
+      console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
+    }
+  }
 
 // Helper function to authenticate and get a session
 async function getAuthSession() {
