@@ -149,15 +149,15 @@ const RoleManagementDialog = ({ member, currentUserRole, currentUser, onClose, o
       return [];
     }
     
-    // Return all roles including Guild Master
+    // Return all roles including Guild Master and ensure Guild Member is always included
     return Object.keys(GUILD_ROLES).filter(role => {
-      // Filter out redundant Member/Guild Member entries
-      if ((role === 'Member' && GUILD_ROLES['Guild Member']) || 
-          (role === 'Guild Member' && GUILD_ROLES['Member'] && role !== member.role)) {
+      // Only filter out redundant "Member" role, but always keep "Guild Member"
+      if (role === 'Member' && GUILD_ROLES['Guild Member']) {
         return false;
       }
       
-      return true; // Show all roles including Guild Master
+      // Always keep Guild Member and all other roles
+      return true;
     });
   };
 
