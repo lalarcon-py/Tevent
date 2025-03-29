@@ -4274,14 +4274,17 @@ client.on('interactionCreate', async (interaction) => {
               }
             }
             
-            // Immediately defer the reply to prevent timeout
-            await interaction.deferReply({ ephemeral: true }).catch(error => {
+            // Immediately defer the reply to prevent timeout - catch errors
+            try {
+              await interaction.deferReply({ ephemeral: true });
+            } catch (error) {
               if (error.code === 40060) {
                 console.log(`[WARN] Interaction ${interaction.id} already acknowledged, continuing processing`);
-                return; // Continue execution even if the interaction was already acknowledged
+                // Continue execution even if the interaction was already acknowledged
+              } else {
+                throw error; // Rethrow other errors
               }
-              throw error; // Rethrow any other errors
-            });
+            }
             
             // Parse event ID and role from the button's custom ID
             const [_, eventId, role] = customId.split('_');
@@ -4297,302 +4300,259 @@ client.on('interactionCreate', async (interaction) => {
             }
             
             // Get app guild ID from mapping
-            const appGuildId = await getGuildMapping(discordGuildId);
-            if (!appGuildId) {
+            const mappingResult = await sequelize.query(
+              `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
+              { 
+                bind: [discordGuildId.toString()],
+                type: sequelize.QueryTypes.SELECT
+              }
+            );
+            
+            if (!mappingResult || mappingResult.length === 0) {
               return await safeReply(interaction, {
                 content: 'This Discord server is not linked to an application guild.',
                 ephemeral: true
               });
             }
+            
+            const appGuildId = mappingResult[0].app_guild_id;
       
             // Get user from discord ID
-            const userResult = await pool.query(
+            const userResult = await sequelize.query(
               'SELECT id, username, builds FROM users WHERE discord_id = $1',
-              [interaction.user.id]
+              { 
+                bind: [interaction.user.id],
+                type: sequelize.QueryTypes.SELECT
+              }
             );
             
-            if (!userResult.rows || userResult.rows.length === 0) {
+            if (!userResult || userResult.length === 0) {
               return await safeReply(interaction, {
                 content: 'You need to register on the website first before signing up for events.',
                 ephemeral: true
               });
             }
             
-            const userId = userResult.rows[0].id;
+            const userId = userResult[0].id;
             
             // Get event details
-            const eventResult = await pool.query(
+            const eventResult = await sequelize.query(
               'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
-              [eventId, appGuildId]
+              { 
+                bind: [eventId, appGuildId],
+                type: sequelize.QueryTypes.SELECT
+              }
             );
             
-            if (!eventResult.rows || eventResult.rows.length === 0) {
+            if (!eventResult || eventResult.length === 0) {
               return await safeReply(interaction, {
                 content: 'Event not found.',
                 ephemeral: true
               });
             }
             
-            const eventDetails = eventResult.rows[0];
+            const eventDetails = eventResult[0];
             
-            // Handle different role types
-            if (role === 'ABSENT') {
-              // Remove from participants
-              await pool.query(
-                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                [eventId, userId]
-              );
+            // Handle different role types - use a database transaction for atomic operations
+            const client = await sequelize.getQueryInterface().sequelize.connectionManager.getConnection();
+            try {
+              await client.query('BEGIN');
               
-              // Add to absentees
-              await pool.query(
-                `INSERT INTO event_absentees 
-                  (id, guild_id, event_id, user_id, created_at, updated_at)
-                VALUES 
-                  (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-                ON CONFLICT (event_id, user_id) DO NOTHING`,
-                [appGuildId, eventId, userId]
-              );
-              
-              await safeReply(interaction, {
-                content: `You have been marked as absent for "${eventDetails.title}".`,
-                ephemeral: true
-              });
-            } else if (role === 'TENTATIVE') {
-              // Handle tentative signup
-              try {
-                // Check if we have a tentative table, if not create one
-                await pool.query(`
-                  CREATE TABLE IF NOT EXISTS event_tentative (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    guild_id UUID NOT NULL,
-                    event_id UUID NOT NULL, 
-                    user_id UUID NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(event_id, user_id)
-                  )
-                `);
-                
-                // Remove from participants and absentees
-                await pool.query(
+              if (role === 'ABSENT') {
+                // Remove from participants
+                await client.query(
                   'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
                   [eventId, userId]
                 );
                 
-                await pool.query(
-                  'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                // First check if already marked absent
+                const existingAbsentee = await client.query(
+                  'SELECT id FROM event_absentees WHERE event_id = $1 AND user_id = $2',
                   [eventId, userId]
                 );
                 
-                // Add to tentative
-                await pool.query(
-                  `INSERT INTO event_tentative 
-                    (id, guild_id, event_id, user_id, created_at, updated_at)
-                  VALUES
-                    (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-                  ON CONFLICT (event_id, user_id) DO UPDATE SET
-                    updated_at = NOW()`,
-                  [appGuildId, eventId, userId]
-                );
+                if (existingAbsentee.rows.length === 0) {
+                  // Add to absentees
+                  await client.query(
+                    `INSERT INTO event_absentees 
+                      (id, guild_id, event_id, user_id, created_at, updated_at)
+                    VALUES 
+                      (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
+                    [appGuildId, eventId, userId]
+                  );
+                }
+                
+                await client.query('COMMIT');
                 
                 await safeReply(interaction, {
-                  content: `You have been marked as tentative for "${eventDetails.title}".`,
+                  content: `You have been marked as absent for "${eventDetails.title}".`,
                   ephemeral: true
                 });
-              } catch (tentativeError) {
-                console.error('Error handling tentative signup:', tentativeError);
-                await safeReply(interaction, {
-                  content: `An error occurred while marking you as tentative.`,
-                  ephemeral: true
-                });
-              }
-            } else {
-              // Regular role signup
-              
-              // Check if already signed up
-              const existingSignup = await pool.query(
-                'SELECT id, role FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                [eventId, userId]
-              );
-              
-              if (existingSignup.rows && existingSignup.rows.length > 0) {
-                // Update existing signup
-                await pool.query(
-                  'UPDATE event_participants SET role = $1 WHERE id = $2',
-                  [role, existingSignup.rows[0].id]
-                );
-                
-                await safeReply(interaction, {
-                  content: `Your role for "${eventDetails.title}" has been updated to ${role}.`,
-                  ephemeral: true
-                });
-              } else {
-                // Check role capacity
-                const roleCountsResult = await pool.query(
-                  `SELECT 
-                    COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-                    COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-                    COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-                  FROM event_participants
-                  WHERE event_id = $1`,
-                  [eventId]
-                );
-                
-                const roleCounts = roleCountsResult.rows[0];
-                
-                // Verify there's room for this role
-                const roleLimits = {
-                  'TANK': eventDetails.tanks || 0,
-                  'HEALER': eventDetails.healers || 0,
-                  'DPS': eventDetails.dps || 0
-                };
-                
-                const currentCounts = {
-                  'TANK': parseInt(roleCounts?.tank_count || 0),
-                  'HEALER': parseInt(roleCounts?.healer_count || 0),
-                  'DPS': parseInt(roleCounts?.dps_count || 0)
-                };
-                
-                if (currentCounts[role] >= roleLimits[role]) {
-                  return await safeReply(interaction, {
-                    content: `Sorry, the ${role} spots are full for this event.`,
+              } else if (role === 'TENTATIVE') {
+                // Handle tentative signup
+                try {
+                  // Check if we have a tentative table, if not create one
+                  await client.query(`
+                    CREATE TABLE IF NOT EXISTS event_tentative (
+                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      guild_id UUID NOT NULL,
+                      event_id UUID NOT NULL, 
+                      user_id UUID NOT NULL,
+                      created_at TIMESTAMP DEFAULT NOW(),
+                      updated_at TIMESTAMP DEFAULT NOW()
+                    )
+                  `);
+                  
+                  // Remove from participants and absentees
+                  await client.query(
+                    'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                    [eventId, userId]
+                  );
+                  
+                  await client.query(
+                    'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                    [eventId, userId]
+                  );
+                  
+                  // Check if already tentative
+                  const existingTentative = await client.query(
+                    'SELECT id FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                    [eventId, userId]
+                  );
+                  
+                  if (existingTentative.rows.length === 0) {
+                    // Add to tentative
+                    await client.query(
+                      `INSERT INTO event_tentative 
+                        (id, guild_id, event_id, user_id, created_at, updated_at)
+                      VALUES
+                        (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
+                      [appGuildId, eventId, userId]
+                    );
+                  }
+                  
+                  await client.query('COMMIT');
+                  
+                  await safeReply(interaction, {
+                    content: `You have been marked as tentative for "${eventDetails.title}".`,
+                    ephemeral: true
+                  });
+                } catch (tentativeError) {
+                  await client.query('ROLLBACK');
+                  console.error('Error handling tentative signup:', tentativeError);
+                  await safeReply(interaction, {
+                    content: `An error occurred while marking you as tentative.`,
                     ephemeral: true
                   });
                 }
+              } else {
+                // Regular role signup
                 
-                // Remove from absentees if marked before
-                await pool.query(
-                  'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                // Check if already signed up
+                const existingSignupResult = await client.query(
+                  'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
                   [eventId, userId]
                 );
                 
-                // Remove from tentative if marked before
-                try {
-                  await pool.query(
-                    'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                if (existingSignupResult.rows.length > 0) {
+                  // Update existing signup
+                  await client.query(
+                    'UPDATE event_participants SET role = $1 WHERE id = $2',
+                    [role, existingSignupResult.rows[0].id]
+                  );
+                  
+                  await client.query('COMMIT');
+                  
+                  await safeReply(interaction, {
+                    content: `Your role for "${eventDetails.title}" has been updated to ${role}.`,
+                    ephemeral: true
+                  });
+                } else {
+                  // Check role capacity
+                  const roleCountsResult = await client.query(
+                    `SELECT 
+                      COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
+                      COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
+                      COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
+                    FROM event_participants
+                    WHERE event_id = $1`,
+                    [eventId]
+                  );
+                  
+                  const roleCounts = roleCountsResult.rows[0];
+                  
+                  // Verify there's room for this role
+                  const roleLimits = {
+                    'TANK': eventDetails.tanks || 0,
+                    'HEALER': eventDetails.healers || 0,
+                    'DPS': eventDetails.dps || 0
+                  };
+                  
+                  const currentCounts = {
+                    'TANK': parseInt(roleCounts?.tank_count || 0),
+                    'HEALER': parseInt(roleCounts?.healer_count || 0),
+                    'DPS': parseInt(roleCounts?.dps_count || 0)
+                  };
+                  
+                  if (currentCounts[role] >= roleLimits[role]) {
+                    await client.query('ROLLBACK');
+                    return await safeReply(interaction, {
+                      content: `Sorry, the ${role} spots are full for this event.`,
+                      ephemeral: true
+                    });
+                  }
+                  
+                  // Remove from absentees if marked before
+                  await client.query(
+                    'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
                     [eventId, userId]
                   );
-                } catch (e) {
-                  // Table might not exist, ignore
-                }
-                
-                // Create new signup
-                await pool.query(
-                  `INSERT INTO event_participants 
-                    (id, guild_id, event_id, user_id, role, created_at, updated_at)
-                  VALUES
-                    (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
-                  [appGuildId, eventId, userId, role]
-                );
-                
-                await safeReply(interaction, {
-                  content: `You have been signed up for "${eventDetails.title}" as ${role}.`,
-                  ephemeral: true
-                });
-              }
-            }
-            
-            // Update the message with new counts - careful error handling
-            try {
-              // Get the original message that contains the embed
-              const message = interaction.message;
-              if (message && message.embeds && message.embeds.length > 0) {
-                // Get updated event data for refreshing the embed
-                try {
-                  // Get all participants with their builds
-                  const participantsResult = await pool.query(
-                    `SELECT ep.role, u.username, u.discord_id, u.builds
-                     FROM event_participants ep
-                     JOIN users u ON ep.user_id = u.id
-                     WHERE ep.event_id = $1
-                     ORDER BY ep.created_at ASC`,
-                    [eventId]
-                  );
                   
-                  // Get updated absences
-                  const absenteesResult = await pool.query(
-                    `SELECT ea.user_id, u.username
-                     FROM event_absentees ea
-                     JOIN users u ON ea.user_id = u.id
-                     WHERE ea.event_id = $1
-                     ORDER BY ea.created_at ASC`,
-                    [eventId]
-                  );
-                  
-                  // Get tentative members if available
-                  let tentativeMembers = [];
+                  // Remove from tentative if marked before and if the table exists
                   try {
-                    const tentativeResult = await pool.query(
-                      `SELECT et.user_id, u.username
-                       FROM event_tentative et
-                       JOIN users u ON et.user_id = u.id
-                       WHERE et.event_id = $1
-                       ORDER BY et.created_at ASC`,
-                      [eventId]
+                    await client.query(
+                      'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                      [eventId, userId]
                     );
-                    
-                    tentativeMembers = tentativeResult.rows;
                   } catch (e) {
                     // Table might not exist, ignore
                   }
                   
-                  // Create updated event object
-                  const updatedEvent = {
-                    ...eventDetails,
-                    participants: participantsResult.rows,
-                    absentees: absenteesResult.rows,
-                    tentative: tentativeMembers
-                  };
+                  // Create new signup
+                  await client.query(
+                    `INSERT INTO event_participants 
+                      (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                    VALUES
+                      (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                    [appGuildId, eventId, userId, role]
+                  );
                   
-                  // Create updated embed
-                  const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
+                  await client.query('COMMIT');
                   
-                  // Create signup buttons with custom role emojis
-                  const row = new ActionRowBuilder()
-                    .addComponents(
-                      new ButtonBuilder()
-                        .setCustomId(`signup_${eventId}_TANK`)
-                        .setLabel('Tank')
-                        .setEmoji('1352736996405022780')
-                        .setStyle(ButtonStyle.Primary),
-                      new ButtonBuilder()
-                        .setCustomId(`signup_${eventId}_HEALER`)
-                        .setLabel('Healer')
-                        .setEmoji('1352737011479482468')
-                        .setStyle(ButtonStyle.Success),
-                      new ButtonBuilder()
-                        .setCustomId(`signup_${eventId}_DPS`)
-                        .setLabel('DPS')
-                        .setEmoji('1352737043972624518')
-                        .setStyle(ButtonStyle.Danger),
-                      new ButtonBuilder()
-                        .setCustomId(`signup_${eventId}_TENTATIVE`)
-                        .setLabel('Tentative')
-                        .setEmoji('⏳')
-                        .setStyle(ButtonStyle.Secondary),
-                      new ButtonBuilder()
-                        .setCustomId(`signup_${eventId}_ABSENT`)
-                        .setLabel('Absent')
-                        .setEmoji('❌')
-                        .setStyle(ButtonStyle.Secondary)
-                    );
-                  
-                  // Update the original message with new embed
-                  await message.edit({
-                    embeds: [updatedEmbed],
-                    components: [row]
-                  }).catch(err => {
-                    console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
+                  await safeReply(interaction, {
+                    content: `You have been signed up for "${eventDetails.title}" as ${role}.`,
+                    ephemeral: true
                   });
-                  
-                  console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
-                } catch (updateError) {
-                  console.error(`[ERROR] Error preparing updated embed: ${updateError.message}`);
                 }
               }
-            } catch (messageError) {
-              console.error(`[ERROR] Error updating event message: ${messageError.message}`);
-              // Don't rethrow - we've already handled the primary interaction
+              
+              // Update the message with new counts - careful error handling
+              try {
+                await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
+              } catch (messageError) {
+                console.error(`[ERROR] Error updating event message: ${messageError.message}`);
+                // Don't rethrow - we've already handled the primary interaction
+              }
+            } catch (error) {
+              try {
+                await client.query('ROLLBACK');
+              } catch (rollbackError) {
+                console.error(`Error in rollback: ${rollbackError.message}`);
+              }
+              console.error(`Error in event signup transaction: ${error.message}`);
+              throw error;
+            } finally {
+              sequelize.connectionManager.releaseConnection(client);
             }
           } catch (error) {
             console.error(`Error processing signup button:`, error);
@@ -4711,37 +4671,46 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
     if (!message || !message.embeds || message.embeds.length === 0) return;
     
     // Get updated participant data
-    const participantsResult = await pool.query(
+    const participantsResult = await sequelize.query(
       `SELECT ep.role, u.username, u.discord_id, u.builds
        FROM event_participants ep
        JOIN users u ON ep.user_id = u.id
        WHERE ep.event_id = $1
        ORDER BY ep.created_at ASC`,
-      [eventId]
+      { 
+        bind: [eventId],
+        type: sequelize.QueryTypes.SELECT
+      }
     );
     
     // Get absentees and tentative members
-    const absenteesResult = await pool.query(
+    const absenteesResult = await sequelize.query(
       `SELECT ea.user_id, u.username
        FROM event_absentees ea
        JOIN users u ON ea.user_id = u.id
        WHERE ea.event_id = $1
        ORDER BY ea.created_at ASC`,
-      [eventId]
+      { 
+        bind: [eventId],
+        type: sequelize.QueryTypes.SELECT
+      }
     );
     
     let tentativeMembers = [];
     try {
-      const tentativeResult = await pool.query(
+      const tentativeResult = await sequelize.query(
         `SELECT et.user_id, u.username
          FROM event_tentative et
          JOIN users u ON et.user_id = u.id
          WHERE et.event_id = $1
          ORDER BY et.created_at ASC`,
-        [eventId]
+        { 
+          bind: [eventId],
+          type: sequelize.QueryTypes.SELECT
+        }
       );
       
-      tentativeMembers = tentativeResult.rows || [];
+      tentativeMembers = tentativeResult || [];
     } catch (e) {
       // Table might not exist, ignore
     }
@@ -4749,12 +4718,12 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
     // Create updated event object
     const updatedEvent = {
       ...eventDetails,
-      participants: participantsResult.rows,
-      absentees: absenteesResult.rows,
+      participants: participantsResult,
+      absentees: absenteesResult,
       tentative: tentativeMembers
     };
     
-    // Create updated embed using your existing createEventEmbed
+    // Create updated embed
     const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
     
     // Create signup buttons with custom role emojis
@@ -4787,7 +4756,7 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
           .setStyle(ButtonStyle.Secondary)
       );
     
-    // Update the original message with new embed - wrap in try/catch
+    // Update the original message with new embed
     try {
       await message.edit({
         embeds: [updatedEmbed],
