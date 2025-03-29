@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
+const { EventEmitter } = require('events');
+EventEmitter.defaultMaxListeners = 25;
 
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
@@ -3980,7 +3982,7 @@ client.on('interactionCreate', async (interaction) => {
             
             // Immediately defer the reply to prevent timeout
             await interaction.deferReply({ ephemeral: true }).catch(error => {
-              if (error.code === 10062) {
+              if (error.code === 40060) {
                 console.log(`[WARN] Interaction ${interaction.id} already acknowledged, continuing processing`);
                 return; // Continue execution even if the interaction was already acknowledged
               }
@@ -4213,7 +4215,7 @@ client.on('interactionCreate', async (interaction) => {
                     [eventId]
                   );
                   
-                  // Get absentees
+                  // Get updated absences
                   const absenteesResult = await pool.query(
                     `SELECT ea.user_id, u.username
                      FROM event_absentees ea
@@ -4223,7 +4225,7 @@ client.on('interactionCreate', async (interaction) => {
                     [eventId]
                   );
                   
-                  // Get tentative members if the table exists
+                  // Get tentative members if available
                   let tentativeMembers = [];
                   try {
                     const tentativeResult = await pool.query(
@@ -4235,7 +4237,7 @@ client.on('interactionCreate', async (interaction) => {
                       [eventId]
                     );
                     
-                    tentativeMembers = tentativeResult.rows || [];
+                    tentativeMembers = tentativeResult.rows;
                   } catch (e) {
                     // Table might not exist, ignore
                   }
@@ -4458,10 +4460,10 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
       tentative: tentativeMembers
     };
     
-    // Create updated embed - use embedBuilder which should be updated to not show class names
+    // Create updated embed using your existing createEventEmbed
     const updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
     
-    // Create signup buttons
+    // Create signup buttons with custom role emojis
     const row = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
@@ -4491,15 +4493,16 @@ async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId
           .setStyle(ButtonStyle.Secondary)
       );
     
-    // Update the original message with new embed
-    await message.edit({
-      embeds: [updatedEmbed],
-      components: [row]
-    }).catch(err => {
+    // Update the original message with new embed - wrap in try/catch
+    try {
+      await message.edit({
+        embeds: [updatedEmbed],
+        components: [row]
+      });
+      console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
+    } catch (err) {
       console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
-    });
-    
-    console.log(`[INFO] Successfully updated event embed for event ${eventId}`);
+    }
   } catch (error) {
     console.error(`[ERROR] Error updating event display: ${error.message}`);
   }
@@ -5394,7 +5397,7 @@ async function safeReply(interaction, options) {
     // Check if interaction has been deferred
     if (interaction.deferred) {
       await interaction.editReply(options).catch(error => {
-        if (error.code === 10062) {
+        if (error.code === 40060) {
           console.log(`[WARN] Cannot edit reply - interaction ${interaction.id} unknown/expired`);
         } else {
           throw error;
@@ -5404,7 +5407,7 @@ async function safeReply(interaction, options) {
     // Check if interaction has been replied to
     else if (interaction.replied) {
       await interaction.followUp(options).catch(error => {
-        if (error.code === 10062) {
+        if (error.code === 40060) {
           console.log(`[WARN] Cannot follow up - interaction ${interaction.id} unknown/expired`);
         } else {
           throw error;
@@ -5414,7 +5417,7 @@ async function safeReply(interaction, options) {
     // If not deferred or replied, send a new reply
     else {
       await interaction.reply(options).catch(error => {
-        if (error.code === 10062) {
+        if (error.code === 40060) {
           console.log(`[WARN] Cannot reply - interaction ${interaction.id} unknown/expired`);
         } else {
           throw error;

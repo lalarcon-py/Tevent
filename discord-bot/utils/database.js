@@ -761,6 +761,8 @@ module.exports = {
       throw error;
     }
   },
+
+  
   
   /**
    * Get a user by Discord ID
@@ -781,6 +783,110 @@ module.exports = {
       console.error(`[ERROR] getUserByDiscordId failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);
       throw error;
+    }
+  },
+  
+  /**
+   * Update event participants with transaction locking
+   */
+  updateEventParticipants: async (eventId, userId, guildId, role, isAbsent) => {
+    // Use a database transaction for atomic operations
+    const dbClient = await pool.connect();
+    try {
+      await dbClient.query('BEGIN');
+      
+      // If marking as absent
+      if (isAbsent) {
+        // Remove from participants
+        await dbClient.query(
+          'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        
+        // Add to absentees
+        await dbClient.query(
+          `INSERT INTO event_absentees 
+            (id, guild_id, event_id, user_id, created_at, updated_at)
+          VALUES 
+            (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+          ON CONFLICT (event_id, user_id) DO NOTHING`,
+          [guildId, eventId, userId]
+        );
+      } 
+      // If tentative
+      else if (role === 'TENTATIVE') {
+        // Remove from participants and absentees
+        await dbClient.query(
+          'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        
+        await dbClient.query(
+          'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        
+        // Add to tentative
+        await dbClient.query(
+          `INSERT INTO event_tentative 
+            (id, guild_id, event_id, user_id, created_at, updated_at)
+          VALUES
+            (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+          ON CONFLICT (event_id, user_id) DO UPDATE SET
+            updated_at = NOW()`,
+          [guildId, eventId, userId]
+        );
+      }
+      // Regular role signup
+      else {
+        // Check if already signed up
+        const existingResult = await dbClient.query(
+          'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        
+        if (existingResult.rows && existingResult.rows.length > 0) {
+          // Update existing
+          await dbClient.query(
+            'UPDATE event_participants SET role = $1 WHERE id = $2',
+            [role, existingResult.rows[0].id]
+          );
+        } else {
+          // Create new signup
+          await dbClient.query(
+            `INSERT INTO event_participants 
+              (id, guild_id, event_id, user_id, role, created_at, updated_at)
+            VALUES
+              (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+            [guildId, eventId, userId, role]
+          );
+        }
+        
+        // Remove from absentees and tentative if needed
+        await dbClient.query(
+          'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        
+        // Try to handle tentative table - catch error if table doesn't exist
+        try {
+          await dbClient.query(
+            'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+            [eventId, userId]
+          );
+        } catch (e) {
+          // Tentative table might not exist - safely ignore this error
+        }
+      }
+      
+      await dbClient.query('COMMIT');
+      return { success: true };
+    } catch (error) {
+      await dbClient.query('ROLLBACK');
+      console.error(`[ERROR] Database transaction error: ${error.message}`);
+      throw error;
+    } finally {
+      dbClient.release();
     }
   }
 };
