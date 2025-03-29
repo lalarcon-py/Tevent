@@ -34,6 +34,7 @@ import AdminPortal from './pages/AdminPortal';
 import DiscordSettingsPage from "./pages/DiscordSettingsPage";
 import DiscordSetupPage from './pages/DiscordSetupPage';
 import RoleSimulationBanner from './components/admin/RoleSimulationBanner';
+import StaticTeams from './components/StaticTeams/StaticTeams';
 
 const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
@@ -215,7 +216,6 @@ function AppContent() {
           <Route path="/applications" element={<GuildApplications />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/admin" element={<AdminPortal />} />
-          <Route path="/guilds/:guildId/discord/settings" element={<DiscordSettingsPage />} />
           <Route path="*" element={<LandingPage />} />
         </Routes>
       </Router>
@@ -270,6 +270,8 @@ function AppContent() {
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/admin" element={<AdminPortal />} />
           <Route path="/discord/setup" element={<DiscordSetupPage />} />
+          <Route path="/guilds/:guildId/discord/settings" element={<DiscordSettingsPage />} />
+          <Route path="/static-teams" element={<StaticTeams />} />
         </Routes>
       </Box>
     </Router>

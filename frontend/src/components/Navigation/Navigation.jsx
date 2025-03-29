@@ -201,6 +201,11 @@ const Navigation = ({ guildId }) => {
       path: '/event-planner'
     },
     {
+      text: 'Static Teams',
+      icon: <GroupIcon />,
+      path: '/static-teams'
+    },
+    {
       text: 'Event Summaries',
       icon: <FormatListBulletedIcon />,
       path: '/event-summaries'

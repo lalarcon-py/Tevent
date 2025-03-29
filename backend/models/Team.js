@@ -36,6 +36,11 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    is_static: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
     created_by: {
       type: DataTypes.UUID,
       allowNull: false,

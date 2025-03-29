@@ -18,6 +18,7 @@ const billingRoutes = require('./routes/billingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
+
 // Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
 const schemaMiddleware = require('./middleware/schemaMiddleware');
@@ -40,6 +41,7 @@ const guildSettingsRoutes = require('./routes/guildSettings');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
+const staticTeamsRoutes = require('./routes/staticTeamsRoutes');
 
 
 
@@ -289,6 +291,7 @@ app.use('/api/teams', guildScopeMiddleware, validateGuildMembership, teamsRouter
 app.use('/api/team-presets', guildScopeMiddleware, validateGuildMembership, teamPresetsRouter);
 app.use('/api/dashboard', guildScopeMiddleware, validateGuildMembership, dashboardRouter);
 app.use('/api/guild-applications', guildScopeMiddleware, validateGuildMembership, require('./routes/guildApplicationRoutes'));
+app.use('/api/static-teams', guildScopeMiddleware, validateGuildMembership, staticTeamsRoutes);
 
 const guildSettingsController = require('./controllers/guildSettingsController');
 
