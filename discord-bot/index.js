@@ -2980,108 +2980,541 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-async function handleEventSignup(interaction, build, userId, eventId, role, eventDetails, appGuildId, isUpdate = false) {
+/**
+ * Handle event signup button interactions with comprehensive error handling
+ * @param {ButtonInteraction} interaction - The Discord button interaction
+ * @returns {Promise<void>}
+ */
+async function handleEventSignupButton(interaction) {
+  // Get request ID for tracing and debugging
+  const requestId = Math.random().toString(36).substring(2, 10);
+  console.log(`[INFO][${requestId}] Processing signup button: ${interaction.customId}`);
+  
+  // Handle duplicate prevention with a proper cooldown system
+  const cooldownKey = `${interaction.user.id}:${interaction.customId}`;
+  const now = Date.now();
+  const cooldownTime = cooldownMap.get(cooldownKey);
+  const COOLDOWN_MS = 5000; // 5 second cooldown
+  
+  if (cooldownTime && now - cooldownTime < COOLDOWN_MS) {
+    console.log(`[INFO][${requestId}] Ignoring duplicate request (cooldown active)`);
+    try {
+      await interaction.deferUpdate().catch(() => {});
+      return;
+    } catch (err) {
+      return; // Silently fail on duplicate requests
+    }
+  }
+  
+  // Set cooldown immediately to prevent race conditions
+  cooldownMap.set(cooldownKey, now);
+  
+  // Parse the custom ID safely
+  let eventId, role;
   try {
-    // Verify the build has the required fields
-    if (!build || !build.primary || !build.secondary || !build.weapon_spec) {
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
-        content: 'Invalid build data. Please ensure your build has primary and secondary weapons and a class specified.',
-        components: []
-      });
-      return;
-    }
-    
-    // Check if user is already signed up
-    const existingSignup = await pool.query(
-      'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
-      [eventId, userId]
-    );
-    
-    // Determine weapon_spec to use (the format the database expects)
-    const weaponCombo = `${build.primary}|${build.secondary}`;
-    const reverseWeaponCombo = `${build.secondary}|${build.primary}`;
-    
-    // Check which weapon combo matches the weapon_spec in WEAPON_SPECS
-    let dbWeaponSpec = weaponCombo;
-    if (WEAPON_SPECS[reverseWeaponCombo] === build.weapon_spec) {
-      dbWeaponSpec = reverseWeaponCombo;
-    }
-    
-    // Check role capacity
-    const roleCountsResult = await pool.query(
-      `SELECT 
-        COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-        COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-        COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-      FROM event_participants
-      WHERE event_id = $1`,
-      [eventId]
-    );
-    
-    const roleCounts = roleCountsResult.rows[0];
-    
-    // Verify there's room for this role
-    const roleLimits = {
-      'TANK': eventDetails.tanks || 0,
-      'HEALER': eventDetails.healers || 0,
-      'DPS': eventDetails.dps || 0
-    };
-    
-    const currentCounts = {
-      'TANK': parseInt(roleCounts?.tank_count || 0),
-      'HEALER': parseInt(roleCounts?.healer_count || 0),
-      'DPS': parseInt(roleCounts?.dps_count || 0)
-    };
-    
-    // Skip the capacity check if the user is already signed up (just updating)
-    if (!existingSignup.rows?.length && currentCounts[role] >= roleLimits[role] && roleLimits[role] > 0) {
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
-        content: `Sorry, the ${role} spots are full for this event.`,
-        components: []
-      });
-      return;
-    }
-    
-    if (existingSignup.rows?.length > 0) {
-      // Update existing signup
-      await pool.query(
-        'UPDATE event_participants SET role = $1, weapon_spec = $2 WHERE event_id = $3 AND user_id = $4',
-        [role, dbWeaponSpec, eventId, userId]
-      );
-      
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
-        content: `Your role for "${eventDetails.title}" has been updated to ${role} (${build.weapon_spec}).`,
-        components: []
-      });
-    } else {
-      // Create new signup
-      await pool.query(
-        `INSERT INTO event_participants 
-          (id, guild_id, event_id, user_id, role, weapon_spec, created_at, updated_at)
-        VALUES
-          (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())`,
-        [appGuildId, eventId, userId, role, dbWeaponSpec]
-      );
-      
-      const method = isUpdate ? 'update' : 'editReply';
-      await interaction[method]({
-        content: `You have been signed up for "${eventDetails.title}" as ${role} (${build.weapon_spec}).`,
-        components: []
-      });
-    }
-    
-    // Update event display
-    await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
-  } catch (error) {
-    console.error('Error in handleEventSignup:', error);
-    const method = isUpdate ? 'update' : 'editReply';
-    await interaction[method]({
-      content: 'An error occurred while processing your signup. Please try again.',
-      components: []
+    [_, eventId, role] = interaction.customId.split('_');
+    if (!eventId || !role) throw new Error('Invalid button ID format');
+  } catch (parseError) {
+    console.error(`[ERROR][${requestId}] Failed to parse button ID: ${parseError.message}`);
+    return await safeReply(interaction, {
+      content: 'Invalid signup button. Please try refreshing the page or contact an admin.',
+      ephemeral: true
     });
+  }
+  
+  // Check if role is valid
+  const validRoles = ['TANK', 'HEALER', 'DPS', 'TENTATIVE', 'ABSENT'];
+  if (!validRoles.includes(role)) {
+    console.error(`[ERROR][${requestId}] Invalid role: ${role}`);
+    return await safeReply(interaction, {
+      content: 'Invalid role selection. Please try again.',
+      ephemeral: true
+    });
+  }
+  
+  const isAbsent = role === 'ABSENT';
+  
+  // Always try to defer first but don't rely on it
+  try {
+    await interaction.deferReply({ ephemeral: true }).catch(error => {
+      if (error.code !== 40060) { // Ignore "already acknowledged" errors
+        console.warn(`[WARN][${requestId}] Defer error: ${error.message}`);
+      }
+    });
+  } catch (deferError) {
+    // Continue even if defer fails - we'll handle this in safeReply
+    console.warn(`[WARN][${requestId}] Defer error: ${deferError.message}`);
+  }
+  
+  try {
+    // Get guild mapping
+    const discordGuildId = interaction.guild?.id;
+    if (!discordGuildId) {
+      return await safeReply(interaction, {
+        content: 'This button must be used in a Discord server.',
+        ephemeral: true
+      });
+    }
+    
+    // Get app guild ID from mapping - handle different database access methods
+    let appGuildId;
+    try {
+      // First try direct pool query if pool is defined
+      if (typeof pool?.query === 'function') {
+        const mappingResult = await pool.query(
+          'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+          [discordGuildId.toString()]
+        );
+        
+        if (mappingResult.rows && mappingResult.rows.length > 0) {
+          appGuildId = mappingResult.rows[0].app_guild_id;
+        }
+      }
+      
+      // Try using the database utility if available and we still don't have a guild ID
+      if (!appGuildId && typeof database?.getGuildIdFromDiscord === 'function') {
+        appGuildId = await database.getGuildIdFromDiscord(discordGuildId);
+      }
+      
+      // Fallback to sequelize if available and we still don't have a guild ID
+      if (!appGuildId && typeof sequelize?.query === 'function') {
+        try {
+          const sequelizeResult = await sequelize.query(
+            `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
+            { 
+              bind: [discordGuildId.toString()],
+              type: sequelize.QueryTypes.SELECT
+            }
+          );
+          
+          if (sequelizeResult && sequelizeResult.length > 0) {
+            appGuildId = sequelizeResult[0].app_guild_id;
+          }
+        } catch (sequelizeError) {
+          console.warn(`[WARN][${requestId}] Sequelize mapping error: ${sequelizeError.message}`);
+        }
+      }
+    } catch (mappingError) {
+      console.error(`[ERROR][${requestId}] Mapping error: ${mappingError.message}`);
+    }
+    
+    if (!appGuildId) {
+      return await safeReply(interaction, {
+        content: 'This Discord server is not linked to an application guild.',
+        ephemeral: true
+      });
+    }
+    
+    // Get user ID from Discord ID - try multiple methods
+    let userId, username;
+    try {
+      // Try direct pool query first if pool is defined
+      if (typeof pool?.query === 'function') {
+        const userResult = await pool.query(
+          'SELECT id, username FROM users WHERE discord_id = $1',
+          [interaction.user.id]
+        );
+        
+        if (userResult.rows && userResult.rows.length > 0) {
+          userId = userResult.rows[0].id;
+          username = userResult.rows[0].username;
+        }
+      }
+      
+      // Try database utility if available and we still don't have a user ID
+      if (!userId && typeof database?.getUserByDiscordId === 'function') {
+        const user = await database.getUserByDiscordId(interaction.user.id);
+        if (user) {
+          userId = user.id;
+          username = user.username;
+        }
+      }
+      
+      // Fallback to sequelize if available and we still don't have a user ID
+      if (!userId && typeof sequelize?.query === 'function') {
+        try {
+          const sequelizeUserResult = await sequelize.query(
+            'SELECT id, username FROM users WHERE discord_id = $1',
+            { 
+              bind: [interaction.user.id],
+              type: sequelize.QueryTypes.SELECT
+            }
+          );
+          
+          if (sequelizeUserResult && sequelizeUserResult.length > 0) {
+            userId = sequelizeUserResult[0].id;
+            username = sequelizeUserResult[0].username;
+          }
+        } catch (sequelizeUserError) {
+          console.warn(`[WARN][${requestId}] Sequelize user error: ${sequelizeUserError.message}`);
+        }
+      }
+    } catch (userError) {
+      console.error(`[ERROR][${requestId}] User lookup error: ${userError.message}`);
+    }
+    
+    if (!userId) {
+      return await safeReply(interaction, {
+        content: 'You need to register on the website first before signing up for events.',
+        ephemeral: true
+      });
+    }
+    
+    // Update participation using the most reliable method available
+    let updateResult;
+    
+    try {
+      // Try our database utility method first
+      if (typeof database?.updateEventParticipants === 'function') {
+        updateResult = await database.updateEventParticipants(eventId, userId, appGuildId, role, isAbsent);
+      } 
+      // If that doesn't exist, use direct pool access if pool is defined
+      else if (typeof pool?.connect === 'function') {
+        const dbClient = await pool.connect();
+        try {
+          // Implement a simplified version of updateEventParticipants right here
+          await dbClient.query('BEGIN');
+          
+          // Get event details first
+          const eventResult = await dbClient.query(
+            'SELECT title FROM events WHERE id = $1',
+            [eventId]
+          );
+          
+          if (!eventResult.rows?.length) {
+            await dbClient.query('ROLLBACK');
+            updateResult = { success: false, message: 'Event not found' };
+          } else {
+            const eventTitle = eventResult.rows[0].title;
+            
+            if (isAbsent) {
+              // Remove from participants
+              await dbClient.query(
+                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              // Add to absentees
+              await dbClient.query(
+                `INSERT INTO event_absentees (id, guild_id, event_id, user_id, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                 ON CONFLICT (event_id, user_id) DO NOTHING`,
+                [appGuildId, eventId, userId]
+              );
+              
+              updateResult = { 
+                success: true, 
+                message: `You are now marked as absent for "${eventTitle}".`
+              };
+            } else if (role === 'TENTATIVE') {
+              // Handle tentative signup - first remove from other tables
+              await dbClient.query(
+                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              await dbClient.query(
+                'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              // Make sure tentative table exists
+              try {
+                await dbClient.query(`
+                  CREATE TABLE IF NOT EXISTS event_tentative (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    guild_id UUID NOT NULL,
+                    event_id UUID NOT NULL,
+                    user_id UUID NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT event_tentative_event_user_unique UNIQUE (event_id, user_id)
+                  )
+                `);
+              } catch (e) {
+                // Ignore - table may already exist
+              }
+              
+              // Add to tentative
+              await dbClient.query(
+                `INSERT INTO event_tentative (id, guild_id, event_id, user_id, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                 ON CONFLICT (event_id, user_id) DO UPDATE SET updated_at = NOW()`,
+                [appGuildId, eventId, userId]
+              );
+              
+              updateResult = {
+                success: true,
+                message: `You are now tentative for "${eventTitle}".`
+              };
+            } else {
+              // Regular signup
+              // First remove from other tables
+              await dbClient.query(
+                'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              try {
+                await dbClient.query(
+                  'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+              } catch (e) {
+                // Tentative table might not exist, ignore
+              }
+              
+              // Check if we already have a signup
+              const existingResult = await dbClient.query(
+                'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              if (existingResult.rows?.length) {
+                // Update existing signup
+                await dbClient.query(
+                  'UPDATE event_participants SET role = $1, updated_at = NOW() WHERE id = $2',
+                  [role, existingResult.rows[0].id]
+                );
+              } else {
+                // Create new signup
+                await dbClient.query(
+                  `INSERT INTO event_participants (id, guild_id, event_id, user_id, role, created_at, updated_at)
+                   VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
+                  [appGuildId, eventId, userId, role]
+                );
+              }
+              
+              updateResult = {
+                success: true,
+                message: `You are signed up as ${role} for "${eventTitle}".`
+              };
+            }
+            
+            await dbClient.query('COMMIT');
+          }
+        } catch (error) {
+          await dbClient.query('ROLLBACK');
+          console.error(`[ERROR][${requestId}] Database error: ${error.message}`);
+          updateResult = { 
+            success: false, 
+            message: 'A database error occurred while processing your signup.',
+            error: error.message
+          };
+        } finally {
+          dbClient.release();
+        }
+      } else {
+        // Fallback to ORM approach if nothing else works
+        updateResult = { 
+          success: false,
+          message: 'No database connection method available.'
+        };
+      }
+    } catch (updateError) {
+      console.error(`[ERROR][${requestId}] Update error: ${updateError.message}`);
+      updateResult = { 
+        success: false, 
+        message: 'An error occurred while processing your signup. Please try again.',
+        error: updateError.message
+      };
+    }
+    
+    // Respond to user based on update result
+    await safeReply(interaction, {
+      content: updateResult.success ? 
+        updateResult.message : 
+        `Error: ${updateResult.message || 'Unknown error'}`,
+      ephemeral: true
+    });
+    
+    // Update the message in the background asynchronously
+    setTimeout(async () => {
+      try {
+        const message = interaction.message;
+        if (!message) return;
+        
+        // Get fresh data
+        try {
+          // Get updated event data
+          const participantsQuery = `
+            SELECT 
+              'PARTICIPANT' as type, role, username, discord_id, builds
+            FROM event_participants ep
+            JOIN users u ON ep.user_id = u.id
+            WHERE ep.event_id = $1
+            
+            UNION ALL
+            
+            SELECT 
+              'ABSENT' as type, NULL as role, username, discord_id, builds
+            FROM event_absentees ea
+            JOIN users u ON ea.user_id = u.id
+            WHERE ea.event_id = $1
+            
+            UNION ALL
+            
+            SELECT 
+              'TENTATIVE' as type, NULL as role, username, discord_id, builds
+            FROM event_tentative et
+            JOIN users u ON et.user_id = u.id
+            WHERE et.event_id = $1
+          `;
+          
+          let participants, absentees, tentatives;
+          
+          if (typeof pool?.query === 'function') {
+            const participantsResult = await pool.query(participantsQuery, [eventId]);
+            participants = participantsResult.rows.filter(p => p.type === 'PARTICIPANT');
+            absentees = participantsResult.rows.filter(p => p.type === 'ABSENT');
+            tentatives = participantsResult.rows.filter(p => p.type === 'TENTATIVE');
+          } else if (typeof sequelize?.query === 'function') {
+            const participantsResult = await sequelize.query(participantsQuery, {
+              bind: [eventId],
+              type: sequelize.QueryTypes.SELECT
+            });
+            participants = participantsResult.filter(p => p.type === 'PARTICIPANT');
+            absentees = participantsResult.filter(p => p.type === 'ABSENT');
+            tentatives = participantsResult.filter(p => p.type === 'TENTATIVE');
+          } else {
+            // If we can't get fresh data, just update the UI to acknowledge the user's action
+            await message.edit({ 
+              components: message.components 
+            }).catch(() => {});
+            return;
+          }
+          
+          // Get event details
+          let eventDetails;
+          if (typeof pool?.query === 'function') {
+            const eventResult = await pool.query(
+              'SELECT * FROM events WHERE id = $1',
+              [eventId]
+            );
+            if (eventResult.rows?.length) {
+              eventDetails = eventResult.rows[0];
+            }
+          } else if (typeof sequelize?.query === 'function') {
+            const eventResult = await sequelize.query(
+              'SELECT * FROM events WHERE id = $1',
+              { 
+                bind: [eventId],
+                type: sequelize.QueryTypes.SELECT
+              }
+            );
+            if (eventResult?.length) {
+              eventDetails = eventResult[0];
+            }
+          }
+          
+          if (!eventDetails) return;
+          
+          // Create updated event object
+          const updatedEvent = {
+            ...eventDetails,
+            participants,
+            absentees,
+            tentative: tentatives
+          };
+          
+          // Create updated embed using the utility function
+          let updatedEmbed;
+          try {
+            if (typeof embedBuilder?.createEventEmbed === 'function') {
+              updatedEmbed = embedBuilder.createEventEmbed(updatedEvent);
+            } else {
+              // Fallback to a simple embed if utility isn't available
+              updatedEmbed = new EmbedBuilder()
+                .setTitle(eventDetails.title || 'Event')
+                .setDescription(eventDetails.description || '')
+                .addFields(
+                  { name: 'Time', value: formatDiscordTimestamp(eventDetails.event_time), inline: false },
+                  { name: 'Tanks', value: participants.filter(p => p.role === 'TANK').map(p => p.username).join('\n') || 'None', inline: true },
+                  { name: 'Healers', value: participants.filter(p => p.role === 'HEALER').map(p => p.username).join('\n') || 'None', inline: true },
+                  { name: 'DPS', value: participants.filter(p => p.role === 'DPS').map(p => p.username).join('\n') || 'None', inline: true },
+                  { name: 'Absent', value: absentees.map(p => p.username).join('\n') || 'None', inline: true },
+                  { name: 'Tentative', value: tentatives.map(p => p.username).join('\n') || 'None', inline: true }
+                );
+            }
+          } catch (embedError) {
+            console.error(`[ERROR][${requestId}] Embed creation error: ${embedError.message}`);
+            return;
+          }
+          
+          // Create signup buttons with custom role emojis
+          const row = new ActionRowBuilder()
+            .addComponents(
+              new ButtonBuilder()
+                .setCustomId(`signup_${eventId}_TANK`)
+                .setLabel('Tank')
+                .setEmoji('1352736996405022780')
+                .setStyle(ButtonStyle.Primary),
+              new ButtonBuilder()
+                .setCustomId(`signup_${eventId}_HEALER`)
+                .setLabel('Healer')
+                .setEmoji('1352737011479482468')
+                .setStyle(ButtonStyle.Success),
+              new ButtonBuilder()
+                .setCustomId(`signup_${eventId}_DPS`)
+                .setLabel('DPS')
+                .setEmoji('1352737043972624518')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder()
+                .setCustomId(`signup_${eventId}_TENTATIVE`)
+                .setLabel('Tentative')
+                .setEmoji('⏳')
+                .setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder()
+                .setCustomId(`signup_${eventId}_ABSENT`)
+                .setLabel('Absent')
+                .setEmoji('❌')
+                .setStyle(ButtonStyle.Secondary)
+            );
+          
+          // Update the message with robust error handling
+          try {
+            await message.edit({
+              embeds: [updatedEmbed],
+              components: [row]
+            }).catch(err => {
+              if (err.code === 10008) { // Unknown Message error
+                console.warn(`[WARN][${requestId}] Message no longer exists: ${err.message}`);
+              } else {
+                console.error(`[ERROR][${requestId}] Failed to update message: ${err.message}`);
+              }
+            });
+          } catch (editError) {
+            console.error(`[ERROR][${requestId}] Message edit error: ${editError.message}`);
+          }
+        } catch (dataError) {
+          console.error(`[ERROR][${requestId}] Data fetch error: ${dataError.message}`);
+        }
+      } catch (updateDisplayError) {
+        console.error(`[ERROR][${requestId}] Display update error: ${updateDisplayError.message}`);
+      }
+    }, 100); // Small delay to not block user response
+    
+    // Log completion
+    console.log(`[INFO][${requestId}] Signup processing completed`);
+  } catch (error) {
+    console.error(`[ERROR][${requestId}] Unhandled error in signup handler: ${error.message}`);
+    console.error(error.stack);
+    
+    // Try to notify user
+    await safeReply(interaction, {
+      content: 'A system error occurred while processing your signup. Please try again later.',
+      ephemeral: true
+    }).catch(() => {}); // Ignore errors in final fallback
+  } finally {
+    // Clean up old cooldowns periodically
+    if (cooldownMap.size > 1000) {
+      const now = Date.now();
+      for (const [key, time] of cooldownMap.entries()) {
+        if (now - time > COOLDOWN_MS * 2) {
+          cooldownMap.delete(key);
+        }
+      }
+    }
   }
 }
 
@@ -4249,6 +4682,9 @@ client.on('interactionCreate', async (interaction) => {
         
         if (customId.startsWith('signup_')) {
           try {
+
+            await handleEventSignupButton(interaction);
+            return;
             // Log the interaction being processed
             console.log(`[INFO] Processing signup button: ${customId}`);
             
@@ -4598,71 +5034,6 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 });
-
-async function showClassSelectionMenu(interaction, userId, username, userBuilds, eventId, role, eventDetails, appGuildId) {
-  // Extract available classes from builds
-  const availableClasses = [];
-  const seenClasses = new Set();
-  
-  userBuilds.forEach(build => {
-    if (!build.weapon_spec || !build.primary || !build.secondary) return;
-    
-    // Check if role matches
-    if (build.spec && build.spec !== role) return;
-    
-    // Check if build has weapon_spec directly
-    const combo1 = `${build.primary}|${build.secondary}`;
-    const combo2 = `${build.secondary}|${build.primary}`;
-    
-    if (WEAPON_SPECS[combo1] === build.weapon_spec && !seenClasses.has(build.weapon_spec)) {
-      availableClasses.push({
-        weaponCombo: combo1,
-        className: build.weapon_spec,
-        spec: build.spec || 'Any'
-      });
-      seenClasses.add(build.weapon_spec);
-    }
-    else if (WEAPON_SPECS[combo2] === build.weapon_spec && !seenClasses.has(build.weapon_spec)) {
-      availableClasses.push({
-        weaponCombo: combo2,
-        className: build.weapon_spec,
-        spec: build.spec || 'Any'
-      });
-      seenClasses.add(build.weapon_spec);
-    }
-  });
-  
-  console.log(`[DEBUG] Available classes for ${username}: ${JSON.stringify(availableClasses)}`);
-  
-  if (availableClasses.length === 0) {
-    await safeReply(interaction, {
-      content: `No available classes found for you as ${role}. Please set up your builds on the website.`,
-      ephemeral: true
-    });
-    return;
-  }
-  
-  // Create selection menu with appropriate class options
-  const options = availableClasses.map(c => ({
-    label: c.className,
-    description: `${c.weaponCombo.replace('|', ' + ')}${c.spec !== 'Any' ? ` (${c.spec})` : ''}`,
-    value: c.weaponCombo
-  }));
-  
-  const row = new ActionRowBuilder()
-    .addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`class_select_signup_${userId}_${eventId}_${role}`)
-        .setPlaceholder('Select your class')
-        .addOptions(options)
-    );
-  
-  await safeReply(interaction, {
-    content: `To sign up for "${eventDetails.title}" as ${role}, please select your class:`,
-    components: [row],
-    ephemeral: true
-  });
-}
 
 async function updateEventDisplay(interaction, eventId, eventDetails, appGuildId) {
   try {
@@ -5655,40 +6026,93 @@ async function handleEventsCommand(interaction, appGuildId) {
   }
 }
 
-async function safeReply(interaction, options) {
+/**
+ * Safely reply to an interaction with full error handling
+ * @param {Interaction} interaction - The Discord interaction
+ * @param {Object} options - Reply options (content, embeds, etc.)
+ * @param {boolean} [shouldDefer=false] - Whether to defer the reply
+ * @returns {Promise<boolean>} - Success status
+ */
+async function safeReply(interaction, options, shouldDefer = false) {
   try {
-    // Check if interaction has been deferred
-    if (interaction.deferred) {
-      await interaction.editReply(options).catch(error => {
-        if (error.code === 40060) {
-          console.log(`[WARN] Cannot edit reply - interaction ${interaction.id} unknown/expired`);
-        } else {
-          throw error;
+    // Check if we need to defer first
+    if (shouldDefer && !interaction.deferred && !interaction.replied) {
+      try {
+        await interaction.deferReply({ ephemeral: true }).catch(error => {
+          if (error.code !== 40060) { // Already acknowledged error
+            console.error(`[ERROR] Defer error: ${error.message}`);
+          }
+        });
+      } catch (deferError) {
+        // Ignore errors from deferring - we'll try other methods
+        if (deferError.code !== 40060) {
+          console.warn(`[WARN] Could not defer: ${deferError.message}`);
         }
-      });
-    } 
-    // Check if interaction has been replied to
-    else if (interaction.replied) {
-      await interaction.followUp(options).catch(error => {
-        if (error.code === 40060) {
-          console.log(`[WARN] Cannot follow up - interaction ${interaction.id} unknown/expired`);
-        } else {
-          throw error;
-        }
-      });
-    } 
-    // If not deferred or replied, send a new reply
-    else {
-      await interaction.reply(options).catch(error => {
-        if (error.code === 40060) {
-          console.log(`[WARN] Cannot reply - interaction ${interaction.id} unknown/expired`);
-        } else {
-          throw error;
-        }
-      });
+      }
     }
+
+    // Now try to respond based on interaction state
+    if (interaction.deferred) {
+      try {
+        await interaction.editReply(options).catch(error => {
+          if (error.code === 10008 || error.code === 10062) {
+            console.warn(`[WARN] Interaction expired: ${error.code}`);
+            return false;
+          }
+          throw error;
+        });
+        return true;
+      } catch (editError) {
+        console.warn(`[WARN] Edit reply failed: ${editError.message}`);
+      }
+    } 
+    else if (interaction.replied) {
+      try {
+        await interaction.followUp({...options, ephemeral: true}).catch(error => {
+          if (error.code === 10008 || error.code === 10062) {
+            console.warn(`[WARN] Interaction expired: ${error.code}`);
+            return false;
+          }
+          throw error;
+        });
+        return true;
+      } catch (followError) {
+        console.warn(`[WARN] Follow-up failed: ${followError.message}`);
+      }
+    } 
+    else {
+      try {
+        await interaction.reply({...options, ephemeral: true}).catch(error => {
+          if (error.code === 10008 || error.code === 10062 || error.code === 40060) {
+            console.warn(`[WARN] Interaction expired or already acknowledged: ${error.code}`);
+            return false;
+          }
+          throw error;
+        });
+        return true;
+      } catch (replyError) {
+        console.warn(`[WARN] Initial reply failed: ${replyError.message}`);
+      }
+    }
+
+    // If all response methods failed, try to recover with a channel message
+    try {
+      if (interaction.channel) {
+        await interaction.channel.send({
+          content: `${interaction.user}, ${options.content || 'Your request was processed, but I couldn\'t respond directly.'}`,
+          embeds: options.embeds,
+          components: options.components
+        }).catch(() => {});
+        return true;
+      }
+    } catch (channelError) {
+      console.warn(`[WARN] Channel message failed: ${channelError.message}`);
+    }
+    
+    return false;
   } catch (error) {
-    console.error(`[ERROR] Safe reply failed for interaction ${interaction.id}: ${error.message}`);
+    console.error(`[ERROR] Safe reply critical error: ${error.message}`);
+    return false;
   }
 }
 
