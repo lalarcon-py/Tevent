@@ -1750,9 +1750,6 @@ async function getItemType(dbClient, storageItemId) {
 // Set max event listeners to prevent warning
 client.setMaxListeners(100);
 
-// Import required components for modals
-const { TextInputBuilder, TextInputStyle, ModalBuilder } = require('discord.js');
-
 // Button interaction handler
 // Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
