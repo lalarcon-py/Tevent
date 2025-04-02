@@ -299,38 +299,88 @@ module.exports = {
         return { success: true, message: 'Role updated' };
       }
       
-      // Check if role is full
-      const participants = await db.EventParticipant.findAll({
-        where: { 
-          event_id: eventId,
-          role,
-          guild_id: guildId
+      // Skip role limit check for tentative or absent roles
+      if (role !== 'TENTATIVE' && role !== 'ABSENT') {
+        // Check if role is full
+        const participants = await db.EventParticipant.findAll({
+          where: { 
+            event_id: eventId,
+            role,
+            guild_id: guildId
+          }
+        });
+        
+        const roleLimits = {
+          'TANK': event.tanks || 0,
+          'HEALER': event.healers || 0,
+          'DPS': event.dps || 0
+        };
+        
+        // Only apply limits if they're greater than zero
+        if (roleLimits[role] > 0 && participants.length >= roleLimits[role]) {
+          // Special case: check if user is already signed up for this role
+          // In that case, we should allow them to "re-sign up" for the same role
+          const isAlreadyInRole = existing && existing.role === role;
+          
+          if (!isAlreadyInRole) {
+            console.log(`[DEBUG] Role ${role} is full: ${participants.length}/${roleLimits[role]}`);
+            return { success: false, message: `${role} slots are full` };
+          }
         }
-      });
-      
-      const roleLimits = {
-        'TANK': event.tanks || 0,
-        'HEALER': event.healers || 0,
-        'DPS': event.dps || 0
-      };
-      
-      if (participants.length >= roleLimits[role]) {
-        console.log(`[DEBUG] Role ${role} is full: ${participants.length}/${roleLimits[role]}`);
-        return { success: false, message: `${role} slots are full` };
       }
       
       console.log(`[DEBUG] Creating new signup for event ${eventId}, user ${user.id}, role ${role}`);
       
-      // Create new signup
-      await db.EventParticipant.create({
-        event_id: eventId,
-        user_id: user.id,
-        guild_id: guildId,
-        role
-      });
+      // Create new signup with error handling
+      try {
+        await db.EventParticipant.create({
+          event_id: eventId,
+          user_id: user.id,
+          guild_id: guildId,
+          role
+        });
+        
+        // If creating for a role, check if we need to remove from other tables
+        if (role === 'TANK' || role === 'HEALER' || role === 'DPS') {
+          // Try to remove from absentees if that table exists
+          try {
+            await db.EventAbsentee.destroy({
+              where: {
+                event_id: eventId,
+                user_id: user.id
+              }
+            });
+          } catch (err) {
+            // Safely ignore if table doesn't exist or other errors
+            console.log(`[INFO] Could not clean up absentee record: ${err.message}`);
+          }
+          
+          // Try to remove from tentative if that table exists
+          try {
+            await sequelize.query(
+              `DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2`,
+              { 
+                bind: [eventId, user.id],
+                type: sequelize.QueryTypes.DELETE
+              }
+            );
+          } catch (err) {
+            // Safely ignore if table doesn't exist or other errors
+            console.log(`[INFO] Could not clean up tentative record: ${err.message}`);
+          }
+        }
+      } catch (createErr) {
+        console.error(`[ERROR] Failed to create event participant: ${createErr.message}`);
+        console.error(createErr.stack);
+        throw createErr;
+      }
       
       console.log(`[DEBUG] Signup created successfully`);
-      return { success: true };
+      return { 
+        success: true, 
+        message: `You have been signed up for the event as ${role}.`,
+        eventDetails: event
+      };
     } catch (error) {
       console.error(`[ERROR] signUpForEvent failed: ${error.message}`);
       console.error(`[ERROR] Error stack: ${error.stack}`);

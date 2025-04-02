@@ -47,7 +47,18 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    console.log(`[DEBUG] Loot command execution started. Subcommand: ${interaction.options.getSubcommand()}`);
+    console.log(`[DEBUG] Attendance command execution started. Subcommand: ${interaction.options.getSubcommand()}`);
+    
+    // Define ensureDatabaseConnection within each command
+    async function ensureDatabaseConnection() {
+      try {
+        await sequelize.authenticate();
+        return true;
+      } catch (error) {
+        console.error('Database connection error in attendance command:', error);
+        return false;
+      }
+    }
     
     if (!await ensureDatabaseConnection()) {
       return interaction.reply({ 

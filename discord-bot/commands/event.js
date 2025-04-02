@@ -112,40 +112,44 @@ module.exports = {
           const healerEmoji = '<:Healer:1352737011479482468>';
           const dpsEmoji = '<:DPS:1352737043972624518>';
           
-          // Create signup buttons for first event
-          const row = new ActionRowBuilder()
-            .addComponents(
-              new ButtonBuilder()
-                .setCustomId(`signup_${eventId}_TANK`)
-                .setLabel('Tank')
-                .setEmoji('1352736996405022780')
-                .setStyle(ButtonStyle.Primary),
-              new ButtonBuilder()
-                .setCustomId(`signup_${eventId}_HEALER`)
-                .setLabel('Healer')
-                .setEmoji('1352737011479482468')
-                .setStyle(ButtonStyle.Success),
-              new ButtonBuilder()
-                .setCustomId(`signup_${eventId}_DPS`)
-                .setLabel('DPS')
-                .setEmoji('1352737043972624518')
-                .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder()
-                .setCustomId(`signup_${eventId}_TENTATIVE`)
-                .setLabel('Tentative')
-                .setEmoji('⏳')
-                .setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder()
-                .setCustomId(`signup_${eventId}_ABSENT`)
-                .setLabel('Absent')
-                .setEmoji('❌')
-                .setStyle(ButtonStyle.Secondary)
-            );
+          // Create signup buttons for first event if events exist
+          let row = null;
+          if (events && events.length > 0) {
+            const firstEvent = events[0];
+            row = new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`signup_${firstEvent.id}_TANK`)
+                  .setLabel('Tank')
+                  .setEmoji('1352736996405022780')
+                  .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                  .setCustomId(`signup_${firstEvent.id}_HEALER`)
+                  .setLabel('Healer')
+                  .setEmoji('1352737011479482468')
+                  .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                  .setCustomId(`signup_${firstEvent.id}_DPS`)
+                  .setLabel('DPS')
+                  .setEmoji('1352737043972624518')
+                  .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                  .setCustomId(`signup_${firstEvent.id}_TENTATIVE`)
+                  .setLabel('Tentative')
+                  .setEmoji('⏳')
+                  .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                  .setCustomId(`signup_${firstEvent.id}_ABSENT`)
+                  .setLabel('Absent')
+                  .setEmoji('❌')
+                  .setStyle(ButtonStyle.Secondary)
+              );
+          }
           
           await interaction.reply({ 
             content: `Upcoming events in the next ${safetyDays} days:`,
             embeds: embeds,
-            components: [row]
+            components: row ? [row] : []
           });
         } catch (error) {
           console.error('Error fetching events:', error);
@@ -231,7 +235,7 @@ module.exports = {
           
           if (result.success) {
             await interaction.reply({ 
-              content: `You have been signed up for the event as ${role}.`,
+              content: result.message || `You have been signed up for the event as ${role}.`,
               ephemeral: true
             });
             
