@@ -332,17 +332,138 @@ module.exports = {
       console.log(`[DEBUG] Creating new signup for event ${eventId}, user ${user.id}, role ${role}`);
       
       // Create new signup with error handling
-      try {
-        await db.EventParticipant.create({
-          event_id: eventId,
-          user_id: user.id,
-          guild_id: guildId,
-          role
-        });
+      // Handle the ABSENT role specifically
+      if (role === 'ABSENT') {
+        // For ABSENT, remove from participants
+        try {
+          await db.EventParticipant.destroy({
+            where: {
+              event_id: eventId,
+              user_id: user.id
+            }
+          });
+        } catch (err) {
+          console.log(`[INFO] Could not remove from participants: ${err.message}`);
+        }
         
-        // If creating for a role, check if we need to remove from other tables
-        if (role === 'TANK' || role === 'HEALER' || role === 'DPS') {
-          // Try to remove from absentees if that table exists
+        // Remove from tentative if that table exists
+        try {
+          await sequelize.query(
+            `DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2`,
+            { 
+              bind: [eventId, user.id],
+              type: sequelize.QueryTypes.DELETE
+            }
+          );
+        } catch (err) {
+          console.log(`[INFO] Could not clean up tentative record: ${err.message}`);
+        }
+        
+        // Add to absentees
+        try {
+          await db.EventAbsentee.findOrCreate({
+            where: {
+              event_id: eventId,
+              user_id: user.id,
+              guild_id: guildId
+            },
+            defaults: {
+              created_at: new Date(),
+              updated_at: new Date()
+            }
+          });
+        } catch (err) {
+          console.error(`[ERROR] Failed to mark user as absent: ${err.message}`);
+          throw err;
+        }
+      } 
+      // Handle TENTATIVE role
+      else if (role === 'TENTATIVE') {
+        // Remove from participants and absentees
+        try {
+          await db.EventParticipant.destroy({
+            where: {
+              event_id: eventId,
+              user_id: user.id
+            }
+          });
+        } catch (err) {
+          console.log(`[INFO] Could not remove from participants: ${err.message}`);
+        }
+        
+        try {
+          await db.EventAbsentee.destroy({
+            where: {
+              event_id: eventId,
+              user_id: user.id
+            }
+          });
+        } catch (err) {
+          console.log(`[INFO] Could not remove from absentees: ${err.message}`);
+        }
+        
+        // Add to tentative table
+        try {
+          await sequelize.query(
+            `INSERT INTO event_tentative (
+              id, guild_id, event_id, user_id, created_at, updated_at
+            ) VALUES (
+              gen_random_uuid(), $1, $2, $3, NOW(), NOW()
+            )
+            ON CONFLICT (event_id, user_id) DO UPDATE
+            SET updated_at = NOW()`,
+            { 
+              bind: [guildId, eventId, user.id]
+            }
+          );
+        } catch (err) {
+          // If table doesn't exist, create it and retry
+          if (err.message.includes('relation "event_tentative" does not exist')) {
+            try {
+              await sequelize.query(`
+                CREATE TABLE IF NOT EXISTS event_tentative (
+                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                  guild_id UUID NOT NULL,
+                  event_id UUID NOT NULL,
+                  user_id UUID NOT NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                  CONSTRAINT event_tentative_event_user_unique UNIQUE (event_id, user_id)
+                );
+              `);
+              
+              // Retry the insert
+              await sequelize.query(
+                `INSERT INTO event_tentative (
+                  id, guild_id, event_id, user_id, created_at, updated_at
+                ) VALUES (
+                  gen_random_uuid(), $1, $2, $3, NOW(), NOW()
+                )`,
+                { 
+                  bind: [guildId, eventId, user.id]
+                }
+              );
+            } catch (retryErr) {
+              console.error(`[ERROR] Failed to create tentative table and insert: ${retryErr.message}`);
+              throw retryErr;
+            }
+          } else {
+            console.error(`[ERROR] Failed to mark user as tentative: ${err.message}`);
+            throw err;
+          }
+        }
+      }
+      // Regular role signup (TANK, HEALER, DPS)
+      else {
+        try {
+          await db.EventParticipant.create({
+            event_id: eventId,
+            user_id: user.id,
+            guild_id: guildId,
+            role
+          });
+          
+          // Remove from absentees if that table exists
           try {
             await db.EventAbsentee.destroy({
               where: {
@@ -355,7 +476,7 @@ module.exports = {
             console.log(`[INFO] Could not clean up absentee record: ${err.message}`);
           }
           
-          // Try to remove from tentative if that table exists
+          // Remove from tentative if that table exists
           try {
             await sequelize.query(
               `DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2`,
@@ -368,7 +489,29 @@ module.exports = {
             // Safely ignore if table doesn't exist or other errors
             console.log(`[INFO] Could not clean up tentative record: ${err.message}`);
           }
+        } catch (err) {
+          if (err.name === 'SequelizeUniqueConstraintError') {
+            // Handle duplicate entry - update instead
+            try {
+              await db.EventParticipant.update(
+                { role: role },
+                {
+                  where: {
+                    event_id: eventId,
+                    user_id: user.id
+                  }
+                }
+              );
+            } catch (updateErr) {
+              console.error(`[ERROR] Failed to update event participant: ${updateErr.message}`);
+              throw updateErr;
+            }
+          } else {
+            console.error(`[ERROR] Failed to create event participant: ${err.message}`);
+            throw err;
+          }
         }
+      }
       } catch (createErr) {
         console.error(`[ERROR] Failed to create event participant: ${createErr.message}`);
         console.error(createErr.stack);

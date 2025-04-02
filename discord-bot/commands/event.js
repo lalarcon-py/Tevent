@@ -234,18 +234,39 @@ module.exports = {
           const result = await database.signUpForEvent(guildId, eventId, discordUserId, role);
           
           if (result.success) {
+            // Reply with ephemeral message to user only
             await interaction.reply({ 
               content: result.message || `You have been signed up for the event as ${role}.`,
               ephemeral: true
             });
             
-            // Refresh event in channel for everyone to see updated signup count
+            // If we have a channel message to update, find and update it instead of posting a new one
             try {
+              // Get updated event data
               const event = await database.getEventById(eventId);
               if (event) {
-                const embed = embedBuilder.createEventEmbed(event);
+                // Check if there's an existing event message in this channel
+                const channelMessages = await interaction.channel.messages.fetch({ limit: 20 });
+                let eventMessage = null;
                 
-                // Create signup buttons for the updated event display
+                // Look for a message that has our event ID in a button custom ID
+                for (const [, message] of channelMessages) {
+                  if (message.components && message.components.length > 0) {
+                    for (const row of message.components) {
+                      for (const component of row.components) {
+                        if (component.customId && component.customId.includes(`signup_${event.id}_`)) {
+                          eventMessage = message;
+                          break;
+                        }
+                      }
+                      if (eventMessage) break;
+                    }
+                  }
+                  if (eventMessage) break;
+                }
+                
+                // Create updated embed and components
+                const embed = embedBuilder.createEventEmbed(event);
                 const row = new ActionRowBuilder()
                   .addComponents(
                     new ButtonBuilder()
@@ -264,21 +285,28 @@ module.exports = {
                       .setEmoji('1352737043972624518')
                       .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
+                      .setCustomId(`signup_${event.id}_TENTATIVE`)
+                      .setLabel('Tentative')
+                      .setEmoji('⏳')
+                      .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
                       .setCustomId(`signup_${event.id}_ABSENT`)
                       .setLabel('Absent')
                       .setEmoji('❌')
                       .setStyle(ButtonStyle.Secondary)
                   );
                 
-                await interaction.followUp({
-                  content: 'Event signup updated:',
-                  embeds: [embed],
-                  components: [row]
-                });
+                // If we found an existing message, edit it; otherwise don't create a new one
+                if (eventMessage) {
+                  await eventMessage.edit({
+                    embeds: [embed],
+                    components: [row]
+                  });
+                }
               }
             } catch (refreshError) {
               console.error('Error refreshing event details:', refreshError);
-              // Continue without refresh
+              // Continue without refresh - error here shouldn't impact the user's signup
             }
           } else {
             await interaction.reply({ 

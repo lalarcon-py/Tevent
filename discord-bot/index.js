@@ -1737,6 +1737,9 @@ async function getItemType(dbClient, storageItemId) {
   }
 }
 
+// Set max event listeners to prevent warning
+client.setMaxListeners(100);
+
 // Button interaction handler
 // Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
@@ -1892,21 +1895,83 @@ client.on('interactionCreate', async (interaction) => {
           
           // Handle different role types
           if (role === 'ABSENT') {
-            // Remove from participants
-            await pool.query(
-              'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-              [eventId, userId]
-            );
-            
-            // Add to absentees
-            await pool.query(
-              `INSERT INTO event_absentees 
-                (id, guild_id, event_id, user_id, created_at, updated_at)
-              VALUES 
-                (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-              ON CONFLICT (event_id, user_id) DO NOTHING`,
-              [appGuildId, eventId, userId]
-            );
+            try {
+              // Ensure absentees table has correct constraints
+              await pool.query(`
+                DO $$
+                BEGIN
+                  -- Check if the constraint exists
+                  IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'event_absentees_event_user_unique'
+                  ) THEN
+                    -- Try to add the constraint if it doesn't exist
+                    BEGIN
+                      ALTER TABLE event_absentees 
+                      ADD CONSTRAINT event_absentees_event_user_unique 
+                      UNIQUE (event_id, user_id);
+                    EXCEPTION WHEN others THEN
+                      -- If we can't add it, the table might not exist or have a different schema
+                      NULL;
+                    END;
+                  END IF;
+                END
+                $$;
+              `);
+              
+              // First remove from participants
+              await pool.query(
+                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
+                [eventId, userId]
+              );
+              
+              // Also remove from tentative if it exists
+              try {
+                await pool.query(
+                  'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
+                  [eventId, userId]
+                );
+              } catch (err) {
+                // Ignore errors - table might not exist
+                console.log(`[DEBUG] Tentative table might not exist: ${err.message}`);
+              }
+              
+              // Add to absentees - first try with conflict handling
+              try {
+                await pool.query(
+                  `INSERT INTO event_absentees 
+                    (id, guild_id, event_id, user_id, created_at, updated_at)
+                  VALUES 
+                    (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+                  ON CONFLICT (event_id, user_id) DO UPDATE SET
+                    updated_at = NOW()`,
+                  [appGuildId, eventId, userId]
+                );
+              } catch (insertErr) {
+                // If the ON CONFLICT clause fails, try a different approach
+                if (insertErr.message.includes('constraint')) {
+                  // Delete any existing row first
+                  await pool.query(
+                    'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
+                    [eventId, userId]
+                  );
+                  
+                  // Then insert without conflict handling
+                  await pool.query(
+                    `INSERT INTO event_absentees 
+                      (id, guild_id, event_id, user_id, created_at, updated_at)
+                    VALUES 
+                      (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
+                    [appGuildId, eventId, userId]
+                  );
+                } else {
+                  throw insertErr; // Rethrow if it's a different error
+                }
+              }
+            } catch (absenceError) {
+              console.error(`[ERROR] Error marking absence: ${absenceError.message}`);
+              throw absenceError;
+            }
             
             await safeReply(interaction, {
               content: `You have been marked as absent for "${eventDetails.title}".`,
