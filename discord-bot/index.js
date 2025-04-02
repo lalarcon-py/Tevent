@@ -3433,105 +3433,262 @@ client.on('interactionCreate', async (interaction) => {
       
       // Handle event signup buttons
       // Full updated function for handling signup button interactions
+      // Replace any existing signup_ button handlers with this one
       client.on('interactionCreate', async (interaction) => {
         // Only handle signup button interactions
         if (!interaction.isButton() || !interaction.customId.startsWith('signup_')) return;
         
-        // Request ID for tracing and debugging
-        const requestId = Math.random().toString(36).substring(2, 10);
-        console.log(`[INFO][${requestId}] Processing signup button: ${interaction.customId}`);
-        
-        // Handle duplicate prevention with cooldown system
+        // Prevent duplicate processing
         const cooldownKey = `${interaction.user.id}:${interaction.customId}`;
         const now = Date.now();
         const cooldownTime = cooldownMap.get(cooldownKey);
         const COOLDOWN_MS = 5000; // 5 second cooldown
         
         if (cooldownTime && now - cooldownTime < COOLDOWN_MS) {
-          console.log(`[INFO][${requestId}] Ignoring duplicate request (cooldown active)`);
-          try {
-            await interaction.deferUpdate().catch(() => {});
-            return;
-          } catch (err) {
-            return; // Silently fail on duplicate requests
-          }
+          console.log(`[INFO] Ignoring duplicate signup from ${interaction.user.id} (cooldown active)`);
+          return await interaction.deferUpdate().catch(() => {});
         }
         
-        // Set cooldown immediately to prevent race conditions
+        // Mark this interaction as in progress
         cooldownMap.set(cooldownKey, now);
         
-        // Try to defer the interaction first
         try {
-          await interaction.deferReply({ ephemeral: true }).catch(error => {
-            if (error.code !== 40060) { // Ignore "already acknowledged" errors
-              console.warn(`[WARN][${requestId}] Defer error: ${error.message}`);
-            }
-          });
-        } catch (deferError) {
-          console.warn(`[WARN][${requestId}] Defer error: ${deferError.message}`);
-        }
-        
-        try {
-          // Parse the custom ID safely
+          // Get our local database helper instead of the problematic module
+          const dbHelper = require('./utils/database-helper');
+          
+          // Parse the custom ID
           const [_, eventId, role] = interaction.customId.split('_');
           const isAbsent = role === 'ABSENT';
+          
+          try {
+            await interaction.deferReply({ ephemeral: true });
+          } catch (error) {
+            // If already acknowledged, continue silently
+            if (error.code !== 40060) {
+              console.error(`Failed to defer interaction: ${error.message}`);
+            }
+          }
           
           // Get guild mapping
           const discordGuildId = interaction.guild?.id;
           if (!discordGuildId) {
-            return await safeReply(interaction, {
+            return await interaction.editReply({ 
               content: 'This button must be used in a Discord server.',
-              ephemeral: true
-            });
+              ephemeral: true 
+            }).catch(() => {});
           }
           
-          // Get app guild ID from mapping
-          const appGuildId = await getGuildMapping(discordGuildId);
+          // Get app guild ID 
+          const appGuildId = await dbHelper.getGuildIdFromDiscord(discordGuildId);
           if (!appGuildId) {
-            return await safeReply(interaction, {
+            return await interaction.editReply({ 
               content: 'This Discord server is not linked to an application guild.',
-              ephemeral: true
-            });
+              ephemeral: true 
+            }).catch(() => {});
           }
           
           // Get user from discord ID
-          const userResult = await pool.query(
-            'SELECT id, username FROM users WHERE discord_id = $1',
-            [interaction.user.id]
-          );
-          
-          if (!userResult.rows || userResult.rows.length === 0) {
-            return await safeReply(interaction, {
+          const user = await dbHelper.getUserByDiscordId(interaction.user.id);
+          if (!user) {
+            return await interaction.editReply({ 
               content: 'You need to register on the website first before signing up for events.',
-              ephemeral: true
-            });
+              ephemeral: true 
+            }).catch(() => {});
           }
           
-          const userId = userResult.rows[0].id;
+          // Update event participants
+          const result = await dbHelper.updateEventParticipants(
+            eventId, user.id, appGuildId, role, isAbsent
+          );
           
-          // Use the proper database method for updating participation
-          const updateResult = await database.updateEventParticipants(eventId, userId, appGuildId, role, isAbsent);
-          
-          // Respond to user based on update result
-          await safeReply(interaction, {
-            content: updateResult.success ? 
-              updateResult.message : 
-              `Error: ${updateResult.message || 'Unknown error'}`,
-            ephemeral: true
-          });
-          
-          // Update the event display in the background
-          setTimeout(() => updateEventDisplay(interaction, eventId, appGuildId), 100);
-          
+          // Handle the response
+          if (result.success) {
+            await interaction.editReply({ 
+              content: result.message,
+              ephemeral: true 
+            }).catch(() => {});
+            
+            // Update event display in background
+            setTimeout(async () => {
+              try {
+                // Get the message that contains the embed
+                const message = interaction.message;
+                if (!message) return;
+                
+                // Re-render the event message
+                await updateDisplayHelper(message, eventId, appGuildId, pool);
+              } catch (displayError) {
+                console.error(`Error updating display: ${displayError.message}`);
+              }
+            }, 100);
+          } else {
+            await interaction.editReply({ 
+              content: result.message || 'An error occurred. Please try again.',
+              ephemeral: true 
+            }).catch(() => {});
+          }
         } catch (error) {
-          console.error(`[ERROR][${requestId}] Error in signup handler: ${error.message}`);
+          console.error(`Error processing signup button: ${error.message}`);
           
-          await safeReply(interaction, {
-            content: 'An error occurred while processing your signup. Please try again.',
-            ephemeral: true
-          });
+          try {
+            await interaction.editReply({ 
+              content: 'An error occurred while processing your signup. Please try again.',
+              ephemeral: true 
+            }).catch(() => {});
+          } catch (replyError) {
+            // Ignore any further errors
+          }
         }
       });
+
+// Helper function for updating the event display
+async function updateDisplayHelper(message, eventId, guildId, pool) {
+  try {
+    // Get participants data
+    const participantsResult = await pool.query(
+      `SELECT ep.role, u.username, u.discord_id
+       FROM event_participants ep
+       JOIN users u ON ep.user_id = u.id
+       WHERE ep.event_id = $1`,
+      [eventId]
+    );
+    
+    // Get absentees
+    const absenteesResult = await pool.query(
+      `SELECT u.username
+       FROM event_absentees ea
+       JOIN users u ON ea.user_id = u.id
+       WHERE ea.event_id = $1`,
+      [eventId]
+    );
+    
+    // Get tentative if table exists
+    let tentativeResult = { rows: [] };
+    try {
+      tentativeResult = await pool.query(
+        `SELECT u.username
+         FROM event_tentative et
+         JOIN users u ON et.user_id = u.id
+         WHERE et.event_id = $1`,
+        [eventId]
+      );
+    } catch (e) {
+      // Table might not exist, ignore
+    }
+    
+    // Get event details
+    const eventResult = await pool.query(
+      `SELECT * FROM events WHERE id = $1`,
+      [eventId]
+    );
+    
+    if (!eventResult.rows.length) return;
+    
+    const event = eventResult.rows[0];
+    
+    // Group participants by role
+    const tanks = participantsResult.rows.filter(p => p.role === 'TANK');
+    const healers = participantsResult.rows.filter(p => p.role === 'HEALER');
+    const dps = participantsResult.rows.filter(p => p.role === 'DPS');
+    
+    // Emojis for roles
+    const tankEmoji = '<:Tank:1352736996405022780>';
+    const healerEmoji = '<:Healer:1352737011479482468>';
+    const dpsEmoji = '<:DPS:1352737043972624518>';
+    
+    // Create updated embed
+    const embed = new EmbedBuilder()
+      .setTitle(event.title || 'Event')
+      .setColor('#1a64f3')
+      .setDescription(event.description || 'No description provided')
+      .addFields(
+        { 
+          name: '⏰ Time', 
+          value: formatDiscordTimestamp(event.event_time),
+          inline: false 
+        },
+        { 
+          name: `${tankEmoji} Tanks (${tanks.length}/${event.tanks || 0})`,
+          value: tanks.length > 0 ? 
+            tanks.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—',
+          inline: true 
+        },
+        { 
+          name: `${healerEmoji} Healers (${healers.length}/${event.healers || 0})`,
+          value: healers.length > 0 ? 
+            healers.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—',
+          inline: true 
+        },
+        { 
+          name: `${dpsEmoji} DPS (${dps.length}/${event.dps || 0})`,
+          value: dps.length > 0 ? 
+            dps.map((p, i) => `${i+1}. ${p.username}`).join('\n') : 
+            '—',
+          inline: true 
+        },
+        {
+          name: `❌ Absent (${absenteesResult.rows.length})`,
+          value: absenteesResult.rows.length > 0 ? 
+            absenteesResult.rows.map((a, i) => `${i+1}. ${a.username}`).join('\n') : 
+            '—',
+          inline: true
+        },
+        {
+          name: `⏳ Tentative (${tentativeResult.rows.length})`,
+          value: tentativeResult.rows.length > 0 ? 
+            tentativeResult.rows.map((t, i) => `${i+1}. ${t.username}`).join('\n') : 
+            '—',
+          inline: true
+        }
+      )
+      .setFooter({ text: `Event ID: ${eventId}` });
+    
+    // Create signup buttons
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_TANK`)
+          .setLabel('Tank')
+          .setEmoji('1352736996405022780')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_HEALER`)
+          .setLabel('Healer')
+          .setEmoji('1352737011479482468')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_DPS`)
+          .setLabel('DPS')
+          .setEmoji('1352737043972624518')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_TENTATIVE`)
+          .setLabel('Tentative')
+          .setEmoji('⏳')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`signup_${eventId}_ABSENT`)
+          .setLabel('Absent')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Secondary)
+      );
+    
+    // Update message
+    await message.edit({ embeds: [embed], components: [row] });
+  } catch (error) {
+    console.error(`Error updating event display: ${error.message}`);
+  }
+}
+
+// Helper for Discord timestamps
+function formatDiscordTimestamp(date, format = 'F') {
+  if (!date) return 'Time not set';
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
+  return `<t:${unixTimestamp}:${format}>`;
+}
     }
     // Handle select menu interactions
     else if (interaction.isSelectMenu()) {
