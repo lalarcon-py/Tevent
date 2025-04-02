@@ -10,7 +10,10 @@ const {
   ButtonStyle, 
   REST, 
   Routes,
-  Collection 
+  Collection,
+  TextInputBuilder,
+  TextInputStyle,
+  ModalBuilder
 } = require('discord.js');
 const axios = require('axios');
 const express = require('express');
@@ -21,6 +24,13 @@ const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
+
+// Import database utilities to ensure they're available
+try {
+  const database = require('./utils/database');
+} catch (err) {
+  console.warn('Warning: Failed to load database utilities:', err.message);
+}
 const cooldownMap = new Map();
 
 const WEAPON_SPECS = {
@@ -1740,6 +1750,9 @@ async function getItemType(dbClient, storageItemId) {
 // Set max event listeners to prevent warning
 client.setMaxListeners(100);
 
+// Import required components for modals
+const { TextInputBuilder, TextInputStyle, ModalBuilder } = require('discord.js');
+
 // Button interaction handler
 // Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
@@ -1895,82 +1908,34 @@ client.on('interactionCreate', async (interaction) => {
           
           // Handle different role types
           if (role === 'ABSENT') {
+            // Show modal to collect reason
             try {
-              // Ensure absentees table has correct constraints
-              await pool.query(`
-                DO $$
-                BEGIN
-                  -- Check if the constraint exists
-                  IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'event_absentees_event_user_unique'
-                  ) THEN
-                    -- Try to add the constraint if it doesn't exist
-                    BEGIN
-                      ALTER TABLE event_absentees 
-                      ADD CONSTRAINT event_absentees_event_user_unique 
-                      UNIQUE (event_id, user_id);
-                    EXCEPTION WHEN others THEN
-                      -- If we can't add it, the table might not exist or have a different schema
-                      NULL;
-                    END;
-                  END IF;
-                END
-                $$;
-              `);
+              // Create a unique identifier for this absence
+              const modalId = `absent_reason_${eventId}_${Date.now()}`;
               
-              // First remove from participants
-              await pool.query(
-                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                [eventId, userId]
+              // Show modal to collect absence reason
+              return await interaction.showModal(
+                new ModalBuilder()
+                  .setCustomId(modalId)
+                  .setTitle('Absence Reason')
+                  .addComponents(
+                    new ActionRowBuilder().addComponents(
+                      new TextInputBuilder()
+                        .setCustomId('absence_reason')
+                        .setLabel('Reason for absence')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Please provide a reason for your absence')
+                        .setRequired(true)
+                        .setMaxLength(1000)
+                    )
+                  )
               );
-              
-              // Also remove from tentative if it exists
-              try {
-                await pool.query(
-                  'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
-                  [eventId, userId]
-                );
-              } catch (err) {
-                // Ignore errors - table might not exist
-                console.log(`[DEBUG] Tentative table might not exist: ${err.message}`);
-              }
-              
-              // Add to absentees - first try with conflict handling
-              try {
-                await pool.query(
-                  `INSERT INTO event_absentees 
-                    (id, guild_id, event_id, user_id, created_at, updated_at)
-                  VALUES 
-                    (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-                  ON CONFLICT (event_id, user_id) DO UPDATE SET
-                    updated_at = NOW()`,
-                  [appGuildId, eventId, userId]
-                );
-              } catch (insertErr) {
-                // If the ON CONFLICT clause fails, try a different approach
-                if (insertErr.message.includes('constraint')) {
-                  // Delete any existing row first
-                  await pool.query(
-                    'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-                    [eventId, userId]
-                  );
-                  
-                  // Then insert without conflict handling
-                  await pool.query(
-                    `INSERT INTO event_absentees 
-                      (id, guild_id, event_id, user_id, created_at, updated_at)
-                    VALUES 
-                      (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
-                    [appGuildId, eventId, userId]
-                  );
-                } else {
-                  throw insertErr; // Rethrow if it's a different error
-                }
-              }
-            } catch (absenceError) {
-              console.error(`[ERROR] Error marking absence: ${absenceError.message}`);
-              throw absenceError;
+            } catch (modalError) {
+              console.error(`[ERROR] Error showing absence modal: ${modalError.message}`);
+              await safeReply(interaction, { 
+                content: 'An error occurred while processing your absence request.',
+                ephemeral: true
+              });
             }
             
             await safeReply(interaction, {
@@ -1978,51 +1943,32 @@ client.on('interactionCreate', async (interaction) => {
               ephemeral: true
             });
           } else if (role === 'TENTATIVE') {
-            // Handle tentative signup
+            // Show modal to collect reason
             try {
-              // Check if we have a tentative table, if not create one
-              await pool.query(`
-                CREATE TABLE IF NOT EXISTS event_tentative (
-                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                  guild_id UUID NOT NULL,
-                  event_id UUID NOT NULL, 
-                  user_id UUID NOT NULL,
-                  created_at TIMESTAMP DEFAULT NOW(),
-                  updated_at TIMESTAMP DEFAULT NOW(),
-                  UNIQUE(event_id, user_id)
-                )
-              `);
+              // Create a unique identifier for this tentative status
+              const modalId = `tentative_reason_${eventId}_${Date.now()}`;
               
-              // Remove from participants and absentees
-              await pool.query(
-                'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                [eventId, userId]
+              // Show modal to collect tentative reason
+              return await interaction.showModal(
+                new ModalBuilder()
+                  .setCustomId(modalId)
+                  .setTitle('Tentative Status')
+                  .addComponents(
+                    new ActionRowBuilder().addComponents(
+                      new TextInputBuilder()
+                        .setCustomId('tentative_reason')
+                        .setLabel('Reason for tentative status')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Please explain why you are marking yourself as tentative')
+                        .setRequired(true)
+                        .setMaxLength(1000)
+                    )
+                  )
               );
-              
-              await pool.query(
-                'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-                [eventId, userId]
-              );
-              
-              // Add to tentative
-              await pool.query(
-                `INSERT INTO event_tentative 
-                  (id, guild_id, event_id, user_id, created_at, updated_at)
-                VALUES
-                  (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
-                ON CONFLICT (event_id, user_id) DO UPDATE SET
-                  updated_at = NOW()`,
-                [appGuildId, eventId, userId]
-              );
-              
-              await safeReply(interaction, {
-                content: `You have been marked as tentative for "${eventDetails.title}".`,
-                ephemeral: true
-              });
-            } catch (tentativeError) {
-              console.error('Error handling tentative signup:', tentativeError);
-              await safeReply(interaction, {
-                content: `An error occurred while marking you as tentative.`,
+            } catch (modalError) {
+              console.error(`[ERROR] Error showing tentative modal: ${modalError.message}`);
+              await safeReply(interaction, { 
+                content: 'An error occurred while processing your tentative status request.',
                 ephemeral: true
               });
             }
