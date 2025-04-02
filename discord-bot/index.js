@@ -23,7 +23,6 @@ const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
 const cooldownMap = new Map();
 const database = require('./utils/database');
-const { pool } = require('../config/database');
 
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
