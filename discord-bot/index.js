@@ -13,7 +13,8 @@ const {
   Collection,
   TextInputBuilder,
   TextInputStyle,
-  ModalBuilder
+  ModalBuilder,
+  ShardingManager
 } = require('discord.js');
 const axios = require('axios');
 const express = require('express');
@@ -24,6 +25,66 @@ const cron = require('node-cron');
 const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
+const eventSignups = require('./utils/eventSignups');
+
+function setupSharding() {
+  const manager = new ShardingManager('./index.js', { 
+    token: process.env.DISCORD_BOT_TOKEN,
+    totalShards: 'auto', // Automatically determine optimal shard count
+    respawn: true,
+    shardArgs: ['--sharded'],
+    execArgv: ['--max-old-space-size=4096'], // Allocate more memory to each shard
+  });
+
+  manager.on('shardCreate', shard => {
+    console.log(`[SHARD] Launched shard ${shard.id}`);
+    
+    shard.on('ready', () => {
+      console.log(`[SHARD] Shard ${shard.id} connected and ready`);
+    });
+    
+    shard.on('disconnect', () => {
+      console.warn(`[SHARD] Shard ${shard.id} disconnected`);
+    });
+    
+    shard.on('reconnecting', () => {
+      console.log(`[SHARD] Shard ${shard.id} reconnecting`);
+    });
+    
+    shard.on('death', (process) => {
+      console.error(`[SHARD] Shard ${shard.id} died with exit code ${process.exitCode}`);
+    });
+    
+    shard.on('error', (error) => {
+      console.error(`[SHARD] Shard ${shard.id} encountered error:`, error);
+    });
+  });
+
+  // Start sharding
+  manager.spawn()
+    .then(shards => {
+      console.log(`[SHARDING] All ${shards.size} shards spawned successfully`);
+    })
+    .catch(error => {
+      console.error(`[SHARDING] Failed to spawn shards:`, error);
+    });
+}
+
+// Check if this is the main process or a shard
+if (!process.argv.includes('--sharded')) {
+  // This is the main process - set up the sharding manager
+  setupSharding();
+} else {
+  // This is a shard process - continue with normal bot initialization
+  // Import database utilities to ensure they're available
+  try {
+    const database = require('./utils/database');
+  } catch (err) {
+    console.warn('Warning: Failed to load database utilities:', err.message);
+  }
+  const cooldownMap = new Map();
+
+
 
 // Import database utilities to ensure they're available
 try {
@@ -31,7 +92,6 @@ try {
 } catch (err) {
   console.warn('Warning: Failed to load database utilities:', err.message);
 }
-const cooldownMap = new Map();
 
 const WEAPON_SPECS = {
   'Crossbow|Dagger': 'Scorpion',
@@ -84,7 +144,11 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL ? {
     rejectUnauthorized: false
-  } : false
+  } : false,
+  max: 100, // Increase maximum connections
+  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
+  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection not established
+  maxUses: 7500 // Close connections after 7500 queries to prevent memory issues
 });
 
 // Test database connection
@@ -4690,325 +4754,92 @@ client.on('interactionCreate', async (interaction) => {
         
         if (customId.startsWith('signup_')) {
           try {
-
-            await handleEventSignupButton(interaction);
-            return;
-            // Log the interaction being processed
-            console.log(`[INFO] Processing signup button: ${customId}`);
-            
-            // Check for duplicate interactions (mobile users often tap multiple times)
-            const interactionKey = `${interaction.user.id}:${customId}`;
-            const lastInteraction = recentInteractions.get(interactionKey);
-            const now = Date.now();
-            
-            if (lastInteraction && now - lastInteraction < INTERACTION_COOLDOWN_MS) {
-              console.log(`[INFO] Ignoring duplicate interaction from ${interaction.user.id} (cooldown active)`);
-              return await interaction.deferUpdate().catch(() => {}); // Silently acknowledge without processing
-            }
-            
-            // Track this interaction
-            recentInteractions.set(interactionKey, now);
-            
-            // Clean up old interactions periodically
-            if (recentInteractions.size > 1000) {
-              for (const [key, timestamp] of recentInteractions.entries()) {
-                if (now - timestamp > INTERACTION_COOLDOWN_MS) {
-                  recentInteractions.delete(key);
-                }
-              }
-            }
-            
-            // Immediately defer the reply to prevent timeout - catch errors
-            try {
-              await interaction.deferReply({ ephemeral: true });
-            } catch (error) {
-              if (error.code === 40060) {
-                console.log(`[WARN] Interaction ${interaction.id} already acknowledged, continuing processing`);
-                // Continue execution even if the interaction was already acknowledged
-              } else {
-                throw error; // Rethrow other errors
-              }
-            }
-            
             // Parse event ID and role from the button's custom ID
             const [_, eventId, role] = customId.split('_');
-            console.log(`[DEBUG] Processing signup for event: ${eventId}, role: ${role}`);
             
-            // Check guild mapping
-            const discordGuildId = interaction.guild?.id;
-            if (!discordGuildId) {
-              return await safeReply(interaction, {
-                content: 'This button must be used in a Discord server.',
-                ephemeral: true
-              });
-            }
-            
-            // Get app guild ID from mapping
-            const mappingResult = await sequelize.query(
-              `SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1`,
-              { 
-                bind: [discordGuildId.toString()],
-                type: sequelize.QueryTypes.SELECT
-              }
-            );
-            
-            if (!mappingResult || mappingResult.length === 0) {
-              return await safeReply(interaction, {
-                content: 'This Discord server is not linked to an application guild.',
-                ephemeral: true
-              });
-            }
-            
-            const appGuildId = mappingResult[0].app_guild_id;
-      
-            // Get user from discord ID
-            const userResult = await sequelize.query(
-              'SELECT id, username, builds FROM users WHERE discord_id = $1',
-              { 
-                bind: [interaction.user.id],
-                type: sequelize.QueryTypes.SELECT
-              }
-            );
-            
-            if (!userResult || userResult.length === 0) {
-              return await safeReply(interaction, {
-                content: 'You need to register on the website first before signing up for events.',
-                ephemeral: true
-              });
-            }
-            
-            const userId = userResult[0].id;
-            
-            // Get event details
-            const eventResult = await sequelize.query(
-              'SELECT * FROM events WHERE id = $1 AND guild_id = $2',
-              { 
-                bind: [eventId, appGuildId],
-                type: sequelize.QueryTypes.SELECT
-              }
-            );
-            
-            if (!eventResult || eventResult.length === 0) {
-              return await safeReply(interaction, {
-                content: 'Event not found.',
-                ephemeral: true
-              });
-            }
-            
-            const eventDetails = eventResult[0];
-            
-            // Handle different role types - use a database transaction for atomic operations
-            const client = await sequelize.getQueryInterface().sequelize.connectionManager.getConnection();
-            try {
-              await client.query('BEGIN');
-              
-              if (role === 'ABSENT') {
-                // Remove from participants
-                await client.query(
-                  'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                  [eventId, userId]
-                );
-                
-                // First check if already marked absent
-                const existingAbsentee = await client.query(
-                  'SELECT id FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-                  [eventId, userId]
-                );
-                
-                if (existingAbsentee.rows.length === 0) {
-                  // Add to absentees
-                  await client.query(
-                    `INSERT INTO event_absentees 
-                      (id, guild_id, event_id, user_id, created_at, updated_at)
-                    VALUES 
-                      (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
-                    [appGuildId, eventId, userId]
-                  );
-                }
-                
-                await client.query('COMMIT');
-                
-                await safeReply(interaction, {
-                  content: `You have been marked as absent for "${eventDetails.title}".`,
+            // Validate the required data
+            if (!eventId || !role) {
+              console.error(`[ERROR] Invalid signup button data: ${customId}`);
+              try {
+                await interaction.reply({
+                  content: 'Invalid button data. Please try again or contact an administrator.',
                   ephemeral: true
                 });
-              } else if (role === 'TENTATIVE') {
-                // Handle tentative signup
-                try {
-                  // Check if we have a tentative table, if not create one
-                  await client.query(`
-                    CREATE TABLE IF NOT EXISTS event_tentative (
-                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                      guild_id UUID NOT NULL,
-                      event_id UUID NOT NULL, 
-                      user_id UUID NOT NULL,
-                      created_at TIMESTAMP DEFAULT NOW(),
-                      updated_at TIMESTAMP DEFAULT NOW()
-                    )
-                  `);
-                  
-                  // Remove from participants and absentees
-                  await client.query(
-                    'DELETE FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                    [eventId, userId]
-                  );
-                  
-                  await client.query(
-                    'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-                    [eventId, userId]
-                  );
-                  
-                  // Check if already tentative
-                  const existingTentative = await client.query(
-                    'SELECT id FROM event_tentative WHERE event_id = $1 AND user_id = $2',
-                    [eventId, userId]
-                  );
-                  
-                  if (existingTentative.rows.length === 0) {
-                    // Add to tentative
-                    await client.query(
-                      `INSERT INTO event_tentative 
-                        (id, guild_id, event_id, user_id, created_at, updated_at)
-                      VALUES
-                        (gen_random_uuid(), $1, $2, $3, NOW(), NOW())`,
-                      [appGuildId, eventId, userId]
-                    );
-                  }
-                  
-                  await client.query('COMMIT');
-                  
-                  await safeReply(interaction, {
-                    content: `You have been marked as tentative for "${eventDetails.title}".`,
-                    ephemeral: true
-                  });
-                } catch (tentativeError) {
-                  await client.query('ROLLBACK');
-                  console.error('Error handling tentative signup:', tentativeError);
-                  await safeReply(interaction, {
-                    content: `An error occurred while marking you as tentative.`,
-                    ephemeral: true
-                  });
-                }
+              } catch (error) {
+                console.error(`[ERROR] Failed to respond to invalid button: ${error.message}`);
+              }
+              return;
+            }
+            
+            // Always defer the reply first to prevent timeout
+            try {
+              await interaction.deferReply({ ephemeral: true });
+            } catch (deferError) {
+              // If already deferred or acknowledged, we'll handle it later
+              console.log(`[WARN] Defer error: ${deferError.message}`);
+            }
+            
+            // Use our new centralized handler to process the signup
+            const result = await eventSignups.handleEventSignup(interaction, eventId, role);
+            
+            // Send appropriate response based on the interaction state
+            try {
+              if (interaction.deferred) {
+                await interaction.editReply({
+                  content: result.message,
+                  ephemeral: true
+                });
+              } else if (interaction.replied) {
+                await interaction.followUp({
+                  content: result.message,
+                  ephemeral: true
+                });
               } else {
-                // Regular role signup
-                
-                // Check if already signed up
-                const existingSignupResult = await client.query(
-                  'SELECT id FROM event_participants WHERE event_id = $1 AND user_id = $2',
-                  [eventId, userId]
-                );
-                
-                if (existingSignupResult.rows.length > 0) {
-                  // Update existing signup
-                  await client.query(
-                    'UPDATE event_participants SET role = $1 WHERE id = $2',
-                    [role, existingSignupResult.rows[0].id]
-                  );
-                  
-                  await client.query('COMMIT');
-                  
-                  await safeReply(interaction, {
-                    content: `Your role for "${eventDetails.title}" has been updated to ${role}.`,
-                    ephemeral: true
-                  });
-                } else {
-                  // Check role capacity
-                  const roleCountsResult = await client.query(
-                    `SELECT 
-                      COUNT(*) FILTER (WHERE role = 'TANK') as tank_count,
-                      COUNT(*) FILTER (WHERE role = 'HEALER') as healer_count,
-                      COUNT(*) FILTER (WHERE role = 'DPS') as dps_count
-                    FROM event_participants
-                    WHERE event_id = $1`,
-                    [eventId]
-                  );
-                  
-                  const roleCounts = roleCountsResult.rows[0];
-                  
-                  // Verify there's room for this role
-                  const roleLimits = {
-                    'TANK': eventDetails.tanks || 0,
-                    'HEALER': eventDetails.healers || 0,
-                    'DPS': eventDetails.dps || 0
-                  };
-                  
-                  const currentCounts = {
-                    'TANK': parseInt(roleCounts?.tank_count || 0),
-                    'HEALER': parseInt(roleCounts?.healer_count || 0),
-                    'DPS': parseInt(roleCounts?.dps_count || 0)
-                  };
-                  
-                  if (currentCounts[role] >= roleLimits[role]) {
-                    await client.query('ROLLBACK');
-                    return await safeReply(interaction, {
-                      content: `Sorry, the ${role} spots are full for this event.`,
-                      ephemeral: true
-                    });
-                  }
-                  
-                  // Remove from absentees if marked before
-                  await client.query(
-                    'DELETE FROM event_absentees WHERE event_id = $1 AND user_id = $2',
-                    [eventId, userId]
-                  );
-                  
-                  // Remove from tentative if marked before and if the table exists
-                  try {
-                    await client.query(
-                      'DELETE FROM event_tentative WHERE event_id = $1 AND user_id = $2',
-                      [eventId, userId]
-                    );
-                  } catch (e) {
-                    // Table might not exist, ignore
-                  }
-                  
-                  // Create new signup
-                  await client.query(
-                    `INSERT INTO event_participants 
-                      (id, guild_id, event_id, user_id, role, created_at, updated_at)
-                    VALUES
-                      (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())`,
-                    [appGuildId, eventId, userId, role]
-                  );
-                  
-                  await client.query('COMMIT');
-                  
-                  await safeReply(interaction, {
-                    content: `You have been signed up for "${eventDetails.title}" as ${role}.`,
-                    ephemeral: true
+                await interaction.reply({
+                  content: result.message,
+                  ephemeral: true
+                });
+              }
+            } catch (replyError) {
+              console.error(`[ERROR] Failed to send signup response: ${replyError.message}`);
+              
+              // Try channel message as a last resort
+              try {
+                if (interaction.channel) {
+                  await interaction.channel.send({
+                    content: `<@${interaction.user.id}>, ${result.message} (Error sending direct response)`,
+                    ephemeral: false
                   });
                 }
+              } catch (channelError) {
+                console.error(`[ERROR] Failed to send channel message: ${channelError.message}`);
               }
-              
-              // Update the message with new counts - careful error handling
-              try {
-                await updateEventDisplay(interaction, eventId, eventDetails, appGuildId);
-              } catch (messageError) {
-                console.error(`[ERROR] Error updating event message: ${messageError.message}`);
-                // Don't rethrow - we've already handled the primary interaction
-              }
-            } catch (error) {
-              try {
-                await client.query('ROLLBACK');
-              } catch (rollbackError) {
-                console.error(`Error in rollback: ${rollbackError.message}`);
-              }
-              console.error(`Error in event signup transaction: ${error.message}`);
-              throw error;
-            } finally {
-              sequelize.connectionManager.releaseConnection(client);
             }
           } catch (error) {
-            console.error(`Error processing signup button:`, error);
+            console.error(`[ERROR] Error processing signup button:`, error);
             
-            // Try to salvage the interaction if possible
+            // Try to send a response even if there was an error
             try {
-              await safeReply(interaction, {
-                content: 'An error occurred while processing your signup. Please try again.',
-                ephemeral: true
-              });
+              const errorMessage = 'An error occurred while processing your signup. Please try again.';
+              
+              if (interaction.deferred) {
+                await interaction.editReply({
+                  content: errorMessage,
+                  ephemeral: true
+                });
+              } else if (!interaction.replied) {
+                await interaction.reply({
+                  content: errorMessage,
+                  ephemeral: true
+                });
+              } else {
+                await interaction.followUp({
+                  content: errorMessage,
+                  ephemeral: true
+                });
+              }
             } catch (replyError) {
-              console.error(`Failed to send error response: ${replyError.message}`);
+              console.error(`[ERROR] Failed to send error message: ${replyError.message}`);
             }
           }
         }
@@ -7454,6 +7285,7 @@ function startItemPolling() {
       console.error('Error in item polling:', error);
     }
   }, 30000);
+}
 }
 
 // Initialize bot
