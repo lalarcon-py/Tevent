@@ -7,8 +7,14 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Bundle app source
-COPY . .
+# Copy app directory first
+COPY app /app/app
+
+# Copy discord-bot directory
+COPY discord-bot /app/discord-bot
+
+# Copy other necessary files
+COPY index.js /app/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/uploads
@@ -22,4 +28,4 @@ EXPOSE 3000
 EXPOSE 3300
 
 # Set startup command
-CMD ["node", "app/index.js"]
+CMD ["sh", "-c", "node /app/app/index.js"]

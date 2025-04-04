@@ -73,7 +73,7 @@ async function initialize() {
   
   // Import event signups module
   try {
-    const eventSignups = require('../discord-bot/utils/eventSignups');
+    const eventSignups = require('/app/discord-bot/utils/eventSignups');
     logWithTimestamp('EventSignups module loaded successfully');
     
     // Initialize the eventSignups module with the database pool
@@ -87,7 +87,7 @@ async function initialize() {
   // Load Discord bot (server will handle the bot startup)
   try {
     logWithTimestamp('Starting Discord bot server');
-    require('../discord-bot/server.js');
+    require('/app/discord-bot/server.js');
     logWithTimestamp('Discord bot server started successfully');
   } catch (err) {
     logWithTimestamp(`Failed to start Discord bot server: ${err.message}`, 'ERROR');
