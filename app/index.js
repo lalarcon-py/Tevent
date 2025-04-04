@@ -71,9 +71,11 @@ async function initialize() {
     logWithTimestamp('REDIS_URL not defined in production, Redis features will be disabled', 'WARN');
   }
   
-  // Import event signups module
+// Import event signups module
   try {
-    const eventSignups = require('/app/discord-bot/utils/eventSignups');
+    // Use path.resolve to find the module regardless of working directory
+    const eventSignupsPath = path.resolve(__dirname, '../discord-bot/utils/eventSignups');
+    const eventSignups = require(eventSignupsPath);
     logWithTimestamp('EventSignups module loaded successfully');
     
     // Initialize the eventSignups module with the database pool
@@ -87,7 +89,8 @@ async function initialize() {
   // Load Discord bot (server will handle the bot startup)
   try {
     logWithTimestamp('Starting Discord bot server');
-    require('/app/discord-bot/server.js');
+    const serverPath = path.resolve(__dirname, '../discord-bot/server.js');
+    require(serverPath);
     logWithTimestamp('Discord bot server started successfully');
   } catch (err) {
     logWithTimestamp(`Failed to start Discord bot server: ${err.message}`, 'ERROR');

@@ -3,18 +3,8 @@ FROM node:18-alpine
 # Create app directory
 WORKDIR /app
 
-# Install app dependencies
-COPY package*.json ./
-RUN npm install
-
-# Copy app directory first
-COPY app /app/app
-
-# Copy discord-bot directory
-COPY discord-bot /app/discord-bot
-
-# Copy other necessary files
-COPY index.js /app/
+# Copy all source files to maintain original directory structure
+COPY . .
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/uploads
@@ -27,5 +17,4 @@ ENV PORT=3000
 EXPOSE 3000
 EXPOSE 3300
 
-# Set startup command
-CMD ["sh", "-c", "node /app/app/index.js"]
+# The build and start commands will be handled by Railway's custom commands

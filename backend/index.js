@@ -1,4 +1,17 @@
 const path = require('path');
+// Start the Discord bot if enabled
+try {
+  const discordBotPath = path.resolve(__dirname, './discord-bot-starter.js');
+  if (process.env.ENABLE_DISCORD_BOT === 'true') {
+    require(discordBotPath);
+    console.log('Discord bot initialized successfully!');
+  } else {
+    console.log('Discord bot is disabled via environment variables');
+  }
+} catch (err) {
+  console.error('Error initializing Discord bot:', err.message);
+}
+
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
