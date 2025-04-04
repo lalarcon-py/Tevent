@@ -9,18 +9,20 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p /app/logs /app/uploads
 
-# Create a custom entrypoint script that will ensure commands run in a shell
-RUN echo '#!/bin/bash\nexec "$@"' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
+# Set up a symbolic link to make "cd backend" work from anywhere
+RUN ln -s /app/backend /backend
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV SHELL=/bin/bash
 
 # Expose ports
 EXPOSE 3000
 EXPOSE 3300
 
-# Use the custom entrypoint
-ENTRYPOINT ["/bin/bash", "-c"]
+# Create a shell script to execute your command
+RUN echo '#!/bin/bash\ncd /app && cd backend && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && node index.js' > /app/start.sh && \
+    chmod +x /app/start.sh
+
+# Set the shell script as the entry point
+CMD ["/bin/bash", "/app/start.sh"]
