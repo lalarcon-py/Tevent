@@ -3876,21 +3876,6 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Helper function for safe replies
-async function safeReply(interaction, options) {
-  try {
-    if (interaction.deferred) {
-      await interaction.editReply(options).catch(() => {});
-    } else if (interaction.replied) {
-      await interaction.followUp(options).catch(() => {});
-    } else {
-      await interaction.reply(options).catch(() => {});
-    }
-  } catch (error) {
-    console.error(`[ERROR] Failed to reply to interaction: ${error.message}`);
-  }
-}
-
 // Simplified function to update the event display in the background
 async function updateEventDisplay(interaction, eventId, appGuildId) {
   // Don't block on getting the message - if we can't find it, that's fine
@@ -3990,22 +3975,6 @@ async function updateEventDisplay(interaction, eventId, appGuildId) {
     console.error(`[ERROR] Failed to update message with new embed: ${err.message}`);
   }
 }
-
-  // Helper function for safe replies
-  async function safeReply(interaction, options) {
-    try {
-      if (interaction.deferred) {
-        await interaction.editReply(options).catch(() => {});
-      } else if (interaction.replied) {
-        await interaction.followUp(options).catch(() => {});
-      } else {
-        await interaction.reply(options).catch(() => {});
-      }
-    } catch (error) {
-      console.error(`[ERROR] Failed to reply to interaction: ${error.message}`);
-    }
-  }
-
   // Simplified function to update the event display in the background
   async function updateEventDisplay(interaction, eventId, appGuildId) {
     // Don't block on getting the message - if we can't find it, that's fine
