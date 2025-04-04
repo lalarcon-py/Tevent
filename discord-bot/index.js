@@ -25,6 +25,7 @@ const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
 const eventSignups = require('./utils/eventSignups');
+eventSignups.setPool(pool);
 const { ShardingManager } = require('discord.js');
 
 function setupSharding() {

@@ -1,6 +1,14 @@
 // discord-bot/utils/eventSignups.js
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { pool } = require('../../../config/database');
+const { Pool } = require('pg');
+const useSSL = process.env.DATABASE_USE_SSL === 'true';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: useSSL ? {
+    rejectUnauthorized: false
+  } : false
+});
 const embedBuilder = require('./embed_builder');
 const Redis = require('ioredis');
 const redis = new Redis(process.env.REDIS_URL);
