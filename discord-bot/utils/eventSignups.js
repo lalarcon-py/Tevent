@@ -11,17 +11,49 @@ const pool = new Pool({
 });
 const embedBuilder = require('./embed_builder');
 const Redis = require('ioredis');
-const redis = new Redis(process.env.REDIS_URL);
+
+// Configure Redis connection with fallback and error handling
+let redis;
+try {
+  redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+  redis.on('error', (err) => {
+    console.error('[REDIS ERROR]', err);
+  });
+} catch (error) {
+  console.error('[REDIS CONNECTION ERROR]', error.message);
+  // Create a mock Redis client to prevent application crashes
+  redis = {
+    set: async () => {},
+    get: async () => null,
+    del: async () => {},
+    exists: async () => 0
+  };
+}
 const CircuitBreaker = require('opossum');
 
-
-const processSignupBreaker = new CircuitBreaker(processSignup, {
+// Initialize circuit breaker for critical operations
+let processSignupBreaker;
+try {
+  processSignupBreaker = new CircuitBreaker(processSignup, {
     timeout: 5000, // If function takes longer than 5 seconds, trigger a failure
     errorThresholdPercentage: 50, // When 50% of requests fail, open the circuit
     resetTimeout: 30000, // After 30 seconds, try again
     rollingCountTimeout: 10000, // Time window for errorThresholdPercentage
     rollingCountBuckets: 10 // Number of buckets to keep track of latency
   });
+  
+  // Add event listeners for circuit breaker
+  processSignupBreaker.on('open', () => console.log('Circuit breaker opened: too many errors'));
+  processSignupBreaker.on('close', () => console.log('Circuit breaker closed: operation recovered'));
+  processSignupBreaker.on('halfOpen', () => console.log('Circuit breaker half-open: trying to recover'));
+} catch (error) {
+  console.error('[CIRCUIT BREAKER ERROR]', error.message);
+  // If circuit breaker fails to initialize, create a fallback that just calls the function directly
+  processSignupBreaker = {
+    fire: (...args) => processSignup(...args),
+    status: { state: 'unavailable' }
+  };
+}
 
 // Track active signups to prevent duplicates
 const activeSignups = new Map();
@@ -111,9 +143,9 @@ async function handleEventSignup(interaction, eventId, role) {
           };
         }
         
-        // Process the signup with bounded execution time
+        // Process the signup with bounded execution time and circuit breaker
         const result = await Promise.race([
-          processSignup(eventId, userId, appGuildId, role),
+          processSignupBreaker.fire(eventId, userId, appGuildId, role),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error("Signup processing timed out")), 3000)
           )
