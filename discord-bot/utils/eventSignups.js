@@ -15,20 +15,59 @@ const Redis = require('ioredis');
 
 // Configure Redis connection with fallback and error handling
 let redis;
-try {
-  redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-  redis.on('error', (err) => {
-    console.error('[REDIS ERROR]', err);
-  });
-} catch (error) {
-  console.error('[REDIS CONNECTION ERROR]', error.message);
-  // Create a mock Redis client to prevent application crashes
-  redis = {
-    set: async () => {},
-    get: async () => null,
-    del: async () => {},
-    exists: async () => 0
-  };
+let redisEnabled = false;
+let lastRedisErrorTime = 0;
+const REDIS_ERROR_THROTTLE_MS = 60000; // Only log errors once per minute
+
+// Create a mock Redis client (used when Redis is unavailable)
+const mockRedis = {
+  set: async () => true,
+  get: async () => null,
+  del: async () => 1,
+  exists: async () => 0,
+  incr: async () => 1,
+  decr: async () => 0,
+  expire: async () => true,
+  // Add any other Redis methods used in the application
+};
+
+// Only try to connect to Redis if explicitly configured
+if (process.env.REDIS_URL) {
+  try {
+    redis = new Redis(process.env.REDIS_URL);
+    redisEnabled = true;
+    console.log('[INFO] Redis connection initialized');
+    
+    redis.on('error', (err) => {
+      // Throttle error messages to avoid log spam
+      const now = Date.now();
+      if (now - lastRedisErrorTime > REDIS_ERROR_THROTTLE_MS) {
+        console.error('[REDIS ERROR]', err.message);
+        lastRedisErrorTime = now;
+      }
+    });
+    
+    redis.on('connect', () => {
+      console.log('[INFO] Successfully connected to Redis');
+    });
+    
+    // Test the connection
+    redis.ping().then(() => {
+      console.log('[INFO] Redis PING successful');
+    }).catch(err => {
+      console.warn('[WARN] Redis PING failed, using mock implementation');
+      redisEnabled = false;
+      redis = mockRedis;
+    });
+  } catch (error) {
+    console.error('[REDIS CONNECTION ERROR]', error.message);
+    redisEnabled = false;
+    redis = mockRedis;
+  }
+} else {
+  console.log('[INFO] REDIS_URL not provided, using in-memory fallback');
+  redisEnabled = false;
+  redis = mockRedis;
 }
 const CircuitBreaker = require('opossum');
 
@@ -58,6 +97,23 @@ try {
 
 // Track active signups to prevent duplicates
 const activeSignups = new Map();
+
+// Helper function to check if Redis is available before using it
+async function safeRedisOp(operation, fallback) {
+  if (!redisEnabled) return fallback();
+  
+  try {
+    return await operation();
+  } catch (error) {
+    // Only log the first error in a burst
+    const now = Date.now();
+    if (now - lastRedisErrorTime > REDIS_ERROR_THROTTLE_MS) {
+      console.error(`[REDIS ERROR] Operation failed: ${error.message}`);
+      lastRedisErrorTime = now;
+    }
+    return fallback();
+  }
+}
 
 /**
  * Centralized handler for all event signup interactions

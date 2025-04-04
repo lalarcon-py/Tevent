@@ -66,6 +66,11 @@ async function initialize() {
     return false;
   }
   
+  // Add REDIS_URL if not present but needed
+  if (!process.env.REDIS_URL && process.env.NODE_ENV === 'production') {
+    logWithTimestamp('REDIS_URL not defined in production, Redis features will be disabled', 'WARN');
+  }
+  
   // Import event signups module
   try {
     const eventSignups = require('../discord-bot/utils/eventSignups');
