@@ -25,6 +25,7 @@ const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
 const eventSignups = require('./utils/eventSignups');
+const rolePingManager = require('./utils/rolePingManager');
 const { ShardingManager } = require('discord.js');
 
 function setupSharding() {
@@ -151,6 +152,22 @@ const pool = new Pool({
   maxUses: 7500 // Close connections after 7500 queries to prevent memory issues
 });
 
+// Load role configuration module
+let roleConfig;
+try {
+  roleConfig = require('./utils/roleConfig');
+} catch (err) {
+  console.warn('Warning: Failed to load roleConfig utilities:', err.message);
+}
+
+// Load notification helpers
+let notificationHelpers;
+try {
+  notificationHelpers = require('./utils/notification_helpers');
+} catch (err) {
+  console.warn('Warning: Failed to load notification helpers:', err.message);
+}
+
 // Initialize function that will be called from server.js
 function initialize(dbPool) {
   if (dbPool) {
@@ -169,6 +186,26 @@ function initialize(dbPool) {
       }
     } else {
       console.warn("eventSignups module is not properly loaded or doesn't have setPool method");
+    }
+    
+    // Initialize roleConfig with the database pool
+    if (roleConfig && typeof roleConfig.setPool === 'function') {
+      try {
+        roleConfig.setPool(dbPool);
+        console.log("Successfully initialized roleConfig module with database pool");
+      } catch (err) {
+        console.error("Error initializing roleConfig:", err.message);
+      }
+    }
+    
+    // Initialize role ping manager
+    if (rolePingManager && typeof rolePingManager.setPool === 'function') {
+      try {
+        rolePingManager.setPool(dbPool);
+        console.log("Successfully initialized rolePingManager module with database pool");
+      } catch (err) {
+        console.error("Error initializing rolePingManager:", err.message);
+      }
     }
     
     return true;
@@ -902,11 +939,20 @@ app.post('/webhook/new-item', async (req, res) => {
           .setStyle(ButtonStyle.Secondary)
       );
     
-    // Send the message with buttons
-    const message = await channel.send({
-      embeds: [embed],
-      components: [buttonsRow]
-    });
+    // Send the message with buttons and role pings
+let pingContent = '';
+try {
+    // Use the rolePingManager to get role pings
+    pingContent = await rolePingManager.createPingString(guildId, 'storage');
+} catch (pingError) {
+    console.error('[ERROR] Error getting role pings:', pingError);
+}
+
+const message = await channel.send({
+    content: pingContent || null,
+  embeds: [embed],
+  components: [buttonsRow]
+});
     
     // Create tracking table if needed
     await pool.query(`
@@ -1114,11 +1160,23 @@ app.post('/webhook/new-event', async (req, res) => {
             .setStyle(ButtonStyle.Secondary)
         );
       
-      const message = await channel.send({
-        content: `**${eventData.title || 'New Event'}**`,
-        embeds: [embed],
-        components: [row]
-      });
+      // Get ping content for events
+let pingContent = `**${eventData.title || 'New Event'}**`;
+try {
+  // Use the rolePingManager to get role pings
+  const rolePings = await rolePingManager.createPingString(guildId, 'events');
+  if (rolePings) {
+    pingContent = rolePings + ' ' + pingContent;
+  }
+} catch (pingError) {
+  console.error('[ERROR] Error getting role pings:', pingError);
+}
+
+const message = await channel.send({
+  content: pingContent,
+  embeds: [embed],
+  components: [row]
+});
 
       try {
         await pool.query(
@@ -1367,16 +1425,47 @@ app.post('/webhook/new-application', async (req, res) => {
       }
     }
     
-    // Send notification to the configured channel
-    const message = await sendNotificationToConfiguredChannel(
-      guildId, 
-      discordGuildId, 
-      'applications', 
-      embed,
-      null,
-      components,
-      attachment ? [attachment] : undefined
-    );
+    // Get configured channel
+const channelConfigResult = await pool.query(
+  `SELECT channel_id FROM discord_channel_config 
+   WHERE guild_id = $1 AND channel_type = 'applications' AND enabled = true`,
+  [guildId]
+);
+
+let channelId;
+if (channelConfigResult.rows.length) {
+  channelId = channelConfigResult.rows[0].channel_id;
+} else {
+  // Try to get a default channel
+  const guild = await client.guilds.fetch(discordGuildId);
+  if (!guild || !guild.systemChannel) {
+    return res.status(404).json({ error: 'No suitable channel found' });
+  }
+  channelId = guild.systemChannel.id;
+}
+
+// Get the channel
+const channel = await client.channels.fetch(channelId);
+if (!channel) {
+  return res.status(404).json({ error: 'Channel not found' });
+}
+
+// Get ping content for applications
+let pingContent = '';
+try {
+  // Use the rolePingManager to get role pings
+  pingContent = await rolePingManager.createPingString(guildId, 'applications');
+} catch (pingError) {
+  console.error('[ERROR] Error getting role pings:', pingError);
+}
+
+// Send the message with role pings
+const message = await channel.send({
+  content: pingContent || null,
+  embeds: [embed],
+  components: components,
+  files: attachment ? [attachment] : undefined
+});
     
     if (message) {
       // Store reference to this message for later updates
@@ -1478,16 +1567,47 @@ app.post('/webhook/new-gear-check', async (req, res) => {
       }
     }
     
-    // Send notification to the configured channel
-    const message = await sendNotificationToConfiguredChannel(
-      guildId, 
-      discordGuildId, 
-      'gear_checks', 
-      embed,
-      null,
-      [row],
-      attachment ? [attachment] : undefined
-    );
+    // Get configured channel
+const channelConfigResult = await pool.query(
+  `SELECT channel_id FROM discord_channel_config 
+   WHERE guild_id = $1 AND channel_type = 'gear_checks' AND enabled = true`,
+  [guildId]
+);
+
+let channelId;
+if (channelConfigResult.rows.length) {
+  channelId = channelConfigResult.rows[0].channel_id;
+} else {
+  // Try to get a default channel
+  const guild = await client.guilds.fetch(discordGuildId);
+  if (!guild || !guild.systemChannel) {
+    return res.status(404).json({ error: 'No suitable channel found' });
+  }
+  channelId = guild.systemChannel.id;
+}
+
+// Get the channel
+const channel = await client.channels.fetch(channelId);
+if (!channel) {
+  return res.status(404).json({ error: 'Channel not found' });
+}
+
+// Get ping content for gear checks
+let pingContent = '';
+try {
+  // Use the rolePingManager to get role pings
+  pingContent = await rolePingManager.createPingString(guildId, 'gear_checks');
+} catch (pingError) {
+  console.error('[ERROR] Error getting role pings:', pingError);
+}
+
+// Send the message with role pings
+const message = await channel.send({
+  content: pingContent || null,
+  embeds: [embed],
+  components: [row],
+  files: attachment ? [attachment] : undefined
+});
     
     if (message) {
       // Store reference to this message for later updates

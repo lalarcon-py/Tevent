@@ -57,6 +57,21 @@ module.exports = {
   app: app
 };
 
+// Initialize roleConfig module
+try {
+  const roleConfig = require('./utils/roleConfig');
+  if (typeof roleConfig.setPool === 'function') {
+    roleConfig.setPool(pool);
+    roleConfig.initDatabase().then(() => {
+      console.log('Role configuration database initialized');
+    }).catch(err => {
+      console.error('Error initializing role configuration database:', err.message);
+    });
+  }
+} catch(err) {
+  console.warn('Warning: Failed to initialize roleConfig:', err.message);
+}
+
 // If bot exports an initialize function, call it with the pool
 if (typeof bot.initialize === 'function') {
   bot.initialize(pool);

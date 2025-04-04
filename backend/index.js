@@ -269,6 +269,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/discord-bot', require('./routes/discordBotRoutes'));
+app.use('/api/discord-bot', require('./routes/discordRolePings'));
 app.use('/auth', express.json());
 
 // Add guildActivityMiddleware without the problematic billing routes

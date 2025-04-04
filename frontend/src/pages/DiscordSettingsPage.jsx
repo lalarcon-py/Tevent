@@ -1,6 +1,7 @@
 // Updated DiscordSettingsPage.jsx component with enhanced channel reading and role simulation
 
 import React, { useState, useEffect } from 'react';
+import RolePingConfig from '../components/discord/RolePingConfig';
 import { useParams } from 'react-router-dom';
 import { 
   Box, Button, Container, FormControl, Grid, 
@@ -350,6 +351,12 @@ const DiscordSettingsPage = () => {
       
       {botConnected && (
         <>
+          <RolePingConfig 
+            guildId={currentGuildId} 
+            discordGuildId={selectedGuild} 
+            botConnected={botConnected} 
+          />
+          
           <Paper sx={{ p: 3, mb: 4, borderRadius: 2 }}>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
               <NotificationsIcon sx={{ mr: 1 }} />
