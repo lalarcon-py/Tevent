@@ -13,8 +13,7 @@ const {
   Collection,
   TextInputBuilder,
   TextInputStyle,
-  ModalBuilder,
-  ShardingManager
+  ModalBuilder
 } = require('discord.js');
 const axios = require('axios');
 const express = require('express');
@@ -26,6 +25,7 @@ const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
 const eventSignups = require('./utils/eventSignups');
+const { ShardingManager } = require('discord.js');
 
 function setupSharding() {
   const manager = new ShardingManager('./index.js', { 
