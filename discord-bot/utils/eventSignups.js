@@ -3,7 +3,8 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { Pool } = require('pg');
 const useSSL = process.env.DATABASE_USE_SSL === 'true';
 
-const pool = new Pool({
+// Create a default pool, but allow it to be replaced via setPool
+let pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL ? {
     rejectUnauthorized: false
@@ -579,7 +580,35 @@ async function safeReply(interaction, options) {
   }
 }
 
+/**
+ * Set the database pool from outside this module
+ * @param {Object} dbPool - PostgreSQL connection pool
+ */
+function setPool(dbPool) {
+  if (dbPool) {
+    try {
+      // Replace the pool with the provided one
+      pool = dbPool;
+      
+      // Verify connection with quick test query
+      dbPool.query('SELECT 1 as test')
+        .then(() => {
+          console.log('[INFO] EventSignups database pool updated and successfully tested');
+        })
+        .catch(err => {
+          console.error('[ERROR] EventSignups database pool test failed:', err.message);
+        });
+    } catch (error) {
+      console.error('[ERROR] Failed to update EventSignups database pool:', error.message);
+      throw new Error('Failed to set database pool: ' + error.message);
+    }
+  } else {
+    console.warn('[WARN] Attempted to set EventSignups pool with null or undefined value');
+  }
+}
+
 module.exports = {
   handleEventSignup,
-  safeReply
+  safeReply,
+  setPool
 };

@@ -25,7 +25,6 @@ const embedBuilder = require('./utils/embed_builder');
 const { EventEmitter } = require('events');
 EventEmitter.defaultMaxListeners = 25;
 const eventSignups = require('./utils/eventSignups');
-eventSignups.setPool(pool);
 const { ShardingManager } = require('discord.js');
 
 function setupSharding() {
@@ -152,10 +151,32 @@ const pool = new Pool({
   maxUses: 7500 // Close connections after 7500 queries to prevent memory issues
 });
 
-// Test database connection
-pool.query('SELECT NOW()')
-  .then(result => console.log("Database connection successful, server time:", result.rows[0].now))
-  .catch(err => console.error("Database connection error:", err));
+// Initialize function that will be called from server.js
+function initialize(dbPool) {
+  if (dbPool) {
+    console.log("Using provided database pool from server.js");
+    
+    // Make the pool available to this module
+    pool = dbPool;
+    
+    // Initialize eventSignups with the database pool
+    if (eventSignups && typeof eventSignups.setPool === 'function') {
+      try {
+        eventSignups.setPool(dbPool);
+        console.log("Successfully initialized eventSignups module with database pool");
+      } catch (err) {
+        console.error("Error initializing eventSignups:", err.message);
+      }
+    } else {
+      console.warn("eventSignups module is not properly loaded or doesn't have setPool method");
+    }
+    
+    return true;
+  } else {
+    console.error("No database pool provided to initialize function");
+    return false;
+  }
+}
 
 // Log connection info
 console.log("Database connection configured");
@@ -7060,4 +7081,7 @@ function startItemPolling() {
 
 // Initialize bot
 client.login(process.env.DISCORD_BOT_TOKEN);
+
+// Export the initialize function so it can be called from server.js
+module.exports = { initialize };
 }
