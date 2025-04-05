@@ -43,6 +43,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
+// Import role routes
+const rolesRoutes = require('./routes/roles');
+
+// Use role routes
+app.use('/api', rolesRoutes);
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
