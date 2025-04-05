@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, Button, Typography, CircularProgress, Alert, Chip,
   Paper, Grid, FormControl, InputLabel, Select, MenuItem,
-  Card, CardContent, IconButton
+  Card, CardContent, IconButton, alpha
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -33,10 +33,10 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       fetchRolePingConfigurations();
       fetchDiscordRoles();
     }
-  }, [botConnected, discordGuildId, guildId]);
+  }, [botConnected, discordGuildId, fetchRolePingConfigurations, fetchDiscordRoles]);
 
   // Fetch role ping configurations
-  const fetchRolePingConfigurations = async () => {
+  const fetchRolePingConfigurations = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get(`/api/discord-bot/role-pings?guildId=${guildId}`);
@@ -63,10 +63,10 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [guildId, discordGuildId]);
 
   // Fetch Discord roles
-  const fetchDiscordRoles = async () => {
+  const fetchDiscordRoles = useCallback(async () => {
     try {
       setRoleLoading(true);
       const response = await axiosInstance.get(
@@ -86,7 +86,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
     } finally {
       setRoleLoading(false);
     }
-  };
+  }, [guildId, discordGuildId]);
 
   // Add role to a notification type
   const addRole = (type, roleId) => {
@@ -184,9 +184,9 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
   }
 
   return (
-    <Paper sx={{ p: 3, mb: 4, borderRadius: 2 }}>
-      <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-        <NotificationsActiveIcon sx={{ mr: 1 }} />
+    <Paper elevation={0} sx={{ p: 4, mb: 5, borderRadius: 2, backgroundColor: 'background.paper' }}>
+      <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', fontWeight: 500 }}>
+        <NotificationsActiveIcon sx={{ mr: 1.5, color: '#5865F2', opacity: 0.85 }} />
         Role Ping Settings
       </Typography>
       
@@ -212,14 +212,16 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
           return (
             <Card 
               key={type.id} 
-              variant="outlined" 
+              elevation={0}
               sx={{ 
-                mb: 2,
-                borderColor: roleIds.length > 0 ? 'primary.main' : 'divider',
+                mb: 3,
+                borderLeft: roleIds.length > 0 ? '3px solid' : 'none',
+                borderColor: roleIds.length > 0 ? 'primary.main' : 'transparent',
+                backgroundColor: roleIds.length > 0 ? alpha('#5865F2', 0.03) : alpha('#f5f5f5', 0.5),
                 transition: 'all 0.2s'
               }}
             >
-              <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+              <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
                 <Grid container spacing={2} alignItems="center">
                   <Grid item xs={12} sm={4}>
                     <Typography variant="subtitle1" fontWeight="medium">
@@ -242,8 +244,10 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
                             label={getRoleName(roleId)}
                             onDelete={() => removeRole(type.id, roleId)}
                             sx={{ 
-                              backgroundColor: getRoleColor(roleId),
-                              color: parseInt(getRoleColor(roleId).substring(1), 16) > 0x888888 ? '#000' : '#fff'
+                            backgroundColor: getRoleColor(roleId),
+                            color: parseInt(getRoleColor(roleId).substring(1), 16) > 0x888888 ? '#000' : '#fff',
+                              borderRadius: '16px',
+                              fontWeight: 400
                             }}
                           />
                         ))
@@ -293,6 +297,13 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
           onClick={saveSettings}
           disabled={saving || roleLoading}
           size="large"
+          sx={{ 
+            backgroundColor: '#5865F2', 
+            '&:hover': { backgroundColor: '#4752C4' },
+            boxShadow: 'none',
+            textTransform: 'none',
+            px: 3
+          }}
         >
           {saving ? <CircularProgress size={24} /> : 'Save Role Pings'}
         </Button>
@@ -301,6 +312,14 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
           variant="outlined"
           onClick={testRolePings}
           disabled={saving || roleLoading}
+          sx={{ 
+            borderColor: '#5865F2', 
+            color: '#5865F2',
+            textTransform: 'none',
+            '&:hover': { borderColor: '#4752C4', backgroundColor: alpha('#5865F2', 0.04) },
+            boxShadow: 'none',
+            px: 3
+          }}
         >
           Test Role Pings
         </Button>

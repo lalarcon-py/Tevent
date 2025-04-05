@@ -6,8 +6,8 @@ import { useParams } from 'react-router-dom';
 import { 
   Box, Button, Container, FormControl, Grid, 
   MenuItem, Select, Typography, Alert, CircularProgress,
-  Snackbar, InputLabel, Divider, Switch, FormControlLabel,
-  Paper, Card, CardContent
+  Snackbar, InputLabel, Switch, FormControlLabel,
+  Paper, Card, CardContent, alpha
 } from '@mui/material';
 import ConnectedTvIcon from '@mui/icons-material/ConnectedTv';
 import NotificationsIcon from '@mui/icons-material/Notifications';
@@ -319,18 +319,20 @@ const DiscordSettingsPage = () => {
   
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <ConnectedTvIcon sx={{ mr: 1, fontSize: 35, color: '#5865F2' }} />
-        Discord Integration Settings
-        {simulatedRole && (
-          <Typography variant="caption" sx={{ display: 'block', color: '#ff9800', ml: 2 }}>
-            Simulating role: {simulatedRole}
-          </Typography>
-        )}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4, fontWeight: 500 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <ConnectedTvIcon sx={{ mr: 2, fontSize: 32, color: '#5865F2', opacity: 0.85 }} />
+          Discord Integration Settings
+          {simulatedRole && (
+            <Typography variant="caption" sx={{ display: 'block', color: '#ff9800', ml: 2, opacity: 0.8 }}>
+              Simulating role: {simulatedRole}
+            </Typography>
+          )}
+        </Box>
       </Typography>
       
       {!botConnected && (
-        <Paper sx={{ p: 3, mb: 4, backgroundColor: 'rgba(144, 202, 249, 0.08)', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 4, mb: 5, backgroundColor: alpha('#5865F2', 0.04), borderRadius: 2 }}>
           <Typography variant="h6" gutterBottom>
             Connect to Discord
           </Typography>
@@ -357,7 +359,7 @@ const DiscordSettingsPage = () => {
             botConnected={botConnected} 
           />
           
-          <Paper sx={{ p: 3, mb: 4, borderRadius: 2 }}>
+          <Paper elevation={0} sx={{ p: 4, mb: 5, backgroundColor: 'background.paper', borderRadius: 2 }}>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
               <NotificationsIcon sx={{ mr: 1 }} />
               Channel Notification Settings
@@ -386,16 +388,18 @@ const DiscordSettingsPage = () => {
                 
                 return (
                   <Card 
-                    key={type.id} 
-                    variant="outlined" 
-                    sx={{ 
-                      mb: 2,
-                      borderColor: enabled ? 'primary.main' : 'divider',
-                      opacity: enabled ? 1 : 0.7,
+                  key={type.id} 
+                  elevation={0}
+                  sx={{ 
+                  mb: 3,
+                  borderLeft: enabled ? '3px solid' : 'none',
+                  borderColor: enabled ? 'primary.main' : 'transparent',
+                  backgroundColor: enabled ? alpha('#5865F2', 0.03) : alpha('#f5f5f5', 0.5),
+                    opacity: enabled ? 1 : 0.8,
                       transition: 'all 0.2s'
                     }}
                   >
-                    <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                    <CardContent sx={{ p: 3, "&:last-child": { pb: 3 } }}>
                       <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={4}>
                           <Typography variant="subtitle1" fontWeight="medium">
@@ -451,6 +455,13 @@ const DiscordSettingsPage = () => {
                 onClick={saveSettings}
                 disabled={saving || channelLoading}
                 size="large"
+                sx={{ 
+                  backgroundColor: '#5865F2', 
+                  '&:hover': { backgroundColor: '#4752C4' },
+                  boxShadow: 'none',
+                  textTransform: 'none',
+                  px: 3
+                }}
               >
                 {saving ? <CircularProgress size={24} /> : 'Save Settings'}
               </Button>
@@ -459,6 +470,14 @@ const DiscordSettingsPage = () => {
                 variant="outlined"
                 onClick={testConfiguration}
                 disabled={saving || channelLoading}
+                sx={{ 
+                  borderColor: '#5865F2', 
+                  color: '#5865F2',
+                  textTransform: 'none',
+                  '&:hover': { borderColor: '#4752C4', backgroundColor: alpha('#5865F2', 0.04) },
+                  boxShadow: 'none',
+                  px: 3
+                }}
               >
                 Test Notifications
               </Button>
@@ -483,7 +502,7 @@ const DiscordSettingsPage = () => {
             )}
           </Paper>
           
-          <Paper sx={{ p: 3, borderRadius: 2 }}>
+          <Paper elevation={0} sx={{ p: 4, borderRadius: 2, backgroundColor: alpha('#f5f5f5', 0.3) }}>
             <Typography variant="h6" gutterBottom>
               Discord Integration Features
             </Typography>
