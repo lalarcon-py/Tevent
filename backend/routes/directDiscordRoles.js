@@ -1,10 +1,10 @@
 /**
  * Direct Discord Roles Route
- * A simplified, direct approach to fetch Discord roles
+ * A simplified, direct approach to fetch Discord roles using axios instead of discord.js
  */
 const express = require('express');
 const router = express.Router();
-const { Client, GatewayIntentBits } = require('discord.js');
+const axios = require('axios');
 const { Pool } = require('pg');
 
 // Initialize database connection
@@ -16,7 +16,7 @@ const pool = new Pool({
 });
 
 /**
- * Get Discord roles directly, bypassing the Discord bot service
+ * Get Discord roles directly via Discord REST API
  * GET /api/direct/guilds/:guildId/discord/roles
  */
 router.get('/guilds/:guildId/discord/roles', async (req, res) => {
@@ -42,41 +42,34 @@ router.get('/guilds/:guildId/discord/roles', async (req, res) => {
     const discordGuildId = mappingResult.rows[0].discord_guild_id;
     console.log(`[DIRECT ROLES] Found Discord guild ID: ${discordGuildId}`);
     
-    // Create a new Discord client instance with all relevant intents
-    const client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildPresences,
-        GatewayIntentBits.MessageContent
-      ]
-    });
-    
-    // Log in to Discord
-    console.log(`[DIRECT ROLES] Logging in to Discord...`);
-    await client.login(process.env.DISCORD_BOT_TOKEN);
-    console.log(`[DIRECT ROLES] Logged in as ${client.user.tag}`);
-    
-    // Fetch the guild
-    console.log(`[DIRECT ROLES] Fetching guild ${discordGuildId}...`);
-    const guild = await client.guilds.fetch(discordGuildId);
-    
-    if (!guild) {
-      console.log(`[DIRECT ROLES] Could not find guild ${discordGuildId}`);
-      await client.destroy();
-      return res.status(404).json({ error: 'Discord guild not found' });
+    // Get the bot token
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    if (!botToken) {
+      console.error('[DIRECT ROLES] Discord bot token not found in environment variables');
+      return res.status(500).json({ error: 'Discord bot token not configured' });
     }
     
-    console.log(`[DIRECT ROLES] Successfully fetched guild: ${guild.name}`);
+    // Call Discord API directly
+    console.log(`[DIRECT ROLES] Calling Discord API for roles in guild ${discordGuildId}`);
     
-    // Fetch all roles
-    console.log(`[DIRECT ROLES] Fetching roles for ${guild.name}...`);
-    const roles = await guild.roles.fetch();
-    console.log(`[DIRECT ROLES] Fetched ${roles.size} roles`);
+    const response = await axios.get(`https://discord.com/api/v10/guilds/${discordGuildId}/roles`, {
+      headers: {
+        'Authorization': `Bot ${botToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.data || !Array.isArray(response.data)) {
+      console.error('[DIRECT ROLES] Invalid response from Discord API:', response.data);
+      return res.status(500).json({ error: 'Invalid response from Discord API' });
+    }
+    
+    console.log(`[DIRECT ROLES] Received ${response.data.length} roles from Discord API`);
     
     // Format roles
     const formattedRoles = [];
-    roles.forEach(role => {
+    
+    for (const role of response.data) {
       // Skip @everyone role
       if (role.name !== '@everyone') {
         formattedRoles.push({
@@ -88,15 +81,12 @@ router.get('/guilds/:guildId/discord/roles', async (req, res) => {
           mentionable: role.mentionable
         });
       }
-    });
+    }
     
     // Sort roles by position (highest first)
     formattedRoles.sort((a, b) => b.position - a.position);
     
     console.log(`[DIRECT ROLES] Returning ${formattedRoles.length} formatted roles`);
-    
-    // Clean up Discord client
-    await client.destroy();
     
     // Return the roles
     res.json(formattedRoles);
@@ -107,7 +97,6 @@ router.get('/guilds/:guildId/discord/roles', async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to fetch Discord roles',
       message: error.message,
-      stack: error.stack,
       tokenInfo: process.env.DISCORD_BOT_TOKEN ? 
         `Token exists, length: ${process.env.DISCORD_BOT_TOKEN.length}` : 
         'Token missing'
