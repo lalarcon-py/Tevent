@@ -31,7 +31,8 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
   const fetchRolePingConfigurations = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get(`/api/discord-bot/role-pings?guildId=${guildId}`);
+      // Updated to use the correct endpoint structure
+      const response = await axiosInstance.get(`/api/guilds/${guildId}/discord/role-ping-configs`);
       
       // Convert array of configs to object for easier access
       const configsObj = {};
@@ -40,10 +41,10 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       });
       
       // Populate from API response
-      if (response.data && response.data.configurations) {
-        response.data.configurations.forEach(config => {
+      if (response.data && Array.isArray(response.data)) {
+        response.data.forEach(config => {
           if (config.role_ids && Array.isArray(config.role_ids)) {
-            configsObj[config.notification_type] = config.role_ids;
+            configsObj[config.type] = config.role_ids;
           }
         });
       }
@@ -61,9 +62,8 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
   const fetchDiscordRoles = useCallback(async () => {
     try {
       setRoleLoading(true);
-      const response = await axiosInstance.get(
-        `/api/discord-bot/roles?guildId=${guildId}&discordGuildId=${discordGuildId}`
-      );
+      // Updated to use the correct endpoint as defined in your backend
+      const response = await axiosInstance.get(`/api/guilds/${guildId}/discord/roles`);
       
       // Filter out @everyone role and sort alphabetically
       const filteredRoles = response.data
@@ -78,15 +78,15 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
     } finally {
       setRoleLoading(false);
     }
-  }, [guildId, discordGuildId]);
+  }, [guildId]);
 
   // Fetch role configurations when component mounts
   useEffect(() => {
-    if (botConnected && discordGuildId) {
+    if (botConnected && guildId) {
       fetchRolePingConfigurations();
       fetchDiscordRoles();
     }
-  }, [botConnected, discordGuildId, fetchRolePingConfigurations, fetchDiscordRoles]);
+  }, [botConnected, guildId, fetchRolePingConfigurations, fetchDiscordRoles]);
 
   // Add role to a notification type
   const addRole = (type, roleId) => {
@@ -129,15 +129,12 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       
       // Convert configurations object to array format expected by API
       const configsArray = Object.entries(configurations).map(([notificationType, roleIds]) => ({
-        notification_type: notificationType,
+        type: notificationType,
         role_ids: roleIds
       }));
       
-      await axiosInstance.post(`/api/discord-bot/role-pings`, {
-        guildId: guildId,
-        discordGuildId: discordGuildId,
-        configurations: configsArray
-      });
+      // Updated to use the correct endpoint structure
+      await axiosInstance.post(`/api/guilds/${guildId}/discord/role-ping-configs`, configsArray);
       
       setSuccess('Role ping configuration saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
@@ -156,9 +153,8 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       setSaving(true);
       setError('');
       
-      const response = await axiosInstance.post(`/api/discord-bot/test-role-pings`, {
-        guildId: guildId,
-        discordGuildId: discordGuildId
+      const response = await axiosInstance.post(`/api/guilds/${guildId}/discord/test-role-pings`, {
+        discordGuildId
       });
       
       setTestResults(response.data.results);
