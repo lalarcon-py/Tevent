@@ -127,6 +127,12 @@ router.delete('/guilds/:guildId/discord/role-ping-configs', checkAuth, isGuildAd
 
 // Get Discord roles
 router.get('/guilds/:guildId/discord/roles', checkAuth, isGuildAdmin, async (req, res) => {
+  // Add CORS headers to ensure proper API response
+  res.header('Content-Type', 'application/json');
+  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   try {
     const { guildId } = req.params;
     console.log(`Fetching Discord roles for guild: ${guildId}`);

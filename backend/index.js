@@ -321,11 +321,23 @@ app.put('/api/guilds/:guildId/settings',
   guildSettingsController.updateGuildSettings
 );
 
-app.use('/api/discord-bot', createProxyMiddleware({
+// IMPORTANT: Only proxy specific routes to the Discord bot that we know aren't handled by our backend
+app.use('/api/discord-bot/webhook', createProxyMiddleware({
   target: 'http://heartfelt-sparkle.railway.internal:3300',
   changeOrigin: true,
   pathRewrite: {
-    '^/api/discord-bot': ''
+    '^/api/discord-bot/webhook': '/webhook'
+  },
+  // Add logging to understand what's happening with requests
+  onProxyReq: (proxyReq, req, res) => {
+    console.log(`Proxying request to Discord bot: ${req.method} ${req.originalUrl}`);
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    console.log(`Proxy response from Discord bot: ${proxyRes.statusCode} for ${req.originalUrl}`);
+  },
+  onError: (err, req, res) => {
+    console.error(`Proxy error: ${err.message}`);
+    res.status(500).json({ error: 'Discord bot service unavailable', details: err.message });
   }
 }));
 
@@ -891,13 +903,24 @@ app.get('/error', (req, res) => {
   res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/auth-error`);
 });
 
+// API 404 handler - Must come BEFORE static file handler
+// This ensures API requests get proper JSON responses instead of HTML
+app.all('/api/*', function(req, res) {
+  res.status(404).json({ 
+    error: 'API endpoint not found',
+    path: req.originalUrl,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Static file serving in production
 if (process.env.NODE_ENV === 'production') {
- app.use(express.static(path.join(__dirname, '../frontend/build')));
+  app.use(express.static(path.join(__dirname, '../frontend/build')));
 
- app.get('*', function(req, res) {
-   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
- });
+  app.get('*', function(req, res) {
+    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+  });
 }
 
 
