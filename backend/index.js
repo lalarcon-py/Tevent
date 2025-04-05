@@ -299,6 +299,9 @@ app.use('/api/discord', require('./routes/discordBotRoutes'));
 app.use(guildActivityMiddleware);
 
 
+// Add our direct Discord roles route
+app.use('/api/direct', require('./routes/directDiscordRoles'));
+
 // General use routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/gear-checks', guildScopeMiddleware, validateGuildMembership, gearCheckRoutes);

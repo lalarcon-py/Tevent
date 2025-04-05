@@ -24,23 +24,39 @@ export function useDiscordRoles(guildId) {
         
         console.log(`Fetching Discord roles for guild ${guildId}`);
         
-        // Use the guild-specific endpoint from rolePingConfig.js
-        const response = await api.get(`/api/guilds/${guildId}/discord/roles`);
-        
-        // Add safety checks for the response format
-        if (!response.data) {
-          console.error('Invalid response format - no data');
-          throw new Error('Invalid response from server');
+        // Try the direct endpoint first
+        let rolesData;
+        try {
+          const directResponse = await api.get(`/api/direct/guilds/${guildId}/discord/roles`);
+          
+          if (directResponse.data && Array.isArray(directResponse.data) && directResponse.data.length > 0) {
+            console.log(`Received ${directResponse.data.length} Discord roles from direct endpoint`);
+            rolesData = directResponse.data;
+          }
+        } catch (directError) {
+          console.warn('Direct endpoint failed, falling back to standard endpoint:', directError);
         }
         
-        // Check if response is HTML (which would indicate an error)
-        if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
-          console.error('Server returned HTML instead of JSON');
-          throw new Error('Server returned HTML instead of JSON');
+        // Fall back to the standard endpoint if direct failed
+        if (!rolesData) {
+          const response = await api.get(`/api/guilds/${guildId}/discord/roles`);
+          
+          // Add safety checks for the response format
+          if (!response.data) {
+            console.error('Invalid response format - no data');
+            throw new Error('Invalid response from server');
+          }
+          
+          // Check if response is HTML (which would indicate an error)
+          if (typeof response.data === 'string' && response.data.includes('<!doctype html>')) {
+            console.error('Server returned HTML instead of JSON');
+            throw new Error('Server returned HTML instead of JSON');
+          }
+          
+          // Ensure we have an array
+          rolesData = Array.isArray(response.data) ? response.data : [];
+          console.log(`Received ${rolesData.length} Discord roles from standard endpoint`);
         }
-        
-        // Ensure we have an array
-        let rolesData = Array.isArray(response.data) ? response.data : [];
         
         console.log(`Received ${rolesData.length} Discord roles`);
         
