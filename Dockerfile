@@ -1,28 +1,30 @@
-FROM node:18-slim
+FROM node:18-alpine
 
-# Create app directory
 WORKDIR /app
 
-# Copy all source files
+# Copy package files
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy frontend package files and install dependencies
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN cd frontend && npm ci
+
+# Copy backend package files and install dependencies
+COPY backend/package.json backend/package-lock.json ./backend/
+RUN cd backend && npm ci
+
+# Copy all files
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/uploads
-
-# Set up a symbolic link to make "cd backend" work from anywhere
-RUN ln -s /app/backend /backend
+# Build frontend
+RUN cd frontend && npm run build
 
 # Set environment variables
-ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8080
 
-# Expose ports
-EXPOSE 3000
-EXPOSE 3300
+# Expose port
+EXPOSE 8080
 
-# Create a shell script to execute your command
-RUN echo '#!/bin/bash\ncd /app && cd backend && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && node index.js' > /app/start.sh && \
-    chmod +x /app/start.sh
-
-# Set the shell script as the entry point
-CMD ["/bin/bash", "/app/start.sh"]
+# Start command (first run migrations and seeds, then start the server)
+CMD cd backend && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && node index.js
