@@ -27,15 +27,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
   const [success, setSuccess] = useState('');
   const [testResults, setTestResults] = useState(null);
 
-  // Fetch role configurations when component mounts
-  useEffect(() => {
-    if (botConnected && discordGuildId) {
-      fetchRolePingConfigurations();
-      fetchDiscordRoles();
-    }
-  }, [botConnected, discordGuildId, fetchRolePingConfigurations, fetchDiscordRoles]);
-
-  // Fetch role ping configurations
+  // Fetch role ping configurations - DEFINED BEFORE BEING USED
   const fetchRolePingConfigurations = useCallback(async () => {
     try {
       setLoading(true);
@@ -63,9 +55,9 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
     } finally {
       setLoading(false);
     }
-  }, [guildId, discordGuildId]);
+  }, [guildId]);
 
-  // Fetch Discord roles
+  // Fetch Discord roles - DEFINED BEFORE BEING USED
   const fetchDiscordRoles = useCallback(async () => {
     try {
       setRoleLoading(true);
@@ -87,6 +79,14 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       setRoleLoading(false);
     }
   }, [guildId, discordGuildId]);
+
+  // Fetch role configurations when component mounts
+  useEffect(() => {
+    if (botConnected && discordGuildId) {
+      fetchRolePingConfigurations();
+      fetchDiscordRoles();
+    }
+  }, [botConnected, discordGuildId, fetchRolePingConfigurations, fetchDiscordRoles]);
 
   // Add role to a notification type
   const addRole = (type, roleId) => {
