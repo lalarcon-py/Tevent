@@ -1,0 +1,3 @@
+@echo off
+echo Starting TeventGM application (Frontend, Backend, and Discord Bot)...
+npm run start:dev

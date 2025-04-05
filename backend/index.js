@@ -30,6 +30,8 @@ const gearCheckRoutes = require('./routes/gearCheckRoutes');
 const billingRoutes = require('./routes/billingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+// Import the Discord roles routes
+const discordRolesRoutes = require('./routes/discordRolesRoutes');
 
 
 // Middleware imports
@@ -41,6 +43,7 @@ const guildActivityMiddleware = require('./middleware/guildActivityMiddleware');
 const guildContextMiddleware = require('./middleware/guildContextMiddleware');
 
 // Route imports
+const discordIntegrationRoutes = require('./routes/discordIntegrationRoutes');
 const itemsRouter = require('./routes/items');
 const eventsRouter = require('./routes/events');
 const teamsRouter = require('./routes/teams');
@@ -288,6 +291,10 @@ app.use('/auth', express.json());
 // Add guildActivityMiddleware without the problematic billing routes
 app.use('/api/billing', billingRoutes);
 app.use('/api/discord-setup', require('./routes/discordRoutes'));
+// Use new Discord integration routes
+app.use('/api', discordIntegrationRoutes);
+
+// Legacy Discord bot routes - to be deprecated
 app.use('/api/discord', require('./routes/discordBotRoutes'));
 app.use(guildActivityMiddleware);
 
@@ -321,9 +328,9 @@ app.put('/api/guilds/:guildId/settings',
   guildSettingsController.updateGuildSettings
 );
 
-// IMPORTANT: Only proxy specific routes to the Discord bot that we know aren't handled by our backend
+// Proxy Discord bot webhook requests to our new standalone Discord bot service
 app.use('/api/discord-bot/webhook', createProxyMiddleware({
-  target: 'http://heartfelt-sparkle.railway.internal:3300',
+  target: process.env.DISCORD_BOT_URL || 'http://localhost:3300',
   changeOrigin: true,
   pathRewrite: {
     '^/api/discord-bot/webhook': '/webhook'

@@ -2,10 +2,11 @@
   "name": "throne-and-liberty-app",
   "scripts": {
     "start": "node backend/index.js",
-    "start:dev": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",
+    "start:dev": "concurrently \"npm run start:frontend\" \"npm run start:backend\" \"npm run start:discord\"",
     "start:frontend": "cd frontend && npm start",
     "start:backend": "cd backend && nodemon index.js",
-    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+    "start:discord": "cd ../discord-bot-service && node src/index.js",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../../discord-bot-service && npm install"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

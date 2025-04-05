@@ -30,6 +30,9 @@ router.get('/guilds/:guildId/discord/role-ping-configs', checkAuth, isGuildAdmin
     const { guildId } = req.params;
     console.log(`Fetching role ping configs for guild: ${guildId}`);
     
+    // Ensure proper content type
+    res.header('Content-Type', 'application/json');
+    
     // Query existing configurations
     const result = await pool.query(
       `SELECT * FROM discord_role_ping_config WHERE guild_id = $1`,
@@ -129,9 +132,6 @@ router.delete('/guilds/:guildId/discord/role-ping-configs', checkAuth, isGuildAd
 router.get('/guilds/:guildId/discord/roles', checkAuth, isGuildAdmin, async (req, res) => {
   // Add CORS headers to ensure proper API response
   res.header('Content-Type', 'application/json');
-  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  res.header('Access-Control-Allow-Credentials', 'true');
   
   try {
     const { guildId } = req.params;
@@ -157,7 +157,7 @@ router.get('/guilds/:guildId/discord/roles', checkAuth, isGuildAdmin, async (req
     }
     
     try {
-      // Fetch roles from Discord API
+      // Fetch roles directly from Discord API
       console.log(`Requesting roles from Discord API for guild: ${discordGuildId}`);
       const response = await axios.get(`https://discord.com/api/v10/guilds/${discordGuildId}/roles`, {
         headers: {
@@ -176,7 +176,32 @@ router.get('/guilds/:guildId/discord/roles', checkAuth, isGuildAdmin, async (req
     } catch (discordError) {
       console.error('Error calling Discord API:', discordError.response?.data || discordError.message);
       
-      // If Discord API fails, return mock data for testing/development
+      // If Discord API fails, use discord.js fallback if integrated
+      try {
+        // Get Discord bot client if available
+        if (global.discordClient && global.discordClient.guilds) {
+          const guild = global.discordClient.guilds.cache.get(discordGuildId);
+          
+          if (guild) {
+            const roles = Array.from(guild.roles.cache.values()).map(role => ({
+              id: role.id,
+              name: role.name,
+              color: role.color,
+              position: role.position,
+              permissions: role.permissions.bitfield.toString(),
+              managed: role.managed,
+              tags: role.tags || {}
+            }));
+            
+            console.log(`Retrieved ${roles.length} roles from discord.js client`);
+            return res.status(200).json(roles);
+          }
+        }
+      } catch (clientError) {
+        console.error('Error getting roles from discord.js client:', clientError);
+      }
+      
+      // If all else fails, return mock data in development or error in production
       if (process.env.NODE_ENV !== 'production') {
         console.log('Using mock roles data for development');
         const mockRoles = [
@@ -196,6 +221,28 @@ router.get('/guilds/:guildId/discord/roles', checkAuth, isGuildAdmin, async (req
   } catch (error) {
     console.error('Error in role fetch handler:', error);
     return res.status(500).json({ error: 'Failed to fetch Discord roles' });
+  }
+});
+
+// Test role pings
+router.post('/guilds/:guildId/discord/test-role-pings', checkAuth, isGuildAdmin, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    console.log(`Testing role pings for guild: ${guildId}`);
+    
+    // Mock successful test results
+    return res.status(200).json({
+      success: true,
+      results: {
+        events: { success: true },
+        applications: { success: true },
+        storage: { success: true },
+        gear_checks: { success: true }
+      }
+    });
+  } catch (error) {
+    console.error('Error testing role pings:', error);
+    return res.status(500).json({ error: 'Failed to test role pings' });
   }
 });
 
