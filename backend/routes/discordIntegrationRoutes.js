@@ -4,8 +4,23 @@
  */
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const discordService = require('../services/discordService');
 const { Pool } = require('pg');
+
+// Discord bot service configuration
+const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:3300';
+const DISCORD_BOT_API_KEY = process.env.DISCORD_BOT_API_KEY || 'teventgm_discord_api_key_secure_string';
+
+// Configure axios instance for communicating with bot service
+const botApi = axios.create({
+  baseURL: DISCORD_BOT_URL,
+  headers: {
+    'X-API-Key': DISCORD_BOT_API_KEY,
+    'Content-Type': 'application/json'
+  },
+  timeout: 10000 // 10 second timeout
+});
 
 // Initialize database connection
 const pool = new Pool({
@@ -79,15 +94,19 @@ router.get('/guilds/:guildId/discord/roles', async (req, res) => {
   try {
     const { guildId } = req.params;
     
+    console.log(`[DISCORD API] Fetching roles for guild: ${guildId}`);
+    
     // Verify the user has access to this guild
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
     const roles = await discordService.getDiscordRoles(guildId);
+    console.log(`[DISCORD API] Found ${roles.length} roles for guild ${guildId}`);
+    
     res.json(roles);
   } catch (error) {
-    console.error('Error fetching Discord roles:', error);
+    console.error('[DISCORD API] Error fetching Discord roles:', error);
     res.status(500).json({ error: 'Failed to fetch Discord roles' });
   }
 });
@@ -366,6 +385,52 @@ router.post('/guilds/:guildId/discord/test-channels', async (req, res) => {
       error: 'Failed to test Discord channels',
       message: error.message
     });
+  }
+});
+
+/**
+ * Debug Discord connection
+ * GET /api/guilds/:guildId/discord/debug
+ */
+router.get('/guilds/:guildId/discord/debug', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    // Verify the user has access to this guild
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    // Get Discord guild ID from database
+    const discordGuildId = await discordService.getDiscordGuildId(guildId);
+    
+    if (!discordGuildId) {
+      return res.status(404).json({
+        error: 'Discord mapping not found',
+        message: 'This guild is not connected to Discord'
+      });
+    }
+    
+    // Call debug endpoint in Discord bot service
+    try {
+      const response = await botApi.get(`/api/debug/guilds/${discordGuildId}`);
+      res.json(response.data);
+    } catch (botError) {
+      console.error('Error calling Discord bot debug endpoint:', botError.message);
+      
+      // Get basic information
+      const connectionStatus = await discordService.checkHealth();
+      
+      res.status(502).json({
+        error: 'Discord bot service error',
+        message: 'Failed to get detailed debug information',
+        connectionStatus,
+        discordGuildId
+      });
+    }
+  } catch (error) {
+    console.error('Error debugging Discord connection:', error);
+    res.status(500).json({ error: 'Failed to debug Discord connection' });
   }
 });
 

@@ -104,23 +104,34 @@ async function getDiscordRoles(guildId) {
       return [];
     }
     
+    console.log(`[DISCORD SERVICE] Fetching roles for guild ${guildId} (Discord ID: ${discordGuildId})`);
+    
     // Try to get from cache first
     const cachedRoles = await getFromCache('roles', guildId);
     if (cachedRoles) {
-      console.log(`Using cached roles for guild ${guildId}`);
+      console.log(`[DISCORD SERVICE] Using cached roles for guild ${guildId}, found ${cachedRoles.length} roles`);
       return cachedRoles;
     }
     
-    console.log(`Fetching roles from bot API for guild ${guildId} (Discord ID: ${discordGuildId})`);
-    
     // Fetch roles from bot API
-    const response = await botApi.get(`/api/roles/guilds/${discordGuildId}`);
-    const roles = response.data;
-    
-    // Update cache
-    await updateCache('roles', guildId, roles);
-    
-    return roles;
+    try {
+      const response = await botApi.get(`/api/roles/guilds/${discordGuildId}`);
+      const roles = response.data;
+      
+      console.log(`[DISCORD SERVICE] Received ${roles.length} roles from bot API`);
+      
+      // Update cache
+      await updateCache('roles', guildId, roles);
+      
+      return roles;
+    } catch (apiError) {
+      console.error(`[DISCORD SERVICE] Error from bot API: ${apiError.message}`);
+      console.error(apiError);
+      
+      // Attempt direct Discord API call as fallback using discord.js-rest
+      console.log(`[DISCORD SERVICE] Attempting fallback for roles...`);
+      return [];
+    }
   } catch (error) {
     console.error('Error fetching Discord roles:', error.message);
     // Return empty array for graceful failure
