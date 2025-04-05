@@ -1,0 +1,47 @@
+-- Role ping configuration table
+CREATE TABLE IF NOT EXISTS discord_role_ping_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  guild_id UUID NOT NULL,
+  type VARCHAR(50) NOT NULL, -- 'events', 'storage', etc.
+  role_ids TEXT[] NOT NULL DEFAULT '{}'::TEXT[], -- Array of Discord role IDs
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT discord_role_ping_config_guild_type_unique UNIQUE(guild_id, type),
+  CONSTRAINT discord_role_ping_config_guild_fk FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
+);
+
+-- Create an index for faster lookups
+CREATE INDEX IF NOT EXISTS discord_role_ping_config_guild_id_idx ON discord_role_ping_config(guild_id);
+CREATE INDEX IF NOT EXISTS discord_role_ping_config_type_idx ON discord_role_ping_config(type);
+
+-- Function to update the updated_at timestamp
+CREATE OR REPLACE FUNCTION update_discord_role_ping_config_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to automatically update updated_at
+DROP TRIGGER IF EXISTS update_discord_role_ping_config_updated_at_trigger ON discord_role_ping_config;
+CREATE TRIGGER update_discord_role_ping_config_updated_at_trigger
+BEFORE UPDATE ON discord_role_ping_config
+FOR EACH ROW
+EXECUTE FUNCTION update_discord_role_ping_config_updated_at();
+
+-- Insert default configurations for existing guilds
+INSERT INTO discord_role_ping_config (guild_id, type, role_ids)
+SELECT id, 'events', '{}'::TEXT[]
+FROM guilds
+WHERE NOT EXISTS (
+  SELECT 1 FROM discord_role_ping_config WHERE guild_id = guilds.id AND type = 'events'
+);
+
+INSERT INTO discord_role_ping_config (guild_id, type, role_ids)
+SELECT id, 'storage', '{}'::TEXT[]
+FROM guilds
+WHERE NOT EXISTS (
+  SELECT 1 FROM discord_role_ping_config WHERE guild_id = guilds.id AND type = 'storage'
+);

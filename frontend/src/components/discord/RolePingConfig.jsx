@@ -4,7 +4,6 @@ import {
   Paper, Grid, FormControl, InputLabel, Select, MenuItem,
   Card, CardContent, IconButton, alpha
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import axiosInstance from '../../config/axios';
@@ -27,12 +26,17 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
   const [success, setSuccess] = useState('');
   const [testResults, setTestResults] = useState(null);
 
-  // Fetch role ping configurations - DEFINED BEFORE BEING USED
+  // Fetch role ping configurations
   const fetchRolePingConfigurations = useCallback(async () => {
+    if (!guildId) return;
+    
     try {
       setLoading(true);
-      // Updated to use the correct endpoint structure
+      setError('');
+      console.log(`Fetching role ping configs for guild: ${guildId}`);
+      
       const response = await axiosInstance.get(`/api/guilds/${guildId}/discord/role-ping-configs`);
+      console.log('Received role ping configs:', response.data);
       
       // Convert array of configs to object for easier access
       const configsObj = {};
@@ -43,7 +47,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       // Populate from API response
       if (response.data && Array.isArray(response.data)) {
         response.data.forEach(config => {
-          if (config.role_ids && Array.isArray(config.role_ids)) {
+          if (config.type && config.role_ids && Array.isArray(config.role_ids)) {
             configsObj[config.type] = config.role_ids;
           }
         });
@@ -58,18 +62,34 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
     }
   }, [guildId]);
 
-  // Fetch Discord roles - DEFINED BEFORE BEING USED
+  // Fetch Discord roles
   const fetchDiscordRoles = useCallback(async () => {
+    if (!guildId) return;
+    
     try {
       setRoleLoading(true);
-      // Updated to use the correct endpoint as defined in your backend
+      setError('');
+      console.log(`Fetching roles for guild: ${guildId}`);
+      
       const response = await axiosInstance.get(`/api/guilds/${guildId}/discord/roles`);
+      console.log('Received roles response:', response.data);
+      
+      // Handle different response formats and ensure we have an array
+      let roles = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          roles = response.data;
+        } else if (Array.isArray(response.data.roles)) {
+          roles = response.data.roles;
+        }
+      }
       
       // Filter out @everyone role and sort alphabetically
-      const filteredRoles = response.data
-        .filter(role => role.name !== '@everyone')
+      const filteredRoles = roles
+        .filter(role => role && role.name && role.name !== '@everyone')
         .sort((a, b) => a.name.localeCompare(b.name));
-        
+      
+      console.log(`Filtered ${filteredRoles.length} roles`);
       setDiscordRoles(filteredRoles);
     } catch (error) {
       console.error('Error fetching Discord roles:', error);
@@ -80,7 +100,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
     }
   }, [guildId]);
 
-  // Fetch role configurations when component mounts
+  // Fetch data when component mounts
   useEffect(() => {
     if (botConnected && guildId) {
       fetchRolePingConfigurations();
@@ -122,18 +142,22 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
 
   // Save role ping configurations
   const saveSettings = async () => {
+    if (!guildId) return;
+    
     try {
       setSaving(true);
       setError('');
       setSuccess('');
       
       // Convert configurations object to array format expected by API
-      const configsArray = Object.entries(configurations).map(([notificationType, roleIds]) => ({
-        type: notificationType,
+      const configsArray = Object.entries(configurations).map(([type, roleIds]) => ({
+        type,
+        enabled: true,
         role_ids: roleIds
       }));
       
-      // Updated to use the correct endpoint structure
+      console.log('Saving configurations:', configsArray);
+      
       await axiosInstance.post(`/api/guilds/${guildId}/discord/role-ping-configs`, configsArray);
       
       setSuccess('Role ping configuration saved successfully!');
@@ -148,12 +172,15 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
 
   // Test the configuration
   const testRolePings = async () => {
+    if (!guildId) return;
+    
     try {
       setTestResults(null);
       setSaving(true);
       setError('');
       
-      const response = await axiosInstance.post(`/api/guilds/${guildId}/discord/test-role-pings`, {
+      const response = await axiosInstance.post(`/api/discord-bot/test-role-pings`, {
+        guildId,
         discordGuildId
       });
       
@@ -168,10 +195,14 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
   };
 
   if (!botConnected) {
-    return null; // Don't show this component if bot is not connected
+    return (
+      <Alert severity="info" sx={{ mb: 3 }}>
+        Discord bot is not connected. Connect a Discord server to use role ping configuration.
+      </Alert>
+    );
   }
 
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
         <CircularProgress />
@@ -191,12 +222,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
       </Typography>
       
       {/* Role selection/loading indicator */}
-      {roleLoading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress size={30} />
-          <Typography sx={{ ml: 2 }}>Loading roles...</Typography>
-        </Box>
-      ) : discordRoles.length === 0 ? (
+      {discordRoles.length === 0 ? (
         <Alert severity="warning" sx={{ mb: 3 }}>
           No roles found in your Discord server. Please create at least one role first.
         </Alert>
@@ -240,8 +266,8 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
                             label={getRoleName(roleId)}
                             onDelete={() => removeRole(type.id, roleId)}
                             sx={{ 
-                            backgroundColor: getRoleColor(roleId),
-                            color: parseInt(getRoleColor(roleId).substring(1), 16) > 0x888888 ? '#000' : '#fff',
+                              backgroundColor: getRoleColor(roleId),
+                              color: parseInt(getRoleColor(roleId).substring(1), 16) > 0x888888 ? '#000' : '#fff',
                               borderRadius: '16px',
                               fontWeight: 400
                             }}
@@ -291,7 +317,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
           variant="contained" 
           color="primary" 
           onClick={saveSettings}
-          disabled={saving || roleLoading}
+          disabled={saving || discordRoles.length === 0}
           size="large"
           sx={{ 
             backgroundColor: '#5865F2', 
@@ -307,7 +333,7 @@ const RolePingConfig = ({ guildId, discordGuildId, botConnected }) => {
         <Button 
           variant="outlined"
           onClick={testRolePings}
-          disabled={saving || roleLoading}
+          disabled={saving || discordRoles.length === 0}
           sx={{ 
             borderColor: '#5865F2', 
             color: '#5865F2',
