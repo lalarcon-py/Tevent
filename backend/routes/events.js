@@ -27,6 +27,83 @@ const hasPermission = (roles) => (req, res, next) => {
   next();
 };
 
+// Get all events with debug info
+router.get('/all-debug', async (req, res) => {
+  try {
+    const guildId = req.guildId || req.query.guildId || req.body?.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    console.log(`DEBUG: Fetching all events for guild ${guildId} without filters`);
+    
+    // Fetch all events for the guild with minimal filtering
+    const events = await Event.findAll({
+      where: { guild_id: guildId },
+      include: [
+        {
+          model: EventParticipant,
+          as: 'participants',
+          required: false,
+          include: [{
+            model: User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        },
+        {
+          model: EventParticipant,
+          as: 'tentatives',
+          required: false,
+          include: [{
+            model: User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        },
+        {
+          model: db.EventAbsentee,
+          as: 'absentees',
+          required: false,
+          include: [{
+            model: User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        }
+      ],
+      order: [['event_time', 'DESC']]
+    });
+    
+    // Log detailed event information
+    console.log(`Found ${events.length} events total for guild ${guildId}`);
+    events.forEach((event, index) => {
+      console.log(`Event ${index + 1}: id=${event.id}, title=${event.title}, date=${event.event_time}`);
+    });
+    
+    // Return all events with debug info
+    res.json({
+      count: events.length,
+      guild_id: guildId,
+      events: events.map(event => ({
+        id: event.id,
+        title: event.title,
+        date: event.event_time,
+        event_time: event.event_time,
+        description: event.description,
+        participants: event.participants || [],
+        tentatives: event.tentatives || [],
+        absentees: event.absentees || []
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching all events:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch events', 
+      details: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // Get all events
 router.get('/', async (req, res) => {
   try {
@@ -759,6 +836,8 @@ router.post('/',
       return res.status(400).json({ error: 'Guild ID is required and no default guild found for user' });
     }
     
+    console.log(`Creating new event for guild ${guildId} by user ${req.user.id}:`, req.body);
+    
     const event = await Event.create({
       guild_id: guildId,
       title: req.body.title,
@@ -775,6 +854,8 @@ router.post('/',
     });
 
     await t.commit();
+    
+    console.log(`Successfully created event with ID ${event.id}`);
     
     // Fetch the created event with associations
     const createdEvent = await Event.findByPk(event.id, {
@@ -818,7 +899,8 @@ router.post('/',
     console.error('Event creation error:', {
       message: error.message,
       stack: error.stack,
-      name: error.name
+      name: error.name,
+      body: req.body
     });
     res.status(500).json({ 
       error: 'Failed to create event',

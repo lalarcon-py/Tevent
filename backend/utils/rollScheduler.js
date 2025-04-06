@@ -117,18 +117,21 @@ const checkForExpiredRequests = async () => {
         winner = needItemRequests.reduce((highest, current) => 
           (current.roll_value > highest.roll_value) ? current : highest, needItemRequests[0]);
         winningGroup = 'NEED_ITEM';
+        console.log(`🎲 Winner from NEED_ITEM category: ${winner.user.username} with roll ${winner.roll_value}`);
       }
       // If no NEED_ITEM requests, check NEED_TRAIT
       else if (needTraitRequests.length > 0) {
         winner = needTraitRequests.reduce((highest, current) => 
           (current.roll_value > highest.roll_value) ? current : highest, needTraitRequests[0]);
         winningGroup = 'NEED_TRAIT';
+        console.log(`🎲 Winner from NEED_TRAIT category: ${winner.user.username} with roll ${winner.roll_value}`);
       }
       // If no NEED_ITEM or NEED_TRAIT, check GREED
       else if (greedRequests.length > 0) {
         winner = greedRequests.reduce((highest, current) => 
           (current.roll_value > highest.roll_value) ? current : highest, greedRequests[0]);
         winningGroup = 'GREED';
+        console.log(`🎲 Winner from GREED category: ${winner.user.username} with roll ${winner.roll_value}`);
       }
       
       if (!winner) {
@@ -285,21 +288,30 @@ const processRollForItem = async (storageItemId, guildId) => {
       };
     });
     
-    // Sort by priority first, then by roll value
-    rollResults.sort((a, b) => {
-      // First by need/greed priority
-      const priorityOrder = { 'NEED_ITEM': 0, 'NEED_TRAIT': 1, 'GREED': 2 };
-      const aPriority = priorityOrder[a.need_or_greed] || 3;
-      const bPriority = priorityOrder[b.need_or_greed] || 3;
-      
-      if (aPriority !== bPriority) return aPriority - bPriority;
-      
-      // Then by roll value (highest wins)
-      return b.roll_value - a.roll_value;
+    // Get highest priority group available
+    const priorityOrder = { 'NEED_ITEM': 0, 'NEED_TRAIT': 1, 'GREED': 2 };
+    let highestPriorityGroup = 3; // Start with value higher than any valid priority
+    
+    for (const result of rollResults) {
+      const priority = priorityOrder[result.need_or_greed] || 3;
+      if (priority < highestPriorityGroup) {
+        highestPriorityGroup = priority;
+      }
+    }
+    
+    // Filter to only highest priority group
+    const highestPriorityResults = rollResults.filter(result => {
+      const priority = priorityOrder[result.need_or_greed] || 3;
+      return priority === highestPriorityGroup;
     });
     
-    // Get the winner (first after sorting)
-    const winner = rollResults[0];
+    // Sort by roll value (highest wins) within the highest priority group
+    highestPriorityResults.sort((a, b) => b.roll_value - a.roll_value);
+    
+    console.log(`Highest priority group is ${Object.keys(priorityOrder)[highestPriorityGroup]} with ${highestPriorityResults.length} requests`);
+    
+    // Get the winner (first after sorting within highest priority group)
+    const winner = highestPriorityResults[0];
     
     // Update all requests with their roll values
     for (const result of rollResults) {

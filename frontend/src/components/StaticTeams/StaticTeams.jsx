@@ -1827,17 +1827,55 @@ const StaticTeams = () => {
     
           <Grid item xs={12} md={9}>
             <Grid container spacing={2}>
-              {teams.map(team => (
-                <Grid item xs={12} md={6} lg={4} key={team.id}>
-                  <Team 
-                    team={team} 
-                    onDrop={handleDrop}
-                    onRemove={handleDeleteTeam}
-                    onRemoveMember={handleRemoveMember}
-                    canEdit={hasEditPermission()}
-                  />
-                </Grid>
-              ))}
+              {/* Use a div with display:flex to make teams appear in a row */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', width: '100%' }}>
+                {teams.map((team, index) => (
+                  <Box 
+                    key={team.id}
+                    sx={{ 
+                      width: { xs: '100%', md: '50%', lg: '33.333%' },
+                      p: 1,
+                      cursor: hasEditPermission() ? 'move' : 'default'
+                    }}
+                    draggable={hasEditPermission()}
+                    onDragStart={(e) => {
+                      if (!hasEditPermission()) return;
+                      e.dataTransfer.setData('teamIndex', index.toString());
+                    }}
+                    onDragOver={(e) => {
+                      if (!hasEditPermission()) return;
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      if (!hasEditPermission()) return;
+                      e.preventDefault();
+                      const draggedIndex = parseInt(e.dataTransfer.getData('teamIndex'));
+                      if (draggedIndex === index) return; // Same position, no change
+                      
+                      // Create a new teams array with the reordered teams
+                      const newTeams = [...teams];
+                      const draggedTeam = newTeams[draggedIndex];
+                      
+                      // Remove the dragged team
+                      newTeams.splice(draggedIndex, 1);
+                      
+                      // Insert it at the new position
+                      newTeams.splice(index, 0, draggedTeam);
+                      
+                      // Update state
+                      setTeams(newTeams);
+                    }}
+                  >
+                    <Team 
+                      team={team} 
+                      onDrop={handleDrop}
+                      onRemove={handleDeleteTeam}
+                      onRemoveMember={handleRemoveMember}
+                      canEdit={hasEditPermission()}
+                    />
+                  </Box>
+                ))}
+              </Box>
             </Grid>
           </Grid>
         </Grid>

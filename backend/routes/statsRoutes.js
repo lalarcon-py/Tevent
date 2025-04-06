@@ -208,24 +208,96 @@ const getAttendanceStats = async (req, res) => {
       return res.status(400).json({ error: 'Guild ID is required' });
     }
     
-    // Calculate period start date
+    console.log(`Getting attendance stats for guild ${guildId} with period ${period} days`);
+    
+    // Calculate period start date (events AFTER this date)
     const periodStart = new Date();
     periodStart.setDate(periodStart.getDate() - parseInt(period));
     
-    // Get all events in the period
-    const events = await db.Event.findAll({
+    // First, get all events without date filtering to check if any exist at all
+    const allEvents = await db.Event.findAll({
       where: {
-        guild_id: guildId,
-        event_time: {
-          [db.Sequelize.Op.gte]: periodStart
-        }
+        guild_id: guildId
       },
-      include: [{
-        model: db.EventParticipant,
-        as: 'participants'
-      }],
+      include: [
+        {
+          model: db.EventParticipant,
+          as: 'participants',
+          where: { status: 'CONFIRMED' },
+          required: false,
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        },
+        {
+          model: db.EventParticipant,
+          as: 'tentatives',
+          where: { status: 'TENTATIVE' },
+          required: false,
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        },
+        {
+          model: db.EventAbsentee,
+          as: 'absentees',
+          required: false,
+          include: [{
+            model: db.User,
+            attributes: ['id', 'username', 'avatar_url']
+          }]
+        }
+      ],
       order: [['event_time', 'DESC']]
     });
+    
+    // If there are no events at all, return empty data to avoid filtering logic
+    if (allEvents.length === 0) {
+      console.log(`No events found for guild ${guildId} at all. Returning empty stats.`);
+      const totalMembers = await db.User.count({
+        where: { guild_id: guildId }
+      });
+      
+      return res.json({
+        total_events: 0,
+        average_attendance_rate: 0,
+        attendance_history: [],
+        total_members: totalMembers,
+        debug_info: {
+          message: "No events found for this guild",
+          guild_id: guildId
+        }
+      });
+    }
+    
+    // Log the events we found before filtering
+    console.log(`Found ${allEvents.length} total events for guild ${guildId}`);
+    allEvents.forEach((event, index) => {
+      console.log(`Event ${index + 1}: id=${event.id}, title=${event.title}, date=${event.event_time}`);
+    });
+    
+    // Now apply period filter
+    // Note: Period filtering means we're looking for events in the past {period} days
+    // For example, if period is 14 days, we want events from now back to 14 days ago
+    const events = allEvents.filter(event => {
+      if (!event.event_time) return false;
+      
+      // Convert both to UTC date objects to ensure correct comparison
+      const eventDate = new Date(event.event_time);
+      
+      // Check if event is after the cutoff date (within period)
+      const timeDiff = new Date().getTime() - eventDate.getTime();
+      const dayDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
+      const isWithinPeriod = dayDiff <= period;
+      
+      console.log(`Event ${event.id} (${event.title}): date=${eventDate.toISOString()}, days ago=${dayDiff}, period=${period}, include=${isWithinPeriod}`);
+      
+      return isWithinPeriod;
+    });
+    
+    console.log(`After date filtering, ${events.length} events remain within the ${period} day period`);
     
     // Get total member count
     const totalMembers = await db.User.count({
@@ -235,32 +307,54 @@ const getAttendanceStats = async (req, res) => {
     // Calculate attendance rate
     let totalAttendance = 0;
     events.forEach(event => {
-      totalAttendance += event.participants.length;
+      const confirmedCount = event.participants ? event.participants.length : 0;
+      totalAttendance += confirmedCount;
     });
     
     const averageAttendance = events.length > 0 ? 
       (totalAttendance / (events.length * totalMembers)) * 100 : 0;
     
-    // Get the last 7 events
-    const recentEvents = events.slice(0, 7).map(event => ({
-      id: event.id,
-      title: event.title,
-      date: event.event_time,
-      attendance_count: event.participants.length,
-      attendance_rate: totalMembers > 0 ? 
-        (event.participants.length / totalMembers) * 100 : 0
-    }));
+    // Process all events
+    const eventHistory = events.map(event => {
+      const participantCount = event.participants ? event.participants.length : 0;
+      const tentativeCount = event.tentatives ? event.tentatives.length : 0;
+      const absenteeCount = event.absentees ? event.absentees.length : 0;
+      
+      return {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        date: event.event_time,
+        event_time: event.event_time, // Include both to ensure frontend has the right field
+        attendance_count: participantCount,
+        tentative_count: tentativeCount,
+        absentee_count: absenteeCount,
+        attendance_rate: totalMembers > 0 ? (participantCount / totalMembers) * 100 : 0,
+        total_members: totalMembers,
+        participants: event.participants || [],
+        tentatives: event.tentatives || [],
+        absentees: event.absentees || []
+      };
+    });
     
     const stats = {
       total_events: events.length,
       average_attendance_rate: averageAttendance,
-      attendance_history: recentEvents
+      attendance_history: eventHistory,
+      total_members: totalMembers,
+      all_events_count: allEvents.length, // For debugging
+      filtered_events_count: events.length // For debugging
     };
     
+    console.log(`Returning attendance stats with ${eventHistory.length} processed events`);
     res.json(stats);
   } catch (error) {
     console.error('Error in getAttendanceStats:', error);
-    res.status(500).json({ error: 'Failed to fetch attendance stats' });
+    res.status(500).json({ 
+      error: 'Failed to fetch attendance stats',
+      details: error.message,
+      stack: error.stack
+    });
   }
 };
 

@@ -1,4 +1,5 @@
 const { User, Event, EventParticipant } = require('../models');
+const db = require('../models');
 const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
 
@@ -123,6 +124,8 @@ const dashboardController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
+      // Get the period parameter from the request or default to 30 days
+      const period = parseInt(req.query.period) || 30;
       const guildId = req.guildId;
       if (!guildId) {
         return res.status(400).json({ error: 'Guild ID is required' });
@@ -141,42 +144,76 @@ const dashboardController = {
         });
       }
   
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Calculate cutoff date based on period
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - period);
   
-      // Get all events in period with participants
+      // Get all events in period with participants, tentatives, and absentees
       const events = await Event.findAll({
         where: {
           guild_id: guildId,
           event_time: {
-            [Op.gte]: thirtyDaysAgo
+            [Op.gte]: cutoffDate
           }
         },
-        include: [{
-          model: EventParticipant,
-          as: 'participants',
-          required: false
-        }],
+        include: [
+          {
+            model: EventParticipant,
+            as: 'participants',
+            where: { status: 'CONFIRMED' }, // Only include confirmed participants
+            required: false,
+            include: [{
+              model: User,
+              attributes: ['id', 'username', 'avatar_url']
+            }]
+          },
+          {
+            model: EventParticipant,
+            as: 'tentatives',
+            where: { status: 'TENTATIVE' }, // Only include tentative participants
+            required: false,
+            include: [{
+              model: User,
+              attributes: ['id', 'username', 'avatar_url']
+            }]
+          },
+          {
+            model: db.EventAbsentee,
+            as: 'absentees',
+            required: false,
+            include: [{
+              model: User,
+              attributes: ['id', 'username', 'avatar_url']
+            }]
+          }
+        ],
         order: [['event_time', 'DESC']]
       });
   
       // Process each event into standardized format
       const attendanceHistory = events.map(event => {
-        const participantCount = event.participants ? event.participants.length : 0;
+        // Get participants count
+        const participantCount = event.participants?.length || 0;
+        
         // Calculate actual percentage - make sure division results in 0 when nobody attended
         const attendanceRate = totalUsers > 0 ? (participantCount / totalUsers) * 100 : 0;
         
         return {
           id: event.id,
           title: event.title,
+          description: event.description,
           date: event.event_time,
+          event_time: event.event_time, // Include both to make sure frontend has correct field
           attendance_count: participantCount,
           attendance_rate: attendanceRate, // Actual percentage, not defaulted
-          total_members: totalUsers
+          total_members: totalUsers,
+          participants: event.participants || [],
+          tentatives: event.tentatives || [],
+          absentees: event.absentees || []
         };
       });
       
-      // Calculate overall attendance rate
+      // Calculate overall attendance rate - only count confirmed participants
       const averageAttendanceRate = events.length > 0 ? 
         attendanceHistory.reduce((sum, event) => sum + event.attendance_rate, 0) / events.length : 0;
   
@@ -184,7 +221,8 @@ const dashboardController = {
       const response = {
         total_events: events.length,
         average_attendance_rate: averageAttendanceRate,
-        attendance_history: attendanceHistory
+        attendance_history: attendanceHistory,
+        total_members: totalUsers
       };
   
       // Log the output for debugging

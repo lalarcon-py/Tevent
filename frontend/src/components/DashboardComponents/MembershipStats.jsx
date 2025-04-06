@@ -3,6 +3,15 @@ import React from 'react';
 import { Typography, Box, Divider, Grid, Avatar } from '@mui/material';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from 'recharts';
+
+const ROLE_COLORS = {
+  'Tank': '#66b3ff', // Blue
+  'TANK': '#66b3ff',
+  'Healer': '#66ff66', // Green
+  'HEALER': '#66ff66', 
+  'DPS': '#ff6666',   // Red
+};
 
 const COLORS = ['#64b5f6', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#4fc3f7'];
 
@@ -136,6 +145,7 @@ class MembershipStats extends React.Component {
         }
         
         if (typeof data.new_members_30d === 'number') {
+          console.log(`Got new_members_30d from API: ${data.new_members_30d}`);
           newMembers30d = data.new_members_30d;
         }
       }
@@ -152,15 +162,53 @@ class MembershipStats extends React.Component {
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
           
+          // We need to log some examples to debug
+          if (guildMembers.length > 0) {
+            const sampleMember = guildMembers[0];
+            console.log("Sample member data for debugging join dates:", {
+              id: sampleMember.id,
+              username: sampleMember.username,
+              joinedAt: sampleMember.joinedAt,
+              createdAt: sampleMember.createdAt,
+              created_at: sampleMember.created_at
+            });
+          }
+          
           newMembers30d = guildMembers.filter(member => {
-            if (!member.joinedAt) return false;
-            try {
-              const joinDate = new Date(member.joinedAt);
-              return joinDate >= thirtyDaysAgo;
-            } catch (e) {
-              return false;
+            // First try joinedAt (Discord-style field)
+            if (member.joinedAt) {
+              try {
+                const joinDate = new Date(member.joinedAt);
+                return joinDate >= thirtyDaysAgo;
+              } catch (e) {
+                console.warn("Error parsing joinedAt:", e);
+              }
             }
+            
+            // Then try createdAt (Sequelize default)
+            if (member.createdAt) {
+              try {
+                const createDate = new Date(member.createdAt);
+                return createDate >= thirtyDaysAgo;
+              } catch (e) {
+                console.warn("Error parsing createdAt:", e);
+              }
+            }
+            
+            // Finally try created_at (snake_case version)
+            if (member.created_at) {
+              try {
+                const createDate = new Date(member.created_at);
+                return createDate >= thirtyDaysAgo;
+              } catch (e) {
+                console.warn("Error parsing created_at:", e);
+              }
+            }
+            
+            return false;
           }).length;
+          
+          console.log(`Calculated new_members_30d from member data: ${newMembers30d}`);
         }
         
         // Process combat roles (DPS, Tank, Healer)
@@ -243,68 +291,7 @@ class MembershipStats extends React.Component {
           </Grid>
         </Grid>
         
-        <Divider sx={{ my: 3, opacity: 0.2 }} />
-        
-        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-          Role Distribution
-        </Typography>
-        
-        {roleData.length > 0 ? (
-          <Box>
-            {roleData.map((item, index) => (
-              <Box key={index} sx={{ mb: 2.5, px: 1 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2" sx={{ 
-                    textTransform: 'capitalize',
-                    fontWeight: 'medium',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}>
-                    <Box 
-                      sx={{ 
-                        width: 10, 
-                        height: 10, 
-                        borderRadius: '50%', 
-                        bgcolor: COLORS[index % COLORS.length],
-                        mr: 1.5
-                      }} 
-                    />
-                    {item.name}
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                    {item.value} members
-                  </Typography>
-                </Box>
-                <Box 
-                  sx={{ 
-                    height: 8, 
-                    width: '100%', 
-                    bgcolor: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: 5,
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                >
-                  <Box 
-                    sx={{ 
-                      height: '100%', 
-                      width: `${(item.value / Math.max(...roleData.map(r => r.value))) * 100}%`, 
-                      bgcolor: COLORS[index % COLORS.length],
-                      borderRadius: 5,
-                      transition: 'width 1s ease-in-out'
-                    }} 
-                  />
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <Typography variant="body2" color="text.secondary">
-              No role distribution data available.
-            </Typography>
-          </Box>
-        )}
+
       </Box>
     );
   }

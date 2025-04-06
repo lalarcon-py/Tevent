@@ -11,10 +11,19 @@ import {
   ListItemAvatar,
   Avatar,
   Chip,
-  Grid
+  Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
 import EventIcon from '@mui/icons-material/Event';
 import PeopleIcon from '@mui/icons-material/People';
+import SearchIcon from '@mui/icons-material/Search';
+import CloseIcon from '@mui/icons-material/Close';
 
 class AttendanceStats extends React.Component {
   constructor(props) {
@@ -23,7 +32,10 @@ class AttendanceStats extends React.Component {
       period: 30,
       totalEvents: 0,
       averageAttendance: 0,
-      filteredHistory: []
+      filteredHistory: [],
+      modalOpen: false,
+      selectedEvent: null,
+      memberSearch: ''
     };
   }
 
@@ -37,13 +49,26 @@ class AttendanceStats extends React.Component {
     }
   }
 
-  setPeriod = (days) => {
-    this.setState({ period: days });
+  setPeriod = async (days) => {
+    // Set period and inform parent component
+    this.setState({ period: days }, () => {
+      console.log(`Period changed to ${days} days. Processing data...`);
+      // First try with client-side filtering for immediate feedback
+      this.processData();
+      
+      // Then notify parent to fetch fresh data from server
+      if (this.props.onPeriodChange) {
+        this.props.onPeriodChange(days);
+      }
+    });
   }
 
   processData = () => {
     try {
       const { data } = this.props;
+      const { period } = this.state;
+      
+      console.log("Attendance data in component:", data);
       
       if (!data) return;
       
@@ -51,73 +76,122 @@ class AttendanceStats extends React.Component {
       console.log("Raw attendance data received:", JSON.stringify(data, null, 2));
       
       // Initialize with zero values as default
-      let totalEvents = 0;
+      let allEvents = [];
       let averageAttendance = 0;
-      let filteredHistory = [];
       
       // First check if we have attendance_history directly in the data
       if (data.attendance_history && Array.isArray(data.attendance_history)) {
         console.log("Using attendance_history from data");
-        filteredHistory = data.attendance_history.map(event => ({
+        allEvents = data.attendance_history.map(event => ({
+          id: event.id,
           date: event.date,
           attendance_rate: event.attendance_rate || 0, // Default to 0%, not 100%
           attendance_count: event.attendance_count || 0,
-          title: event.title || "Event"
+          title: event.title || "Event",
+          total_members: event.total_members || 0,
+          participants: event.participants || []
         }));
       } 
       // Fallback to events array if available
       else if (data.events && Array.isArray(data.events)) {
         console.log("Using events array for attendance");
-        filteredHistory = data.events.map(event => {
+        allEvents = data.events.map(event => {
           // Calculate the actual rate - default to 0% if not available
-          const participantCount = event.participants ? event.participants.length : 0;
+          const confirmedParticipants = event.participants ? 
+            event.participants.filter(p => p.status === 'CONFIRMED') : [];
+          const participantCount = confirmedParticipants.length;
           const totalMembers = data.total_members || 1; // Prevent division by zero
           const attendanceRate = event.attendance_rate || (participantCount / totalMembers * 100) || 0;
           
           return {
+            id: event.id,
             date: event.date || event.event_time,
             attendance_rate: attendanceRate, // Use calculated rate or 0
             attendance_count: participantCount,
-            title: event.title || "Event"
+            title: event.title || "Event",
+            total_members: totalMembers,
+            participants: confirmedParticipants || [],
+            absentees: event.absentees || [],
+            tentatives: event.tentatives || []
           };
         });
       }
-      
-      // Set total events
-      totalEvents = data.total_events !== undefined ? data.total_events : filteredHistory.length;
+      // Direct array of events without nested structure
+      else if (Array.isArray(data)) {
+        console.log("Using direct array of events");
+        allEvents = data.map(event => {
+          // Calculate the actual rate - default to 0% if not available
+          const confirmedParticipants = event.participants ? 
+            event.participants.filter(p => p.status === 'CONFIRMED') : [];
+          const participantCount = confirmedParticipants.length;
+          const totalMembers = event.total_members || 1; // Without context, we use a placeholder
+          const attendanceRate = event.attendance_rate || (participantCount / totalMembers * 100) || 0;
+          
+          return {
+            id: event.id,
+            date: event.date || event.event_time,
+            attendance_rate: attendanceRate, // Use calculated rate or 0
+            attendance_count: participantCount,
+            title: event.title || "Event",
+            total_members: totalMembers,
+            participants: confirmedParticipants || [],
+            absentees: event.absentees || [],
+            tentatives: event.tentatives || []
+          };
+        });
+      }
       
       // Use the average attendance rate from data if available
       if (typeof data.average_attendance_rate === 'number') {
         console.log("Using average_attendance_rate from data:", data.average_attendance_rate);
         averageAttendance = data.average_attendance_rate;
-      } 
-      // Otherwise calculate it from filteredHistory
-      else if (filteredHistory.length > 0) {
-        console.log("Calculating average from history items");
-        const sum = filteredHistory.reduce((acc, event) => 
+      }
+      
+      // Log what we found
+      console.log("Found events before filtering:", allEvents.length);
+      
+      // Apply date filter based on selected period
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - period);
+      console.log(`Filtering events by date: ${cutoffDate.toISOString()}`);
+      
+      // Filter events by date range
+      const filteredEvents = allEvents.filter(event => {
+        const eventDate = new Date(event.date);
+        return eventDate >= cutoffDate;
+      });
+      
+      console.log(`Filtered to ${filteredEvents.length} events in the last ${period} days`);
+      
+      // Calculate new totals based on filtered events
+      const totalFilteredEvents = filteredEvents.length;
+      
+      // Calculate new average based on filtered events
+      if (filteredEvents.length > 0) {
+        const sum = filteredEvents.reduce((acc, event) => 
           acc + (typeof event.attendance_rate === 'number' ? event.attendance_rate : 0), 0);
-        averageAttendance = Math.round(sum / filteredHistory.length);
-      } 
-      // Absolute fallback
-      else {
-        console.log("No attendance data found, defaulting to 0%");
-        averageAttendance = 0; // Default to 0%, not 100%
+        averageAttendance = Math.round(sum / filteredEvents.length);
+      } else {
+        averageAttendance = 0; // Default to 0% when no events
       }
       
       console.log("Processed attendance data:", {
-        totalEvents,
+        period,
+        totalEvents: totalFilteredEvents,
         averageAttendance,
-        filteredHistoryLength: filteredHistory.length,
-        sampleEntry: filteredHistory[0]
+        filteredEventsCount: filteredEvents.length
+      });
+      
+      // Sort filtered events by date (newest first) before saving to state
+      const sortedEvents = filteredEvents.sort((a, b) => {
+        if (!a.date || !b.date) return 0;
+        return new Date(b.date) - new Date(a.date);
       });
       
       this.setState({
-        totalEvents,
+        totalEvents: totalFilteredEvents,
         averageAttendance,
-        filteredHistory: filteredHistory.sort((a, b) => {
-          if (!a.date || !b.date) return 0;
-          return new Date(b.date) - new Date(a.date);
-        }).slice(0, 10) // Only keep the most recent 10 events
+        filteredHistory: sortedEvents.slice(0, 10) // Only keep the most recent 10 events
       });
     } catch (error) {
       console.error("Error processing attendance data:", error);
@@ -139,6 +213,47 @@ class AttendanceStats extends React.Component {
     if (rate >= 85) return '#4caf50';
     if (rate >= 70) return '#ff9800';
     return '#f44336';
+  }
+
+  // Open member attendance modal
+  showMemberAttendance = (event) => {
+    const { filteredHistory } = this.state;
+    const selectedEvent = filteredHistory.find(e => e.id === event.id);
+    
+    if (!selectedEvent) return;
+    
+    this.setState({
+      modalOpen: true,
+      selectedEvent,
+      memberSearch: ''
+    });
+  }
+  
+  // Close the modal
+  handleCloseModal = () => {
+    this.setState({
+      modalOpen: false,
+      selectedEvent: null,
+      memberSearch: ''
+    });
+  }
+  
+  // Handle member search input change
+  handleSearchChange = (e) => {
+    this.setState({ memberSearch: e.target.value });
+  }
+  
+  // Filter members based on search term
+  filterMembers = (members) => {
+    const { memberSearch } = this.state;
+    
+    if (!memberSearch.trim() || !members) return members;
+    
+    const searchTerm = memberSearch.toLowerCase();
+    return members.filter(member => {
+      const username = member.User?.username || '';
+      return username.toLowerCase().includes(searchTerm);
+    });
   }
 
   render() {
@@ -273,7 +388,7 @@ class AttendanceStats extends React.Component {
           )}
         </Box>
 
-        {/* Latest Events List */}
+        {/* Latest Events List with clickable entries */}
         <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
           Latest Events
         </Typography>
@@ -286,7 +401,18 @@ class AttendanceStats extends React.Component {
             {filteredHistory.slice(0, 7).map((event, index) => (
               <React.Fragment key={index}>
                 {index > 0 && <Divider component="li" sx={{ opacity: 0.2 }} />}
-                <ListItem alignItems="flex-start" sx={{ py: 1.5 }}>
+                <ListItem 
+                  alignItems="flex-start" 
+                  sx={{ 
+                    py: 1.5,
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'rgba(255, 255, 255, 0.05)'
+                    }
+                  }}
+                  onClick={() => this.showMemberAttendance(event)}
+                  button
+                >
                   <ListItemAvatar>
                     <Avatar sx={{ bgcolor: 'rgba(186, 104, 200, 0.2)', color: '#ba68c8' }}>
                       <EventIcon />
@@ -295,11 +421,11 @@ class AttendanceStats extends React.Component {
                   <ListItemText
                     primary={
                       <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                        Event on {this.formatDate(event.date, { 
+                        {event.title || `Event on ${this.formatDate(event.date, { 
                           weekday: 'short',
                           month: 'short', 
                           day: 'numeric' 
-                        })}
+                        })}`}
                       </Typography>
                     }
                     secondary={
@@ -336,6 +462,257 @@ class AttendanceStats extends React.Component {
             </Typography>
           </Box>
         )}
+        {/* Member Attendance Modal */}
+        <Dialog 
+          open={this.state.modalOpen} 
+          onClose={this.handleCloseModal}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              bgcolor: 'rgba(30, 30, 40, 0.95)',
+              backgroundImage: 'linear-gradient(rgba(55, 65, 81, 0.1) 1px, transparent 1px), linear-gradient(to right, rgba(55, 65, 81, 0.1) 1px, transparent 1px)',
+              backgroundSize: '20px 20px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }
+          }}
+        >
+          {this.state.selectedEvent && (
+            <React.Fragment>
+              <DialogTitle sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                pb: 2
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <EventIcon sx={{ mr: 1, color: '#ba68c8' }} />
+                  <Typography variant="h6" component="div">
+                    {this.state.selectedEvent.title || `Event on ${this.formatDate(this.state.selectedEvent.date, { 
+                      weekday: 'long',
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}`}
+                  </Typography>
+                </Box>
+                <IconButton onClick={this.handleCloseModal} size="small" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                  <CloseIcon />
+                </IconButton>
+              </DialogTitle>
+              
+              <DialogContent sx={{ p: 3 }}>
+                {/* Event details summary */}
+                <Box sx={{ mb: 4, p: 2, borderRadius: 2, bgcolor: 'rgba(20, 20, 30, 0.6)' }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={4}>
+                      <Typography variant="body2" color="text.secondary">Date</Typography>
+                      <Typography variant="body1">
+                        {this.formatDate(this.state.selectedEvent.date, { 
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Typography variant="body2" color="text.secondary">Attendance</Typography>
+                      <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Chip 
+                          label={`${Math.round(this.state.selectedEvent.attendance_rate || 0)}%`}
+                          size="small"
+                          sx={{ 
+                            mr: 1,
+                            height: 24,
+                            fontSize: '0.8rem',
+                            bgcolor: this.getAttendanceColor(this.state.selectedEvent.attendance_rate || 0),
+                            color: 'white',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                        {this.state.selectedEvent.attendance_count || 0} of {this.state.selectedEvent.total_members || '?'} members
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Typography variant="body2" color="text.secondary">Missing Members</Typography>
+                      <Typography variant="body1">
+                        {Math.max(0, (this.state.selectedEvent.total_members || 0) - 
+                          (this.state.selectedEvent.participants?.length || 0) - 
+                          (this.state.selectedEvent.tentatives?.length || 0) -
+                          (this.state.selectedEvent.absentees?.length || 0)
+                        )} members did not respond
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+                
+                {/* Member search */}
+                <TextField
+                  fullWidth
+                  variant="outlined"
+                  placeholder="Search members..."
+                  value={this.state.memberSearch}
+                  onChange={this.handleSearchChange}
+                  sx={{ mb: 3 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: 'rgba(255,255,255,0.5)' }} />
+                      </InputAdornment>
+                    ),
+                    sx: {
+                      bgcolor: 'rgba(20, 20, 30, 0.4)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 1,
+                      '&:hover': {
+                        border: '1px solid rgba(255,255,255,0.2)',
+                      }
+                    }
+                  }}
+                />
+                
+                <Grid container spacing={3}>
+                  {/* Present members */}
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ 
+                      fontWeight: 'bold',
+                      color: '#4caf50', // Green color
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      Present Members ({this.state.selectedEvent.participants?.length || 0})
+                    </Typography>
+                    
+                    <List sx={{ 
+                      bgcolor: 'rgba(76, 175, 80, 0.1)', 
+                      borderRadius: 2,
+                      border: '1px solid rgba(76, 175, 80, 0.2)',
+                      maxHeight: '300px',
+                      overflow: 'auto'
+                    }}>
+                      {this.filterMembers(this.state.selectedEvent.participants)?.map((participant, index) => (
+                        <ListItem key={index} divider={index < (this.state.selectedEvent.participants?.length || 0) - 1}>
+                          <ListItemAvatar>
+                            <Avatar src={participant.User?.avatar_url} alt={participant.User?.username} />
+                          </ListItemAvatar>
+                          <ListItemText 
+                            primary={participant.User?.username || 'Unknown'}
+                            secondary={`Role: ${participant.role || 'Not specified'}`}
+                          />
+                        </ListItem>
+                      ))}
+                      {(!this.state.selectedEvent.participants || this.state.selectedEvent.participants.length === 0) && (
+                        <ListItem>
+                          <ListItemText primary={<Typography color="text.secondary">No members present</Typography>} />
+                        </ListItem>
+                      )}
+                      {(this.state.selectedEvent.participants?.length > 0 && 
+                        this.filterMembers(this.state.selectedEvent.participants)?.length === 0) && (
+                        <ListItem>
+                          <ListItemText primary={<Typography color="text.secondary">No matching members</Typography>} />
+                        </ListItem>
+                      )}
+                    </List>
+                  </Grid>
+                  
+                  {/* Tentative members */}
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ 
+                      fontWeight: 'bold',
+                      color: '#ff9800', // Orange color
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      Tentative Members ({this.state.selectedEvent.tentatives?.length || 0})
+                    </Typography>
+                    
+                    <List sx={{ 
+                      bgcolor: 'rgba(255, 152, 0, 0.1)', 
+                      borderRadius: 2,
+                      border: '1px solid rgba(255, 152, 0, 0.2)',
+                      maxHeight: '300px',
+                      overflow: 'auto'
+                    }}>
+                      {this.filterMembers(this.state.selectedEvent.tentatives)?.map((tentative, index) => (
+                        <ListItem key={index} divider={index < (this.state.selectedEvent.tentatives?.length || 0) - 1}>
+                          <ListItemAvatar>
+                            <Avatar src={tentative.User?.avatar_url} alt={tentative.User?.username} />
+                          </ListItemAvatar>
+                          <ListItemText 
+                            primary={tentative.User?.username || 'Unknown'}
+                            secondary="Status: Tentative"
+                          />
+                        </ListItem>
+                      ))}
+                      {(!this.state.selectedEvent.tentatives || this.state.selectedEvent.tentatives.length === 0) && (
+                        <ListItem>
+                          <ListItemText primary={<Typography color="text.secondary">No tentative members</Typography>} />
+                        </ListItem>
+                      )}
+                      {(this.state.selectedEvent.tentatives?.length > 0 && 
+                        this.filterMembers(this.state.selectedEvent.tentatives)?.length === 0) && (
+                        <ListItem>
+                          <ListItemText primary={<Typography color="text.secondary">No matching members</Typography>} />
+                        </ListItem>
+                      )}
+                    </List>
+                  </Grid>
+                  
+                  {/* Absent members */}
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ 
+                      fontWeight: 'bold',
+                      color: '#f44336', // Red color
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      Absent Members ({this.state.selectedEvent.absentees?.length || 0})
+                    </Typography>
+                    
+                    <List sx={{ 
+                      bgcolor: 'rgba(244, 67, 54, 0.1)', 
+                      borderRadius: 2,
+                      border: '1px solid rgba(244, 67, 54, 0.2)',
+                      maxHeight: '300px',
+                      overflow: 'auto'
+                    }}>
+                      {this.filterMembers(this.state.selectedEvent.absentees)?.map((absentee, index) => (
+                        <ListItem key={index} divider={index < (this.state.selectedEvent.absentees?.length || 0) - 1}>
+                          <ListItemAvatar>
+                            <Avatar src={absentee.User?.avatar_url} alt={absentee.User?.username} />
+                          </ListItemAvatar>
+                          <ListItemText 
+                            primary={absentee.User?.username || 'Unknown'}
+                            secondary="Status: Absent"
+                          />
+                        </ListItem>
+                      ))}
+                      {(!this.state.selectedEvent.absentees || this.state.selectedEvent.absentees.length === 0) && (
+                        <ListItem>
+                          <ListItemText primary={<Typography color="text.secondary">No reported absences</Typography>} />
+                        </ListItem>
+                      )}
+                      {(this.state.selectedEvent.absentees?.length > 0 && 
+                        this.filterMembers(this.state.selectedEvent.absentees)?.length === 0) && (
+                        <ListItem>
+                          <ListItemText primary={<Typography color="text.secondary">No matching members</Typography>} />
+                        </ListItem>
+                      )}
+                    </List>
+                  </Grid>
+                </Grid>
+              </DialogContent>
+              
+              <DialogActions sx={{ p: 2, borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <Button onClick={this.handleCloseModal} variant="outlined" color="primary">
+                  Close
+                </Button>
+              </DialogActions>
+            </React.Fragment>
+          )}
+        </Dialog>
       </Box>
     );
   }

@@ -17,10 +17,19 @@ import {
   Chip,
   Avatar
 } from '@mui/material';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from 'recharts';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CloseIcon from '@mui/icons-material/Close';
 import GradeIcon from '@mui/icons-material/Grade';
 import BoltIcon from '@mui/icons-material/Bolt';
+
+const ROLE_COLORS = {
+  'Tank': '#66b3ff', // Blue
+  'TANK': '#66b3ff',
+  'Healer': '#66ff66', // Green
+  'HEALER': '#66ff66', 
+  'DPS': '#ff6666',   // Red
+};
 
 const COLORS = ['#64b5f6', '#81c784', '#ffb74d', '#e57373', '#ba68c8', '#4fc3f7'];
 
@@ -356,32 +365,60 @@ class CombatStats extends React.Component {
             }}>
               <CardContent>
                 <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                  CP Distribution
+                  Role Distribution
                 </Typography>
                 
-                <Grid container spacing={2} sx={{ mt: 1 }}>
-                  {cpDistributionData.map((range, index) => (
-                    <Grid item xs={6} sm={4} key={index}>
-                      <Box sx={{ 
-                        p: 2, 
-                        borderRadius: 2,
-                        bgcolor: 'rgba(20, 20, 30, 0.8)',
-                        border: '1px solid rgba(255,255,255,0.05)',
-                        textAlign: 'center'
-                      }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                          {range.label}
-                        </Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#64b5f6' }}>
-                          {range.count}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          members
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  ))}
-                </Grid>
+                {processedData.roleData && Object.keys(processedData.roleData).length > 0 ? (
+                  <Box sx={{ height: 280 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={Object.entries(processedData.roleData).map(([role, count]) => ({ name: role, value: count }))}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={true}
+                          outerRadius={100}
+                          innerRadius={50}
+                          fill="#8884d8"
+                          dataKey="value"
+                          nameKey="name"
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                        >
+                          {Object.entries(processedData.roleData).map(([role, count], index) => (
+                            <Cell key={`cell-${role}`} fill={ROLE_COLORS[role] || COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Legend 
+                          formatter={(value, entry) => {
+                            const count = processedData.roleData[value] || 0;
+                            return `${value}: ${count} players`;
+                          }}
+                          layout="vertical"
+                          verticalAlign="middle"
+                          align="right"
+                        />
+                        <RechartsTooltip
+                          formatter={(value, name) => {
+                            const total = Object.values(processedData.roleData).reduce((sum, val) => sum + val, 0);
+                            return [`${value} players (${((value / total) * 100).toFixed(1)}%)`, name];
+                          }}
+                          contentStyle={{ 
+                            backgroundColor: '#1e1e2d', 
+                            border: 'none', 
+                            borderRadius: '4px', 
+                            padding: '10px',
+                            color: 'white'
+                          }}
+                          labelStyle={{ color: 'white' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </Box>
+                ) : (
+                  <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
+                    No role data available
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -402,41 +439,47 @@ class CombatStats extends React.Component {
                 </Typography>
                 
                 {classData.length > 0 ? (
-                  <Box>
-                    {classData.slice(0, 8).map((item, index) => (
-                      <Box key={index} sx={{ mb: 2, px: 1 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                          <Typography variant="body2" sx={{ 
-                            textTransform: 'capitalize',
-                            fontWeight: 'medium',
-                          }}>
-                            {item.name}
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                            {item.value} players
-                          </Typography>
-                        </Box>
-                        <Box 
-                          sx={{ 
-                            height: 8, 
-                            width: '100%', 
-                            bgcolor: 'rgba(255, 255, 255, 0.1)',
-                            borderRadius: 5,
-                            position: 'relative',
-                            overflow: 'hidden'
-                          }}
+                  <Box sx={{ height: 280 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={classData.slice(0, 8)}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={true}
+                          outerRadius={100}
+                          innerRadius={50}
+                          fill="#8884d8"
+                          dataKey="value"
+                          nameKey="name"
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                         >
-                          <Box 
-                            sx={{ 
-                              height: '100%', 
-                              width: `${(item.value / Math.max(...classData.slice(0, 8).map(c => c.value))) * 100}%`, 
-                              bgcolor: COLORS[index % COLORS.length],
-                              borderRadius: 5
-                            }} 
-                          />
-                        </Box>
-                      </Box>
-                    ))}
+                          {classData.slice(0, 8).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Legend 
+                          formatter={(value, entry) => {
+                            const item = classData.find(d => d.name === value);
+                            return `${value}: ${item ? item.value : 0} players`;
+                          }}
+                          layout="vertical"
+                          verticalAlign="middle"
+                          align="right"
+                        />
+                        <RechartsTooltip
+                          formatter={(value, name) => [`${value} players (${((value / classData.reduce((acc, curr) => acc + curr.value, 0)) * 100).toFixed(1)}%)`, name]}
+                          contentStyle={{ 
+                            backgroundColor: '#1e1e2d', 
+                            border: 'none', 
+                            borderRadius: '4px', 
+                            padding: '10px',
+                            color: 'white' // Fix text color
+                          }}
+                          labelStyle={{ color: 'white' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </Box>
                 ) : (
                   <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
