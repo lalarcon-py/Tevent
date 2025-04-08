@@ -91,30 +91,77 @@ const guildApplicationController = {
       }
       
       // Send application to Discord if integration is enabled
-      try {
-        const webhookURL = `${process.env.DISCORD_BOT_URL || 'http://localhost:3300'}/webhook/new-application`;
-        
-        console.log('Sending application to Discord webhook:', {
-          guildId: application.guild_id,
-          applicationId: application.id
-        });
-        
-        // Ensure guildId is sent as string to avoid parsing issues
-        const guildIdStr = String(application.guild_id);
-        
-        const response = await axios.post(webhookURL, {
-          guildId: guildIdStr,
-          applicationId: application.id,
-          secret: process.env.BOT_WEBHOOK_SECRET
-        });
-        
-        console.log(`Application ${application.id} sent to Discord successfully. Response:`, response.data);
-      } catch (webhookError) {
-        console.error('Error notifying Discord bot about new application:', webhookError.message);
-        if (webhookError.response) {
-          console.error('Webhook response:', webhookError.response.data);
+      if (process.env.DISCORD_NOTIFICATIONS_ENABLED === 'true') {
+        try {
+          // Determine the Discord bot service URL based on environment variables
+          // Check both possible environment variable names (BOT_WEBHOOK_URL and DISCORD_BOT_URL)
+          let webhookURL;
+          
+          if (process.env.BOT_WEBHOOK_URL) {
+            // Use the BOT_WEBHOOK_URL if available
+            const baseURL = process.env.BOT_WEBHOOK_URL;
+            console.log(`Using BOT_WEBHOOK_URL: ${baseURL}`);
+            
+            // For Railway's internal networking
+            if (process.env.NODE_ENV === 'production' && baseURL.includes('railway.internal')) {
+              console.log('Using Railway internal networking');
+              webhookURL = baseURL; // Use the full URL as provided
+            } else {
+              webhookURL = `${baseURL}/webhook/new-application`;
+            }
+          } else if (process.env.DISCORD_BOT_URL) {
+            // Fallback to DISCORD_BOT_URL if available
+            const baseURL = process.env.DISCORD_BOT_URL;
+            console.log(`Using DISCORD_BOT_URL: ${baseURL}`);
+            webhookURL = `${baseURL}/webhook/new-application`;
+          } else {
+            // Default for development environment
+            const baseURL = 'http://localhost:3300';
+            console.log(`No webhook URL configured in environment, defaulting to: ${baseURL}`);
+            webhookURL = `${baseURL}/webhook/new-application`;
+          }
+          
+          console.log(`Final webhook URL: ${webhookURL}`);
+          
+          console.log('Sending application to Discord webhook:', {
+            guildId: application.guild_id,
+            applicationId: application.id,
+            environment: process.env.NODE_ENV || 'development'
+          });
+          
+          // Ensure guildId is sent as string to avoid parsing issues
+          const guildIdStr = String(application.guild_id);
+          
+          // Set reasonable timeout to avoid long blocking operations
+          const response = await axios.post(webhookURL, {
+            guildId: guildIdStr,
+            applicationId: application.id,
+            secret: process.env.BOT_WEBHOOK_SECRET
+          }, {
+            timeout: 5000, // 5 second timeout
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log(`Application ${application.id} sent to Discord successfully. Status: ${response.status}`);
+        } catch (webhookError) {
+          console.error('Error notifying Discord bot about new application:', webhookError.message);
+          
+          if (webhookError.code === 'ECONNREFUSED') {
+            console.error(`Connection refused to Discord bot service. Check if the service is running and BOT_WEBHOOK_URL (${process.env.BOT_WEBHOOK_URL}) is correctly configured.`);
+          } else if (webhookError.code === 'ETIMEDOUT' || webhookError.code === 'TIMEOUT') {
+            console.error('Connection to Discord bot service timed out. The service may be overloaded or unreachable.');
+          }
+          
+          if (webhookError.response) {
+            console.error(`Webhook response: Status ${webhookError.response.status}`, webhookError.response.data);
+          }
+          
+          // Continue even if webhook fails - application is still stored in database
         }
-        // Continue even if webhook fails - application is still stored in database
+      } else {
+        console.log('Discord notifications are disabled. Skipping webhook call.');
       }
       
       res.status(201).json(application);
