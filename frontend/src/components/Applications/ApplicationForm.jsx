@@ -92,11 +92,21 @@ const ApplicationForm = ({ setUserApplication, guildId }) => {
     submitFormData.append('previousGuilds', formData.previousGuilds);
     submitFormData.append('leaveReason', formData.leaveReason);
     submitFormData.append('combatPower', formData.combatPower);
-    submitFormData.append('guildId', guildId);
+    
+    // Ensure guildId is valid and included in all possible ways
+    if (!guildId) {
+      setSubmitError('Missing guild ID. Please try again or contact support.');
+      setLoading(false);
+      return;
+    }
+    
+    submitFormData.append('guildId', String(guildId));
     
     if (screenshot) {
       submitFormData.append('screenshot', screenshot);
     }
+    
+    console.log('Submitting application with guildId:', guildId);
     
     try {
       // Submit application to backend

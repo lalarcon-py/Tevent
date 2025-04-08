@@ -93,14 +93,27 @@ const guildApplicationController = {
       // Send application to Discord if integration is enabled
       try {
         const webhookURL = `${process.env.DISCORD_BOT_URL || 'http://localhost:3300'}/webhook/new-application`;
-        await axios.post(webhookURL, {
+        
+        console.log('Sending application to Discord webhook:', {
           guildId: application.guild_id,
+          applicationId: application.id
+        });
+        
+        // Ensure guildId is sent as string to avoid parsing issues
+        const guildIdStr = String(application.guild_id);
+        
+        const response = await axios.post(webhookURL, {
+          guildId: guildIdStr,
           applicationId: application.id,
           secret: process.env.BOT_WEBHOOK_SECRET
         });
-        console.log(`Application ${application.id} sent to Discord successfully`);
+        
+        console.log(`Application ${application.id} sent to Discord successfully. Response:`, response.data);
       } catch (webhookError) {
-        console.error('Error notifying Discord bot about new application:', webhookError);
+        console.error('Error notifying Discord bot about new application:', webhookError.message);
+        if (webhookError.response) {
+          console.error('Webhook response:', webhookError.response.data);
+        }
         // Continue even if webhook fails - application is still stored in database
       }
       
