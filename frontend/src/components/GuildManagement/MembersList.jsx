@@ -747,48 +747,76 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       // Close the dialog
       setKickMemberConfirm(null);
       
-      // Try both methods to ensure we succeed in removing the member
+      // Try all three methods in sequence to ensure we succeed in removing the member
       try {
-        // First try with standard DELETE method
+        // First try with our new hard-delete method (most reliable)
+        console.log("Trying hard-delete method first...");
+        const hardDeleteResponse = await fetch(`${API_URL}/api/hard-delete/guild/${guildId}/member/${memberToRemove.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          }
+        });
+        
+        if (hardDeleteResponse.ok) {
+          console.log("Hard DELETE was successful");
+          alert(`${memberToRemove.username} has been removed from the guild.`);
+          // Force a refresh to ensure UI is updated
+          fetchMembers();
+          return;
+        }
+        
+        // If hard-delete fails, try standard DELETE method
+        console.log("Hard DELETE failed, trying standard DELETE method...");
         const response = await fetch(`${API_URL}/api/guilds/${guildId}/members/${memberToRemove.id}`, {
           method: 'DELETE',
           credentials: 'include',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
           }
         });
         
         if (response.ok) {
           console.log("Standard DELETE was successful");
           alert(`${memberToRemove.username} has been removed from the guild.`);
+          // Force a refresh to ensure UI is updated
+          fetchMembers();
           return;
         }
         
         // If standard method fails, use the direct method
-        console.log("Standard DELETE failed, trying direct method");
+        console.log("Standard DELETE failed, trying direct method...");
         const directResponse = await fetch(`${API_URL}/api/direct-member-delete`, {
           method: 'POST',
           credentials: 'include',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
           },
           body: JSON.stringify({
             guildId,
-            memberId: memberToRemove.id
+            memberId: memberToRemove.id,
+            forceDirect: true
           })
         });
         
         if (!directResponse.ok) {
-          throw new Error(`Direct method failed with status ${directResponse.status}`);
+          throw new Error(`All deletion methods failed with status ${directResponse.status}`);
         }
         
         const result = await directResponse.json();
         console.log("Direct member removal succeeded:", result);
         alert(`${memberToRemove.username} has been removed from the guild.`);
         
+        // Force a refresh to ensure UI is updated
+        fetchMembers();
+        
       } catch (error) {
-        console.error("Both removal methods failed:", error);
-        // Revert UI if both methods failed
+        console.error("All removal methods failed:", error);
+        // Revert UI if all methods failed
         setMembers(currentMembers);
         alert(`Error: Failed to remove member. ${error.message}`);
       }
@@ -984,13 +1012,50 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
   
       console.log('Fetching members for guild:', guildId);
       
-      // Add cache-busting parameter and headers
-      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members?timestamp=${Date.now()}`, {
+      // Create a unique cache-busting value using timestamp
+      const cacheBuster = Date.now();
+      
+      // First try the new API endpoint that bypasses the ORM cache
+      console.log('Trying to fetch with direct SQL query first...');
+      try {
+        const directResponse = await fetch(`${API_URL}/api/hard-fetch/guild/${guildId}/members?nocache=${cacheBuster}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        });
+        
+        if (directResponse.ok) {
+          const data = await directResponse.json();
+          console.log('Members data received from direct query:', data);
+          
+          // Process the data
+          const processedData = data.map(member => ({
+            ...member,
+            builds: Array.isArray(member.builds) ? member.builds : 
+                    typeof member.builds === 'string' ? JSON.parse(member.builds) : []
+          }));
+          
+          setMembers(processedData);
+          setLoading(false);
+          return; // Exit early if successful
+        }
+      } catch (directError) {
+        console.error('Failed to fetch using direct query, falling back to standard API:', directError);
+      }
+      
+      // Fall back to the standard API endpoint
+      console.log('Falling back to standard API endpoint');
+      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members?nocache=${cacheBuster}`, {
         method: 'GET',
         credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       });
       
@@ -1001,7 +1066,7 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       }
       
       const data = await response.json();
-      console.log('Members data received:', data);
+      console.log('Members data received from standard API:', data);
       
       // Process member data to ensure builds are in the right format
       const processedData = data.map(member => ({

@@ -51,6 +51,7 @@ module.exports = (sequelize, DataTypes) => {
     tableName: 'guild_members',
     underscored: true,
     timestamps: true
+    // The table doesn't have deleted_at column, so paranoid mode isn't relevant
   });
 
   return GuildMember;

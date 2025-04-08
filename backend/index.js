@@ -304,7 +304,7 @@ app.use(guildActivityMiddleware);
 app.use('/api/direct', require('./routes/directDiscordRoles'));
 
 // Add direct member deletion route
-app.use('/api', directMemberDeleteRoutes);
+app.use('/api', directMemberDeleteRoutes); // This route contains our hard-delete endpoint for guild members
 
 // General use routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -938,7 +938,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 
+// Endpoint to remove a member from a guild
 app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
+  // Start a transaction to ensure all operations happen together
+  const t = await sequelize.transaction();
+  
   try {
     console.log(`DELETE request received to remove member ${req.params.memberId} from guild ${req.params.guildId}`);
     
@@ -958,10 +962,12 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
       where: {
         guild_id: guildId,
         user_id: req.user.id
-      }
+      },
+      transaction: t
     });
     
     if (!requesterMembership || requesterMembership.role !== 'Guild Master') {
+      await t.rollback();
       return res.status(403).json({ 
         error: 'Permission denied', 
         details: 'Only Guild Masters can remove members' 
@@ -970,14 +976,12 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
     
     // Prevent Guild Masters from removing themselves
     if (memberId === req.user.id) {
+      await t.rollback();
       return res.status(400).json({
         error: 'Invalid operation',
         details: 'Guild Masters cannot remove themselves from the guild'
       });
     }
-    
-    // Use raw SQL for better debugging
-    console.log('Searching for member to remove...');
     
     // First check if the member exists using raw query
     const [memberCheck] = await sequelize.query(
@@ -987,16 +991,19 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
        WHERE gm.guild_id = :guildId AND gm.user_id = :memberId`,
       {
         replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.SELECT
+        type: sequelize.QueryTypes.SELECT,
+        transaction: t
       }
     );
     
     if (!memberCheck) {
+      await t.rollback();
       return res.status(404).json({ error: 'Member not found in this guild' });
     }
     
     // Prevent removing other Guild Masters
     if (memberCheck.role === 'Guild Master') {
+      await t.rollback();
       return res.status(400).json({
         error: 'Invalid operation',
         details: 'Cannot remove a Guild Master'
@@ -1005,17 +1012,79 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
     
     console.log(`Found member to remove: ${memberCheck.username}`);
     
-    // Delete using raw SQL to ensure it works
+    // Hard delete the member from guild_members using raw SQL 
+    // This ensures actual deletion, not soft-delete
     const deleteResult = await sequelize.query(
       `DELETE FROM guild_members 
        WHERE guild_id = :guildId AND user_id = :memberId`,
       {
         replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
       }
     );
     
-    console.log('Delete operation result:', deleteResult);
+    // Delete any guild-specific user records for this user
+    await sequelize.query(
+      `DELETE FROM users
+       WHERE id = :memberId AND guild_id = :guildId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Also clean up any associated data for this user in the guild
+    // Update loot requests
+    await sequelize.query(
+      `UPDATE loot_requests
+       SET status = 'Denied - Left Guild'
+       WHERE guild_id = :guildId AND user_id = :memberId AND status = 'Pending'`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: t
+      }
+    );
+    
+    // Delete wishlist entries
+    await sequelize.query(
+      `DELETE FROM wishlists
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Delete event participants
+    await sequelize.query(
+      `DELETE FROM event_participants
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Delete team members
+    await sequelize.query(
+      `DELETE FROM team_members
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Commit the transaction
+    await t.commit();
+    
+    console.log('Delete operation successful. Member removed from guild.');
     
     // Return success with username from the check we did earlier
     res.json({ 
@@ -1025,6 +1094,10 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
     });
     
   } catch (error) {
+    // Rollback the transaction if any operation fails
+    if (t && !t.finished) {
+      await t.rollback();
+    }
     console.error('Error removing guild member:', error);
     res.status(500).json({ error: 'Failed to remove member from guild' });
   }
@@ -1032,6 +1105,9 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
 
 // Add this endpoint to directly remove a member when the normal endpoint isn't working
 app.post('/api/direct-member-delete', async (req, res) => {
+  // Start a transaction to ensure all operations happen together
+  const t = await sequelize.transaction();
+  
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' });
@@ -1040,6 +1116,7 @@ app.post('/api/direct-member-delete', async (req, res) => {
     const { guildId, memberId, forceDirect } = req.body;
     
     if (!forceDirect) {
+      await t.rollback();
       return res.status(400).json({ error: 'Direct deletion not allowed without force flag' });
     }
     
@@ -1049,14 +1126,33 @@ app.post('/api/direct-member-delete', async (req, res) => {
         guild_id: guildId,
         user_id: req.user.id,
         role: 'Guild Master'
-      }
+      },
+      transaction: t
     });
     
     if (!requesterMembership) {
+      await t.rollback();
       return res.status(403).json({ error: 'Only Guild Masters can perform this operation' });
     }
     
-    // Use raw SQL to ensure deletion works
+    // First check if the member exists and get their info for logging
+    const [memberCheck] = await sequelize.query(
+      `SELECT gm.id, gm.role, u.username 
+       FROM guild_members gm
+       JOIN users u ON gm.user_id = u.id
+       WHERE gm.guild_id = :guildId AND gm.user_id = :memberId AND gm.user_id != :requesterId`,
+      {
+        replacements: { 
+          guildId, 
+          memberId,
+          requesterId: req.user.id  // Prevent self-deletion
+        },
+        type: sequelize.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+    
+    // Use raw SQL to hard delete the member
     const deleteResult = await sequelize.query(
       `DELETE FROM guild_members 
        WHERE guild_id = :guildId AND user_id = :memberId 
@@ -1067,31 +1163,99 @@ app.post('/api/direct-member-delete', async (req, res) => {
           memberId,
           requesterId: req.user.id  // Prevent self-deletion
         },
-        type: sequelize.QueryTypes.DELETE
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
       }
     );
     
-    console.log('Direct delete result:', deleteResult);
+    // Delete any guild-specific user records as well
+    await sequelize.query(
+      `DELETE FROM users 
+       WHERE id = :memberId AND guild_id = :guildId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Also clean up associated data for this user in the guild
+    // Update loot requests
+    await sequelize.query(
+      `UPDATE loot_requests
+       SET status = 'Denied - Left Guild'
+       WHERE guild_id = :guildId AND user_id = :memberId AND status = 'Pending'`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: t
+      }
+    );
+    
+    // Delete wishlist entries
+    await sequelize.query(
+      `DELETE FROM wishlists
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Delete event participants
+    await sequelize.query(
+      `DELETE FROM event_participants
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Delete team members
+    await sequelize.query(
+      `DELETE FROM team_members
+       WHERE guild_id = :guildId AND user_id = :memberId`,
+      {
+        replacements: { guildId, memberId },
+        type: sequelize.QueryTypes.DELETE,
+        transaction: t
+      }
+    );
+    
+    // Commit the transaction
+    await t.commit();
+    
+    const username = memberCheck ? memberCheck.username : 'Unknown user';
+    console.log(`Direct delete successful: Removed ${username} from guild ${guildId}`);
     
     res.json({ 
       success: true, 
-      message: 'Member removed with direct database operation',
+      message: memberCheck ? `${username} has been removed from the guild` : 'Member removed with direct database operation',
       affected: deleteResult[1] // Number of rows affected
     });
     
   } catch (error) {
+    // Rollback the transaction if any operation fails
+    if (t && !t.finished) {
+      await t.rollback();
+    }
     console.error('Direct member deletion error:', error);
     res.status(500).json({ error: 'Failed to remove member' });
   }
 });
 
 const rollScheduler = require('./utils/rollScheduler');
+const membershipCleanup = require('./utils/membershipCleanup');
+const { checkDuplicateMembers, cleanupSoftDeletedMembers } = require('./jobs/checkDuplicateMembers');
 
 rollScheduler.checkForExpiredRequests()
   .then(() => console.log('Initial roll check completed'))
   .catch(err => console.error('Error in initial roll check:', err));
 
-// Then set up the regular interval
+// Then set up the regular intervals
 const rollInterval = setInterval(() => {
   console.log('Running scheduled roll check...');
   rollScheduler.checkForExpiredRequests()
@@ -1099,10 +1263,46 @@ const rollInterval = setInterval(() => {
     .catch(err => console.error('Error in roll check:', err));
 }, 60000); // Check every minute
 
-// Clean up interval on shutdown
+// Run membership cleanup less frequently - every 30 minutes
+const membershipCleanupInterval = setInterval(() => {
+  console.log('Running scheduled membership cleanup...');
+  membershipCleanup.runMembershipCleanup()
+    .then(result => console.log('Membership cleanup completed:', result))
+    .catch(err => console.error('Error in membership cleanup:', err));
+}, 30 * 60000); // Check every 30 minutes
+
+// Run duplicate member check every hour
+const duplicateMemberInterval = setInterval(() => {
+  console.log('Running scheduled duplicate member check...');
+  checkDuplicateMembers()
+    .then(result => console.log('Duplicate member check completed:', result || 'No duplicates found'))
+    .catch(err => console.error('Error in duplicate member check:', err));
+  
+  // Also clean up any soft-deleted members
+  cleanupSoftDeletedMembers()
+    .then(result => console.log('Soft-deleted member cleanup completed:', result || 'No soft-deleted members found'))
+    .catch(err => console.error('Error in soft-deleted member cleanup:', err));
+}, 60 * 60000); // Check every hour
+
+// Also run membership cleanup and duplicate member check once on startup
+membershipCleanup.runMembershipCleanup()
+  .then(() => console.log('Initial membership cleanup completed'))
+  .catch(err => console.error('Error in initial membership cleanup:', err));
+
+checkDuplicateMembers()
+  .then(() => console.log('Initial duplicate member check completed'))
+  .catch(err => console.error('Error in initial duplicate member check:', err));
+
+cleanupSoftDeletedMembers()
+  .then(() => console.log('Initial soft-deleted member cleanup completed'))
+  .catch(err => console.error('Error in initial soft-deleted member cleanup:', err));
+
+// Clean up intervals on shutdown
 process.on('SIGTERM', () => {
-  console.log('Shutting down roll scheduler...');
+  console.log('Shutting down scheduled tasks...');
   clearInterval(rollInterval);
+  clearInterval(membershipCleanupInterval);
+  clearInterval(duplicateMemberInterval);
 });
 
 
