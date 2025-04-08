@@ -106,6 +106,9 @@ const ApplicationForm = ({ setUserApplication, guildId }) => {
         {
           headers: {
             'Content-Type': 'multipart/form-data'
+          },
+          params: {
+            guildId: guildId // Add as query parameter as well for extra safety
           }
         }
       );

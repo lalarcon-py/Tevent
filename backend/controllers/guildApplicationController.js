@@ -33,8 +33,21 @@ const guildApplicationController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
-      const guildId = req.guildId || req.body.guildId;
+      // Try to get guildId from multiple sources
+      const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+      
+      console.log('Submit application request received with:', {
+        userId: req.user?.id,
+        guildId,
+        bodyGuildId: req.body.guildId,
+        queryGuildId: req.query.guildId,
+        paramsGuildId: req.params.guildId,
+        contextGuildId: req.guildId,
+        hasFile: !!req.file
+      });
+      
       if (!guildId) {
+        console.error('Guild ID is missing in application submission');
         return res.status(400).json({ error: 'Guild ID is required' });
       }
       
@@ -185,7 +198,20 @@ const guildApplicationController = {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
-      const guildId = req.guildId;
+      // Try to get guildId from multiple sources
+      const guildId = req.guildId || req.params.guildId || req.query.guildId || req.body.guildId;
+      
+      if (!guildId) {
+        console.error('Missing guildId in request:', {
+          guildId: req.guildId,
+          paramsGuildId: req.params.guildId,
+          queryGuildId: req.query.guildId,
+          bodyGuildId: req.body.guildId
+        });
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
+      
+      console.log(`Fetching application for user ${req.user.id} in guild ${guildId}`);
       
       // Get user's application
       const application = await GuildApplication.findOne({

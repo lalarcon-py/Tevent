@@ -40,7 +40,7 @@ const ApplyToGuildPage = () => {
         
         // Check if user already has an application
         try {
-          const userAppResponse = await axiosInstance.get('/api/guild-applications/my-application');
+          const userAppResponse = await axiosInstance.get(`/api/guild-applications/my-application?guildId=${guildId}`);
           setUserApplication(userAppResponse.data);
         } catch (err) {
           // 404 is expected if no application exists
@@ -86,7 +86,7 @@ const ApplyToGuildPage = () => {
       
       setSuccessMessage('Your application has been submitted successfully. The guild leadership will review it soon.');
       
-      const response = await axiosInstance.get('/api/guild-applications/my-application');
+      const response = await axiosInstance.get(`/api/guild-applications/my-application?guildId=${guildId}`);
       setUserApplication(response.data);
     } catch (err) {
       console.error('Application submission error:', err);
