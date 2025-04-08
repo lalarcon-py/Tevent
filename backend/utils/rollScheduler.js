@@ -92,6 +92,40 @@ const checkForExpiredRequests = async () => {
       const needTraitRequests = requests.filter(r => r.need_or_greed === 'NEED_TRAIT');
       const greedRequests = requests.filter(r => r.need_or_greed === 'GREED');
       
+      // Check for active guild membership for each user
+      const userChecks = [];
+      for (const request of requests) {
+        if (!request.user || !request.user.id) continue;
+        
+        try {
+          const membership = await db.GuildMember.findOne({
+            where: {
+              guild_id: guildId,
+              user_id: request.user.id,
+              status: 'Active'
+            }
+          });
+          
+          if (!membership) {
+            // User is not in the guild anymore, deny their request
+            await request.update({
+              status: 'Denied - Left Guild',
+              roll_value: 0,
+              roll_time: now
+            });
+            console.log(`🎲 ${request.user.username} is no longer in the guild, denying request`);
+            
+            // Remove this request from all groups
+            const reqId = request.id;
+            needItemRequests.splice(needItemRequests.findIndex(r => r.id === reqId), 1);
+            needTraitRequests.splice(needTraitRequests.findIndex(r => r.id === reqId), 1);
+            greedRequests.splice(greedRequests.findIndex(r => r.id === reqId), 1);
+          }
+        } catch (err) {
+          console.error(`Error checking membership for user ${request.user.id}:`, err);
+        }
+      }
+      
       console.log(`🎲 Priority breakdown - NEED_ITEM: ${needItemRequests.length}, NEED_TRAIT: ${needTraitRequests.length}, GREED: ${greedRequests.length}`);
       
       // Assign roll values to all requests
@@ -112,6 +146,7 @@ const checkForExpiredRequests = async () => {
       let winner = null;
       let winningGroup = null;
       
+      // Always prioritize NEED_ITEM over NEED_TRAIT over GREED
       // Check NEED_ITEM first (highest priority)
       if (needItemRequests.length > 0) {
         winner = needItemRequests.reduce((highest, current) => 
@@ -147,6 +182,28 @@ const checkForExpiredRequests = async () => {
         won_roll: true
       });
       
+      // If winner wishlisted this item, remove it from their wishlist
+      try {
+        // Only attempt to remove from wishlist if we have an item_id (some storage items might not have it)
+        if (storageItem.Item && storageItem.Item.id) {
+          const wishlistItem = await db.WishList.findOne({
+            where: {
+              user_id: winner.user_id,
+              guild_id: guildId,
+              item_id: storageItem.Item.id
+            }
+          });
+          
+          if (wishlistItem) {
+            await wishlistItem.destroy();
+            console.log(`🎲 Removed item ${storageItem.Item.name} from ${winner.user.username}'s wishlist`);
+          }
+        }
+      } catch (wishlistError) {
+        console.error('Failed to remove item from wishlist:', wishlistError);
+        // Continue processing even if wishlist removal fails
+      }
+      
       // Mark all other requests as denied with reason
       for (const request of requests) {
         if (request.id !== winner.id) {
@@ -157,17 +214,43 @@ const checkForExpiredRequests = async () => {
         }
       }
       
-      // Create roll history entry - THIS IS THE NEW CODE THAT FIXES THE ISSUE
+      // Create roll history entry and check for previous wins
       try {
-        const rollResults = requests.map(req => ({
-          id: req.id,
-          user_id: req.user_id,
-          username: req.user.username,
-          avatar_url: req.user.avatar_url,
-          roll_value: req.roll_value,
-          need_or_greed: req.need_or_greed,
-          winner: req.id === winner.id
-        }));
+      const rollResults = requests.map(req => ({
+      id: req.id,
+      user_id: req.user_id,
+      username: req.user.username,
+      avatar_url: req.user.avatar_url,
+      roll_value: req.roll_value,
+      need_or_greed: req.need_or_greed,
+      winner: req.id === winner.id
+      }));
+      
+      // Check if winner has previously won this item (only for NEED_ITEM and NEED_TRAIT)
+      let isRepeatedWin = false;
+      let previousWinDate = null;
+      
+      if (winner.need_or_greed === 'NEED_ITEM' || winner.need_or_greed === 'NEED_TRAIT') {
+      // Look for previous wins of the same item by this user
+      const previousWins = await db.RollHistory.findAll({
+        where: {
+          guild_id: guildId,
+          winner_id: winner.user_id,
+          item_name: storageItem.Item?.name || 'Unknown Item',
+          // Only consider previous NEED wins
+            winner_need_type: {
+              [db.Sequelize.Op.in]: ['NEED_ITEM', 'NEED_TRAIT']
+            }
+            },
+          order: [['roll_time', 'ASC']]
+        });
+          
+          if (previousWins.length > 0) {
+            isRepeatedWin = true;
+            previousWinDate = previousWins[0].roll_time;
+            console.log(`🎲 ${winner.user.username} has previously won ${storageItem.Item?.name} on ${previousWinDate.toISOString()}`);
+          }
+        }
         
         await db.RollHistory.create({
           guild_id: guildId,
@@ -180,7 +263,9 @@ const checkForExpiredRequests = async () => {
           winner_roll: winner.roll_value,
           winner_need_type: winner.need_or_greed,
           roll_results: rollResults,
-          roll_time: now
+          roll_time: now,
+          is_repeated_win: isRepeatedWin,
+          previous_win_date: previousWinDate
         });
         
         console.log(`🎲 Created roll history entry for ${itemName}`);
@@ -267,9 +352,34 @@ const processRollForItem = async (storageItemId, guildId) => {
       return { success: false, message: 'No pending requests found' };
     }
     
+    // Check for guild membership
+    const guildMembers = await db.GuildMember.findAll({
+      where: {
+        guild_id: guildId,
+        status: 'Active'
+      }
+    });
+    
+    // Get active guild member user IDs
+    const activeMemberIds = guildMembers.map(member => member.user_id);
+    
+    // Filter out users who are no longer in the guild
+    const filteredRequests = pendingRequests.filter(request => {
+      if (!activeMemberIds.includes(request.user_id)) {
+        // Update request to be denied with reason
+        request.update({
+          status: 'Denied - Left Guild',
+          roll_value: 0,
+          roll_time: new Date()
+        });
+        return false;
+      }
+      return true;
+    });
+    
     // Sort by need/greed priority
-    const sortedRequests = pendingRequests.sort((a, b) => {
-      // First by need/greed priority
+    const sortedRequests = filteredRequests.sort((a, b) => {
+      // First by need/greed priority - always NEED_ITEM > NEED_TRAIT > GREED
       const priorityOrder = { 'NEED_ITEM': 0, 'NEED_TRAIT': 1, 'GREED': 2 };
       const aPriority = priorityOrder[a.need_or_greed] || 3;
       const bPriority = priorityOrder[b.need_or_greed] || 3;
@@ -326,6 +436,35 @@ const processRollForItem = async (storageItemId, guildId) => {
       });
     }
     
+    // If the winner wishlisted this item, remove it from their wishlist
+    if (winner) {
+      try {
+        const storageItem = await db.GuildStorageItem.findByPk(storageItemId, {
+          include: [{ model: db.Item }],
+          transaction: t
+        });
+        
+        if (storageItem && storageItem.Item && storageItem.Item.id) {
+          const wishlistItem = await db.WishList.findOne({
+            where: {
+              user_id: winner.user_id,
+              guild_id: guildId,
+              item_id: storageItem.Item.id
+            },
+            transaction: t
+          });
+          
+          if (wishlistItem) {
+            await wishlistItem.destroy({ transaction: t });
+            console.log(`Roll winner's wishlist item removed: ${storageItem.Item.name}`);
+          }
+        }
+      } catch (wishlistError) {
+        console.error('Failed to remove item from wishlist:', wishlistError);
+        // Continue processing even if wishlist removal fails
+      }
+    }
+    
     // Get item details for roll history
     const storageItem = await db.GuildStorageItem.findByPk(storageItemId, {
       include: [{ model: db.Item }],
@@ -334,6 +473,33 @@ const processRollForItem = async (storageItemId, guildId) => {
     
     if (!storageItem) {
       throw new Error('Storage item not found');
+    }
+    
+    // Check if winner has previously won this item (only for NEED_ITEM and NEED_TRAIT)
+    let isRepeatedWin = false;
+    let previousWinDate = null;
+    
+    if (winner.need_or_greed === 'NEED_ITEM' || winner.need_or_greed === 'NEED_TRAIT') {
+      // Look for previous wins of the same item by this user
+      const previousWins = await db.RollHistory.findAll({
+        where: {
+          guild_id: guildId,
+          winner_id: winner.user_id,
+          item_name: storageItem.Item.name,
+          // Only consider previous NEED wins
+          winner_need_type: {
+            [db.Sequelize.Op.in]: ['NEED_ITEM', 'NEED_TRAIT']
+          }
+        },
+        order: [['roll_time', 'ASC']],
+        transaction: t
+      });
+      
+      if (previousWins.length > 0) {
+        isRepeatedWin = true;
+        previousWinDate = previousWins[0].roll_time;
+        console.log(`Roll winner ${winner.user.username} has previously won ${storageItem.Item.name} on ${previousWinDate.toISOString()}`);
+      }
     }
     
     // Create roll history entry
@@ -356,7 +522,9 @@ const processRollForItem = async (storageItemId, guildId) => {
         need_or_greed: r.need_or_greed,
         winner: r.id === winner.id
       })),
-      roll_time: new Date()
+      roll_time: new Date(),
+      is_repeated_win: isRepeatedWin,
+      previous_win_date: previousWinDate
     }, { transaction: t });
     
     // Update storage item quantity

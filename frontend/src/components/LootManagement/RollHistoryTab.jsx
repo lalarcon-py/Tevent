@@ -10,6 +10,7 @@ import {
 import CasinoIcon from '@mui/icons-material/Casino';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import WarningIcon from '@mui/icons-material/Warning';
 import axiosInstance from '../../config/axios';
 
 const RollHistoryTab = ({ refreshData }) => {
@@ -106,12 +107,17 @@ const RollHistoryTab = ({ refreshData }) => {
                 <TableCell>Roll</TableCell>
                 <TableCell>Need/Greed</TableCell>
                 <TableCell>Date</TableCell>
+                <TableCell>Status</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {history.map((roll) => (
-                <TableRow key={roll.id} hover>
+                <TableRow key={roll.id} hover
+                sx={{
+                  bgcolor: roll.is_repeated_win ? 'rgba(244, 67, 54, 0.05)' : 'transparent'
+                }}
+              >
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar 
@@ -143,14 +149,21 @@ const RollHistoryTab = ({ refreshData }) => {
                         sx={{ 
                           width: 35, 
                           height: 35,
-                          border: '2px solid #ffd700'
+                          border: roll.is_repeated_win ? '2px solid #f44336' : '2px solid #ffd700'
                         }}
                       >
                         {roll.winner_name?.[0] || '?'}
                       </Avatar>
-                      <Typography sx={{ color: '#ffd700' }}>
-                        {roll.winner?.username || roll.winner_name}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography sx={{ color: roll.is_repeated_win ? '#f44336' : '#ffd700' }}>
+                          {roll.winner?.username || roll.winner_name}
+                        </Typography>
+                        {roll.is_repeated_win && (
+                          <Tooltip title={`Repeated Win! Previously won this item on ${new Date(roll.previous_win_date).toLocaleDateString()}`} arrow>
+                            <WarningIcon sx={{ color: '#f44336', fontSize: 20 }} />
+                          </Tooltip>
+                        )}
+                      </Box>
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -180,6 +193,21 @@ const RollHistoryTab = ({ refreshData }) => {
                   </TableCell>
                   <TableCell>
                     {new Date(roll.roll_time).toLocaleDateString()} {new Date(roll.roll_time).toLocaleTimeString()}
+                  </TableCell>
+                  <TableCell>
+                    {roll.reprocessed && (
+                      <Tooltip title="This roll was reprocessed with updated roll logic">
+                        <Chip
+                          label="Reprocessed"
+                          size="small"
+                          sx={{
+                            bgcolor: 'rgba(156, 39, 176, 0.1)',
+                            color: '#9c27b0',
+                            border: '1px solid rgba(156, 39, 176, 0.3)'
+                          }}
+                        />
+                      </Tooltip>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Tooltip title="View Details">
@@ -237,8 +265,8 @@ const RollHistoryTab = ({ refreshData }) => {
                   }} />
                 </Box>
                 
-                <Typography variant="h5" sx={{ color: '#ffd700', mb: 2, mt: 3, fontWeight: 'bold' }}>
-                  Winner
+                <Typography variant="h5" sx={{ color: selectedRoll.is_repeated_win ? '#f44336' : '#ffd700', mb: 2, mt: 3, fontWeight: 'bold' }}>
+                  Winner {selectedRoll.is_repeated_win && '(Repeat Win)'}
                 </Typography>
                 
                 <Avatar 
@@ -246,7 +274,7 @@ const RollHistoryTab = ({ refreshData }) => {
                   sx={{ 
                     width: 80, 
                     height: 80,
-                    border: '3px solid #ffd700',
+                    border: selectedRoll.is_repeated_win ? '3px solid #f44336' : '3px solid #ffd700',
                     mb: 2
                   }}
                 >
@@ -256,6 +284,23 @@ const RollHistoryTab = ({ refreshData }) => {
                 <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
                   {selectedRoll.winner?.username || selectedRoll.winner_name}
                 </Typography>
+                
+                {selectedRoll.is_repeated_win && (
+                  <Box sx={{ 
+                    p: 1.5, 
+                    bgcolor: 'rgba(244, 67, 54, 0.1)', 
+                    borderRadius: 1, 
+                    mb: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                  }}>
+                    <WarningIcon sx={{ color: '#f44336' }} />
+                    <Typography sx={{ color: '#f44336' }}>
+                      This player previously won this item on {new Date(selectedRoll.previous_win_date).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                )}
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
                   <Chip
@@ -285,6 +330,25 @@ const RollHistoryTab = ({ refreshData }) => {
                   />
                 </Box>
               </Box>
+              
+              {/* Reprocessed Roll Notice */}
+              {selectedRoll.reprocessed && (
+                <Box sx={{ 
+                  p: 2, 
+                  mb: 3, 
+                  bgcolor: 'rgba(156, 39, 176, 0.1)', 
+                  borderRadius: 1,
+                  border: '1px solid rgba(156, 39, 176, 0.3)' 
+                }}>
+                  <Typography variant="subtitle1" sx={{ color: '#9c27b0', fontWeight: 'medium' }}>
+                    Roll Logic Update Notice
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                    {selectedRoll.reprocessed_note || 
+                     'This roll has been reprocessed with updated priority rules: NEED_ITEM > NEED_TRAIT > GREED.'}
+                  </Typography>
+                </Box>
+              )}
               
               {/* All Rolls Section */}
               <Typography variant="h6" sx={{ mb: 2, color: '#9c27b0' }}>

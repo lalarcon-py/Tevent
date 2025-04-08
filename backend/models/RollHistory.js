@@ -63,6 +63,24 @@ module.exports = (sequelize, DataTypes) => {
     roll_time: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
+    },
+    is_repeated_win: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    previous_win_date: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    reprocessed: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    reprocessed_note: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   }, {
     sequelize,

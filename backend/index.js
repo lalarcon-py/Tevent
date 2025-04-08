@@ -32,6 +32,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 // Import the Discord roles routes
 const discordRolesRoutes = require('./routes/discordRolesRoutes');
+const directMemberDeleteRoutes = require('./routes/directMemberDelete');
 
 
 // Middleware imports
@@ -301,6 +302,9 @@ app.use(guildActivityMiddleware);
 
 // Add our direct Discord roles route
 app.use('/api/direct', require('./routes/directDiscordRoles'));
+
+// Add direct member deletion route
+app.use('/api', directMemberDeleteRoutes);
 
 // General use routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

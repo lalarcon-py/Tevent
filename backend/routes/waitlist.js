@@ -56,11 +56,11 @@ router.get('/', async (req, res) => {
       order: [
         ['status', 'ASC'], // Pending first
         [db.Sequelize.literal(`CASE 
-          WHEN need_or_greed = 'NEED_TRAIT' THEN 1
-          WHEN need_or_greed = 'NEED_ITEM' THEN 2
+          WHEN need_or_greed = 'NEED_ITEM' THEN 1
+          WHEN need_or_greed = 'NEED_TRAIT' THEN 2
           WHEN need_or_greed = 'GREED' THEN 3
           ELSE 4
-        END`), 'ASC'], // Sort by priority: NEED_TRAIT > NEED_ITEM > GREED
+        END`), 'ASC'], // Sort by priority: NEED_ITEM > NEED_TRAIT > GREED
         ['created_at', 'ASC'] // First come, first served
       ]
     });

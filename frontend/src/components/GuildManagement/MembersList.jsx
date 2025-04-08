@@ -747,66 +747,51 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
       // Close the dialog
       setKickMemberConfirm(null);
       
-      // Make the DELETE request
-      const response = await fetch(`${API_URL}/api/guilds/${guildId}/members/${memberToRemove.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log("Response status:", response.status);
-      
-      if (!response.ok) {
-        // Revert UI if request failed
-        setMembers(currentMembers);
-        alert(`Error: Failed to remove member (status ${response.status})`);
-        return;
-      }
-      
-      // Try to parse response
-      let responseData;
+      // Try both methods to ensure we succeed in removing the member
       try {
-        responseData = await response.json();
-        console.log("Response data:", responseData);
-      } catch (jsonError) {
-        console.log("No JSON response or invalid JSON");
-      }
-      
-      // Check if the member is still in the response data (which means delete failed)
-      if (Array.isArray(responseData)) {
-        const memberStillExists = responseData.some(m => m.id === memberToRemove.id);
-        
-        if (memberStillExists) {
-          console.log("Member still exists in response - making direct database request");
-          
-          // Try direct database DELETE as a fallback
-          const directDeleteResponse = await fetch(`${API_URL}/api/direct-member-delete`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              guildId,
-              memberId: memberToRemove.id,
-              forceDirect: true  // Signal to backend this is a direct operation
-            })
-          });
-          
-          if (!directDeleteResponse.ok) {
-            console.error("Direct delete also failed");
-            setMembers(responseData); // Use the server's current state
-            alert("Could not remove member. Please try again later.");
-            return;
+        // First try with standard DELETE method
+        const response = await fetch(`${API_URL}/api/guilds/${guildId}/members/${memberToRemove.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
           }
+        });
+        
+        if (response.ok) {
+          console.log("Standard DELETE was successful");
+          alert(`${memberToRemove.username} has been removed from the guild.`);
+          return;
         }
+        
+        // If standard method fails, use the direct method
+        console.log("Standard DELETE failed, trying direct method");
+        const directResponse = await fetch(`${API_URL}/api/direct-member-delete`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            guildId,
+            memberId: memberToRemove.id
+          })
+        });
+        
+        if (!directResponse.ok) {
+          throw new Error(`Direct method failed with status ${directResponse.status}`);
+        }
+        
+        const result = await directResponse.json();
+        console.log("Direct member removal succeeded:", result);
+        alert(`${memberToRemove.username} has been removed from the guild.`);
+        
+      } catch (error) {
+        console.error("Both removal methods failed:", error);
+        // Revert UI if both methods failed
+        setMembers(currentMembers);
+        alert(`Error: Failed to remove member. ${error.message}`);
       }
-      
-      // Success - keep our optimistic update
-      alert(`${memberToRemove.username} has been removed from the guild.`);
-      
     } catch (error) {
       console.error('Error removing member:', error);
       // Refresh member list to ensure UI matches server state
