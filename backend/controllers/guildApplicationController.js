@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
 
 // Helper to handle file upload
 const uploadScreenshot = (file) => {
@@ -76,21 +77,24 @@ const guildApplicationController = {
         );
       }
       
+      // Send application to Discord if integration is enabled
+      try {
+        const webhookURL = `${process.env.DISCORD_BOT_URL || 'http://localhost:3300'}/webhook/new-application`;
+        await axios.post(webhookURL, {
+          guildId: application.guild_id,
+          applicationId: application.id,
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+        console.log(`Application ${application.id} sent to Discord successfully`);
+      } catch (webhookError) {
+        console.error('Error notifying Discord bot about new application:', webhookError);
+        // Continue even if webhook fails - application is still stored in database
+      }
+      
       res.status(201).json(application);
     } catch (error) {
       console.error('Error submitting application:', error);
       res.status(500).json({ error: 'Failed to submit application' });
-    }
-    try {
-      const webhookURL = `${process.env.BOT_WEBHOOK_URL || 'http://localhost:3300'}/webhook/new-application`;
-      await axios.post(webhookURL, {
-        guildId: application.guild_id,
-        applicationId: application.id,
-        secret: process.env.BOT_WEBHOOK_SECRET
-      });
-    } catch (webhookError) {
-      console.error('Error notifying Discord bot about new application:', webhookError);
-      // Continue even if webhook fails
     }
   },
   
