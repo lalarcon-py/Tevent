@@ -91,37 +91,34 @@ const guildApplicationController = {
       }
       
       // Send application to Discord if integration is enabled
-      if (process.env.DISCORD_NOTIFICATIONS_ENABLED === 'true') {
+      if (process.env.DISCORD_NOTIFICATIONS_ENABLED === 'true' || process.env.ENABLE_DISCORD_BOT === 'true') {
         try {
-          // Determine the Discord bot service URL based on environment variables
-          // Check both possible environment variable names (BOT_WEBHOOK_URL and DISCORD_BOT_URL)
+          // Log all relevant environment variables for debugging
+          console.log('Environment variables used for Discord webhook:');
+          console.log(`BOT_WEBHOOK_URL: ${process.env.BOT_WEBHOOK_URL}`);
+          console.log(`DISCORD_BOT_URL: ${process.env.DISCORD_BOT_URL}`);
+          console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+          
+          // Determine the Discord bot service URL - HARD-CODED FOR RAILWAY PRODUCTION
           let webhookURL;
           
-          if (process.env.BOT_WEBHOOK_URL) {
-            // Use the BOT_WEBHOOK_URL if available
-            const baseURL = process.env.BOT_WEBHOOK_URL;
-            console.log(`Using BOT_WEBHOOK_URL: ${baseURL}`);
-            
-            // For Railway's internal networking
-            if (process.env.NODE_ENV === 'production' && baseURL.includes('railway.internal')) {
-              console.log('Using Railway internal networking');
-              webhookURL = baseURL; // Use the full URL as provided
-            } else {
-              webhookURL = `${baseURL}/webhook/new-application`;
-            }
+          if (process.env.NODE_ENV === 'production') {
+            // In production, use the Railway internal URL directly
+            webhookURL = 'http://teventgm.railway.internal/api/discord-bot/webhook/new-application';
+            console.log(`Using hardcoded production webhook URL: ${webhookURL}`);
+          } else if (process.env.BOT_WEBHOOK_URL) {
+            // For non-production with BOT_WEBHOOK_URL
+            webhookURL = `${process.env.BOT_WEBHOOK_URL}/webhook/new-application`;
+            console.log(`Using BOT_WEBHOOK_URL: ${webhookURL}`);
           } else if (process.env.DISCORD_BOT_URL) {
-            // Fallback to DISCORD_BOT_URL if available
-            const baseURL = process.env.DISCORD_BOT_URL;
-            console.log(`Using DISCORD_BOT_URL: ${baseURL}`);
-            webhookURL = `${baseURL}/webhook/new-application`;
+            // Fallback to DISCORD_BOT_URL
+            webhookURL = `${process.env.DISCORD_BOT_URL}/webhook/new-application`;
+            console.log(`Using DISCORD_BOT_URL: ${webhookURL}`);
           } else {
-            // Default for development environment
-            const baseURL = 'http://localhost:3300';
-            console.log(`No webhook URL configured in environment, defaulting to: ${baseURL}`);
-            webhookURL = `${baseURL}/webhook/new-application`;
+            // Last resort for development
+            webhookURL = 'http://localhost:3300/webhook/new-application';
+            console.log(`Using default webhook URL: ${webhookURL}`);
           }
-          
-          console.log(`Final webhook URL: ${webhookURL}`);
           
           console.log('Sending application to Discord webhook:', {
             guildId: application.guild_id,
