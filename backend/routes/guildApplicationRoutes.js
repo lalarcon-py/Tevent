@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const guildApplicationController = require('../controllers/guildApplicationController');
+const { GuildApplication, User } = require('../models');
 
 // Configure multer for file uploads
 const upload = multer({
@@ -46,6 +47,43 @@ router.get('/waitlist', guildApplicationController.getWaitlistedApplications);
 router.get('/my-application', guildApplicationController.getMyApplication);
 // Add alternative route with explicit guildId parameter
 router.get('/:guildId/my-application', guildApplicationController.getMyApplication);
+
+// Add route to get a specific application by ID
+router.get('/:applicationId', (req, res) => {
+  const { applicationId } = req.params;
+  const guildId = req.guildId || req.query.guildId;
+  
+  // Check authentication
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  // Check guild ID
+  if (!guildId) {
+    return res.status(400).json({ error: 'Guild ID is required' });
+  }
+  
+  // Find the application
+  GuildApplication.findOne({
+    where: { id: applicationId, guild_id: guildId },
+    include: [{
+      model: User,
+      attributes: ['id', 'username', 'discord_id', 'avatar_url']
+    }]
+  })
+  .then(application => {
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    
+    // Return the application data
+    return res.json(application);
+  })
+  .catch(error => {
+    console.error('Error fetching application:', error);
+    return res.status(500).json({ error: 'Failed to fetch application' });
+  });
+});
 
 router.post('/:applicationId/approve', guildApplicationController.approveApplication);
 router.post('/:applicationId/deny', guildApplicationController.denyApplication);

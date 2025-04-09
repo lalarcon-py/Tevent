@@ -24,6 +24,7 @@ import EventSummaries from './components/EventSummaries/EventSummaries';
 import GuildSettings from './components/GuildSettings/GuildSettings';
 import { GuildSettingsProvider } from './contexts/GuildSettingsContext';
 import GuildApplications from './pages/GuildApplications';
+import ApplicationDetails from './pages/ApplicationDetails';
 import GuildSetupPage from './pages/GuildSetupPage';
 import LandingPage from './pages/LandingPage';
 import { BillingProvider, useBilling } from './contexts/BillingContext';
@@ -214,6 +215,7 @@ function AppContent() {
         <Routes>
           <Route path="/auth-error" element={<AuthError />} />
           <Route path="/applications" element={<GuildApplications />} />
+          <Route path="/guilds/applications/:applicationId" element={<ApplicationDetails />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/admin" element={<AdminPortal />} />
           <Route path="*" element={<LandingPage />} />
@@ -262,6 +264,7 @@ function AppContent() {
           <Route path="/events/:eventId/team-planner" element={<TeamPlanner />} />
           <Route path="/event-summaries" element={<EventSummaries />} />
           <Route path="/applications" element={<GuildApplications />} />
+          <Route path="/guilds/applications/:applicationId" element={<ApplicationDetails />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
           <Route path="/auth-error" element={<AuthError />} />
