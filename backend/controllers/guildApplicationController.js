@@ -5,8 +5,6 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
-const http = require('http');
-const https = require('https');
 
 // Helper to handle file upload
 const uploadScreenshot = (file) => {
@@ -95,40 +93,9 @@ const guildApplicationController = {
       // Send application to Discord if integration is enabled
       if (process.env.DISCORD_NOTIFICATIONS_ENABLED === 'true' || process.env.ENABLE_DISCORD_BOT === 'true') {
         try {
-          // Log all relevant environment variables for debugging
-          console.log('Environment variables used for Discord webhook:');
-          console.log(`BOT_WEBHOOK_URL: ${process.env.BOT_WEBHOOK_URL}`);
-          console.log(`DISCORD_BOT_URL: ${process.env.DISCORD_BOT_URL}`);
-          console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-          console.log(`DISCORD_BOT_INTERNAL_URL: ${process.env.DISCORD_BOT_INTERNAL_URL}`);
-          
-          // Determine the Discord bot service URL
-          let webhookURL;
-          
-          // First check if an explicit internal URL override is provided
-          if (process.env.DISCORD_BOT_INTERNAL_URL) {
-            // Use the explicit internal URL if provided
-            webhookURL = `${process.env.DISCORD_BOT_INTERNAL_URL}`;
-            console.log(`Using override DISCORD_BOT_INTERNAL_URL: ${webhookURL}`);
-          } else if (process.env.NODE_ENV === 'production') {
-            // In production, try to use Railway's service-name.railway.internal format
-            // The true service name might be discord-bot or teventgm-discord-bot
-            // Note that Railway internal networking is very particular about hostname formats
-            webhookURL = 'http://discord-bot.railway.internal/webhook/new-application';
-            console.log(`Using likely service name for Railway internal networking: ${webhookURL}`);
-          } else if (process.env.BOT_WEBHOOK_URL) {
-            // For non-production with BOT_WEBHOOK_URL
-            webhookURL = `${process.env.BOT_WEBHOOK_URL}/webhook/new-application`;
-            console.log(`Using BOT_WEBHOOK_URL: ${webhookURL}`);
-          } else if (process.env.DISCORD_BOT_URL) {
-            // Fallback to DISCORD_BOT_URL
-            webhookURL = `${process.env.DISCORD_BOT_URL}/webhook/new-application`;
-            console.log(`Using DISCORD_BOT_URL: ${webhookURL}`);
-          } else {
-            // Last resort for development
-            webhookURL = 'http://localhost:3300/webhook/new-application';
-            console.log(`Using default webhook URL: ${webhookURL}`);
-          }
+          // Use the same working URL pattern that's used for events
+          const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+          console.log(`Using Discord bot URL: ${discordBotUrl}`);
           
           console.log('Sending application to Discord webhook:', {
             guildId: application.guild_id,
@@ -139,85 +106,19 @@ const guildApplicationController = {
           // Ensure guildId is sent as string to avoid parsing issues
           const guildIdStr = String(application.guild_id);
           
-          // Set up IPv4 agents
-          const httpAgent = new http.Agent({ family: 4 });
-          const httpsAgent = new https.Agent({ family: 4 });
+          // Set reasonable timeout to avoid long blocking operations
+          const response = await axios.post(`${discordBotUrl}/webhook/new-application`, {
+            guildId: guildIdStr,
+            applicationId: application.id,
+            secret: process.env.BOT_WEBHOOK_SECRET
+          }, {
+            timeout: 5000, // 5 second timeout
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
           
-          // Try to send the webhook
-          try {
-            // Set reasonable timeout to avoid long blocking operations
-            const response = await axios.post(webhookURL, {
-              guildId: guildIdStr,
-              applicationId: application.id,
-              secret: process.env.BOT_WEBHOOK_SECRET
-            }, {
-              timeout: 5000, // 5 second timeout
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              // Force IPv4 connections
-              // Railway internal networking might need this for proper routing
-              httpAgent,
-              httpsAgent
-            });
-            
-            console.log(`Application ${application.id} sent to Discord successfully. Status: ${response.status}`);
-          } catch (primaryError) {
-            // If the primary approach fails, try an alternative URL format
-            console.log('Primary webhook attempt failed, trying alternative URL formats...');
-            
-            // Different possible formats for Railway internal services
-            // Railway uses service-name.railway.internal format for internal networking
-            const alternativeURLs = [
-              // Try original URL with just the port changed
-              'http://teventgm-discord-bot.railway.internal/webhook/new-application',
-              // Try with just the service name
-              'http://discord-bot.railway.internal/webhook/new-application',
-              // Try just the service name with port
-              'http://discord-bot.railway.internal:3300/webhook/new-application',
-              // Try original service name with port
-              'http://teventgm.railway.internal:3300/webhook/new-application',
-              // Try with dash instead of dot
-              'http://teventgm-railway-internal/webhook/new-application',
-              // Try simplified path format
-              'http://teventgm.railway.internal/webhook/new-application'
-            ];
-            
-            let successful = false;
-            
-            // Try each URL in sequence
-            for (const url of alternativeURLs) {
-              try {
-                console.log(`Trying alternative URL: ${url}`);
-                
-                const altResponse = await axios.post(url, {
-                  guildId: guildIdStr,
-                  applicationId: application.id,
-                  secret: process.env.BOT_WEBHOOK_SECRET
-                }, {
-                  timeout: 5000,
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  httpAgent,
-                  httpsAgent
-                });
-                
-                console.log(`Application ${application.id} sent to Discord successfully via alternative URL: ${url}. Status: ${altResponse.status}`);
-                successful = true;
-                break;
-              } catch (altError) {
-                console.log(`Alternative URL ${url} failed: ${altError.message}`);
-                // Continue to next URL
-              }
-            }
-            
-            if (!successful) {
-              // If all alternative URLs failed, throw the original error
-              console.log('All alternative URLs failed');
-              throw primaryError;
-            }
-          }
+          console.log(`Application ${application.id} sent to Discord successfully. Status: ${response.status}`);
         } catch (webhookError) {
           console.error('Error notifying Discord bot about new application:', webhookError.message);
           
