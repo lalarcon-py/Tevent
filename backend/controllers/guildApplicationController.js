@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
 
 // Helper to handle file upload
 const uploadScreenshot = (file) => {
@@ -129,19 +131,52 @@ const guildApplicationController = {
           // Ensure guildId is sent as string to avoid parsing issues
           const guildIdStr = String(application.guild_id);
           
-          // Set reasonable timeout to avoid long blocking operations
-          const response = await axios.post(webhookURL, {
-            guildId: guildIdStr,
-            applicationId: application.id,
-            secret: process.env.BOT_WEBHOOK_SECRET
-          }, {
-            timeout: 5000, // 5 second timeout
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
+          // Set up IPv4 agents
+          const httpAgent = new http.Agent({ family: 4 });
+          const httpsAgent = new https.Agent({ family: 4 });
           
-          console.log(`Application ${application.id} sent to Discord successfully. Status: ${response.status}`);
+          // Try to send the webhook
+          try {
+            // Set reasonable timeout to avoid long blocking operations
+            const response = await axios.post(webhookURL, {
+              guildId: guildIdStr,
+              applicationId: application.id,
+              secret: process.env.BOT_WEBHOOK_SECRET
+            }, {
+              timeout: 5000, // 5 second timeout
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              // Force IPv4 connections
+              // Railway internal networking might need this for proper routing
+              httpAgent,
+              httpsAgent
+            });
+            
+            console.log(`Application ${application.id} sent to Discord successfully. Status: ${response.status}`);
+          } catch (primaryError) {
+            // If the primary approach fails, try an alternative URL format
+            console.log('Primary webhook attempt failed, trying alternative URL format...');
+            
+            // Try with IP address directly if available
+            const alternativeURL = 'http://teventgm.railway.internal:3300/webhook/new-application';
+            console.log(`Trying alternative URL: ${alternativeURL}`);
+            
+            const response = await axios.post(alternativeURL, {
+              guildId: guildIdStr,
+              applicationId: application.id,
+              secret: process.env.BOT_WEBHOOK_SECRET
+            }, {
+              timeout: 5000,
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              httpAgent,
+              httpsAgent
+            });
+            
+            console.log(`Application ${application.id} sent to Discord successfully via alternative URL. Status: ${response.status}`);
+          }
         } catch (webhookError) {
           console.error('Error notifying Discord bot about new application:', webhookError.message);
           
