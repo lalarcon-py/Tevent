@@ -194,11 +194,24 @@ const BuildSelectionDialog = ({ open, member, onClose, onSelectBuild }) => {
 const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
   const dragRef = React.useRef(null);
   
+  // Store member ID for comparison to detect changes
+  const memberIdRef = React.useRef(member?.user_id || member?.id || member?.User?.id);
+  
   React.useEffect(() => {
     const currentEl = dragRef.current;
     if (!currentEl) return;
     
+    // Track if we're in the middle of a drag operation
+    let isDragging = false;
+    
     const handleDragStart = (e) => {
+      // Prevent starting a new drag while one is in progress
+      if (isDragging) {
+        e.preventDefault();
+        return;
+      }
+      
+      console.log('Drag started!');
       const memberId = member.user_id || member.id || (member.User?.id);
       
       if (!memberId) {
@@ -207,18 +220,35 @@ const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
         return;
       }
       
+      console.log('Setting drag data with ID:', memberId);
+      
       try {
+        // Set the primary data
         e.dataTransfer.setData('text/plain', memberId);
         e.dataTransfer.setData('memberId', memberId);
+        
+        // Set a custom format instead of duplicating 'text/plain'
+        e.dataTransfer.setData('application/x-member-id', memberId);
+        
+        // Set the drag image to the current element to avoid flicker
+        e.dataTransfer.setDragImage(currentEl, 20, 20);
+        
+        isDragging = true;
+        currentEl.classList.add('dragging');
       } catch (err) {
         console.error('Error setting drag data:', err);
+        e.preventDefault();
       }
-      
-      currentEl.classList.add('dragging');
     };
     
     const handleDragEnd = () => {
       currentEl.classList.remove('dragging');
+      isDragging = false;
+      
+      // Add a small delay to ensure the element is ready for the next drag
+      setTimeout(() => {
+        currentEl.style.opacity = 1;
+      }, 100);
     };
     
     // Directly attach event listeners to the DOM element
@@ -231,6 +261,14 @@ const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
       currentEl.removeEventListener('dragstart', handleDragStart);
       currentEl.removeEventListener('dragend', handleDragEnd);
     };
+  }, [member]);
+  
+  // Update memberIdRef when it changes
+  React.useEffect(() => {
+    const currentMemberId = member?.user_id || member?.id || member?.User?.id;
+    if (currentMemberId !== memberIdRef.current) {
+      memberIdRef.current = currentMemberId;
+    }
   }, [member]);
 
   // Prioritize selected_build
@@ -294,6 +332,8 @@ const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
     <Box 
       ref={dragRef} 
       draggable={true}
+      role="button"
+      aria-label={`Drag ${member.User?.username || member.username}`}
       sx={{
         position: 'relative',
         padding: '10px 12px',
@@ -524,6 +564,46 @@ const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
   );
 };
 
+// Simple error boundary component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Static Teams Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h5" sx={{ color: '#ff6666', mb: 2 }}>
+            Something went wrong with the Static Teams component.
+          </Typography>
+          <Typography sx={{ color: 'white', mb: 2 }}>
+            Please try refreshing the page. If the problem persists, contact support.
+          </Typography>
+          <Button 
+            variant="contained" 
+            onClick={() => window.location.reload()}
+            sx={{ mr: 2 }}
+          >
+            Refresh Page
+          </Button>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const StaticTeams = () => {
   const { simulatedRole } = useSimulatedRole();
   const { user } = useAuth();
@@ -709,36 +789,50 @@ const StaticTeams = () => {
         const teamsResponse = await axiosInstance.get(`/api/static-teams?guildId=${guildId}`);
         if (teamsResponse.status === 200) {
           const fetchedTeams = teamsResponse.data || [];
-          setTeams(fetchedTeams);
+          
+          // Ensure teams array has valid data
+          const validTeams = fetchedTeams.filter(team => team && typeof team === 'object');
+          setTeams(validTeams);
           
           // Collect all member IDs already assigned to teams
           const assignedMemberIds = new Set();
-          fetchedTeams.forEach(team => {
-            team.members?.forEach(member => {
-              const memberId = member.user_id || member.id || (member.User?.id);
-              if (memberId) {
-                assignedMemberIds.add(memberId);
-              }
-            });
+          validTeams.forEach(team => {
+            if (team && Array.isArray(team.members)) {
+              team.members.forEach(member => {
+                if (member) {
+                  const memberId = member.user_id || member.id || (member.User?.id);
+                  if (memberId) {
+                    assignedMemberIds.add(memberId);
+                  }
+                }
+              });
+            }
           });
   
-          // Fetch all guild members
-          const membersResponse = await axiosInstance.get(`/api/guilds/${guildId}/members`);
-          if (membersResponse.status === 200) {
-            // Process members to ensure they have the correct structure
-            // AND filter out members who are already in teams
-            const processedMembers = membersResponse.data
-              .map(formatMemberWithBuilds)
-              .filter(member => {
-                const memberId = member.user_id || member.id || (member.User?.id);
-                return !assignedMemberIds.has(memberId);
-              });
-              
-            setMembers(processedMembers);
+          try {
+            // Fetch all guild members
+            const membersResponse = await axiosInstance.get(`/api/guilds/${guildId}/members`);
+            if (membersResponse.status === 200 && Array.isArray(membersResponse.data)) {
+              // Process members to ensure they have the correct structure
+              // AND filter out members who are already in teams
+              const processedMembers = membersResponse.data
+                .filter(member => member !== null && typeof member === 'object') // Filter out null or invalid member entries
+                .map(formatMemberWithBuilds)
+                .filter(member => {
+                  if (!member) return false;
+                  const memberId = member.user_id || member.id || (member.User?.id);
+                  return memberId && !assignedMemberIds.has(memberId);
+                });
+                
+              setMembers(processedMembers);
+            }
+          } catch (memberError) {
+            console.error('Error fetching guild members:', memberError);
+            setError('Failed to load guild members');
           }
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching static teams:', error);
         setError('Failed to load static teams data');
       }
     };
@@ -836,11 +930,14 @@ const StaticTeams = () => {
       );
       
       let sourceTeamId = null;
+      let sourceTeam = null;
 
       // If not found in available members, check teams
       if (!member) {
         for (const team of teams) {
-          const foundMember = team.members?.find(m => 
+          if (!team || !team.members) continue;
+          
+          const foundMember = team.members.find(m => 
             m.id === memberId || m.user_id === memberId || 
             (m.User && m.User.id === memberId)
           );
@@ -848,6 +945,7 @@ const StaticTeams = () => {
           if (foundMember) {
             member = foundMember;
             sourceTeamId = team.id;
+            sourceTeam = team;
             break;
           }
         }
@@ -873,8 +971,77 @@ const StaticTeams = () => {
       // Extract selected build
       const selectedBuild = member.selectedBuild || member.selected_build || 
                           (member.builds && member.builds.length > 0 ? member.builds[0] : null);
+      
+      // Create copies of current state for manipulation
+      const updatedTeams = [...teams];
+      const updatedMembers = [...members];
+      
+      // Find target team
+      const targetTeamIndex = updatedTeams.findIndex(t => t && t.id === teamId);
+      if (targetTeamIndex === -1) {
+        console.error('Target team not found:', teamId);
+        return;
+      }
+      
+      // Prepare the member object to add to the target team
+      const memberToAdd = {
+        ...member,
+        role: role,
+        selectedBuild: selectedBuild,
+        selected_build: selectedBuild
+      };
+      
+      if (sourceTeamId) {
+        // Moving between teams
+        // Find the source team
+        const sourceTeamIndex = updatedTeams.findIndex(t => t && t.id === sourceTeamId);
+        if (sourceTeamIndex >= 0) {
+          // Remove member from source team
+          updatedTeams[sourceTeamIndex] = {
+            ...updatedTeams[sourceTeamIndex],
+            members: updatedTeams[sourceTeamIndex].members?.filter(m => 
+              m.id !== memberId && 
+              m.user_id !== memberId && 
+              (m.User?.id !== memberId)
+            ) || []
+          };
+          
+          // Add member to target team
+          updatedTeams[targetTeamIndex] = {
+            ...updatedTeams[targetTeamIndex],
+            members: [
+              ...(updatedTeams[targetTeamIndex].members || []),
+              memberToAdd
+            ]
+          };
+        }
+      } else {
+        // Moving from available members to team
+        // Remove from available members
+        const filteredMembers = updatedMembers.filter(m => 
+          m.id !== memberId && 
+          m.user_id !== memberId && 
+          (m.User?.id !== memberId)
+        );
+        
+        // Add to target team
+        updatedTeams[targetTeamIndex] = {
+          ...updatedTeams[targetTeamIndex],
+          members: [
+            ...(updatedTeams[targetTeamIndex].members || []),
+            memberToAdd
+          ]
+        };
+        
+        // Update members state
+        setMembers(filteredMembers);
+      }
+      
+      // Force a fresh render of the entire component by creating a deep copy
+      const deepCopiedTeams = JSON.parse(JSON.stringify(updatedTeams));
+      setTeams(deepCopiedTeams);
 
-      // Make API call to update team membership
+      // Now make the API call after UI has been updated
       const response = await axiosInstance.post(`/api/static-teams/${teamId}/members`, {
         memberId: userId,
         role: role,
@@ -883,59 +1050,35 @@ const StaticTeams = () => {
         selectedBuild
       });
 
-      if (response.status === 200) {
-        // Update UI state
-        if (sourceTeamId) {
-          // Moving between teams
-          setTeams(prev => prev.map(team => {
-            if (team.id === sourceTeamId) {
-              return {
-                ...team,
-                members: team.members.filter(m => 
-                  m.id !== memberId && 
-                  m.user_id !== memberId && 
-                  (m.User?.id !== memberId)
-                )
-              };
-            }
-            if (team.id === teamId) {
-              return {
-                ...team,
-                members: [...(team.members || []), {
-                  ...member,
-                  role: role,
-                  selectedBuild
-                }]
-              };
-            }
-            return team;
-          }));
-        } else {
-          // Moving from available members to team
-          setMembers(prev => prev.filter(m => 
-            m.id !== memberId && 
-            m.user_id !== memberId && 
-            (m.User?.id !== memberId)
-          ));
-          
-          setTeams(prev => prev.map(team => {
-            if (team.id === teamId) {
-              return {
-                ...team,
-                members: [...(team.members || []), {
-                  ...member,
-                  role: role,
-                  selectedBuild
-                }]
-              };
-            }
-            return team;
-          }));
-        }
+      if (response.status !== 200) {
+        throw new Error('Failed to update team member');
       }
     } catch (error) {
       console.error('Error updating team member:', error);
       setError('Failed to update team');
+      
+      // If an error occurs, refresh data to restore correct state
+      if (guildId) {
+        const refreshData = async () => {
+          try {
+            // Fetch static teams
+            const teamsResponse = await axiosInstance.get(`/api/static-teams?guildId=${guildId}`);
+            if (teamsResponse.status === 200) {
+              setTeams(teamsResponse.data || []);
+              
+              // Fetch all guild members
+              const membersResponse = await axiosInstance.get(`/api/guilds/${guildId}/members`);
+              if (membersResponse.status === 200) {
+                setMembers(membersResponse.data.map(formatMemberWithBuilds));
+              }
+            }
+          } catch (refreshError) {
+            console.error('Error refreshing data after failure:', refreshError);
+          }
+        };
+        
+        refreshData();
+      }
     }
   };
 
@@ -1357,8 +1500,18 @@ const StaticTeams = () => {
   // Team component
   const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit, canEdit }) => {
     const [isEditingName, setIsEditingName] = useState(false);
-    const [teamName, setTeamName] = useState(team.name);
+    const [teamName, setTeamName] = useState(team?.name || '');
     const [isDropTarget, setIsDropTarget] = useState(false);
+    const [isProcessingDrop, setIsProcessingDrop] = useState(false);
+    const teamRef = React.useRef(team);
+    
+    // Update team name state when team changes
+    React.useEffect(() => {
+      if (team?.name !== teamName) {
+        setTeamName(team?.name || '');
+      }
+      teamRef.current = team;
+    }, [team]);
   
     const handleDragOver = (e) => {
       e.preventDefault();
@@ -1373,32 +1526,58 @@ const StaticTeams = () => {
   
     const handleDrop = (e) => {
       e.preventDefault();
-      if (!canEdit) return;
+      if (!canEdit || isProcessingDrop) return;
       setIsDropTarget(false);
+      setIsProcessingDrop(true);
   
       let memberId;
       try {
+        // Try all possible data formats
         memberId = e.dataTransfer.getData('memberId');
+        
         if (!memberId) {
-          const jsonData = e.dataTransfer.getData('application/json');
-          if (jsonData) {
-            const data = JSON.parse(jsonData);
-            memberId = data.id;
-          }
+          memberId = e.dataTransfer.getData('application/x-member-id');
         }
+        
         if (!memberId) {
           memberId = e.dataTransfer.getData('text/plain');
         }
+        
+        if (!memberId) {
+          const jsonData = e.dataTransfer.getData('application/json');
+          if (jsonData) {
+            try {
+              const data = JSON.parse(jsonData);
+              memberId = data.id;
+            } catch (parseErr) {
+              console.error('Error parsing JSON data:', parseErr);
+            }
+          }
+        }
       } catch (err) {
         console.error('Error getting drag data:', err);
+        setIsProcessingDrop(false);
+        return;
       }
       
       if (!memberId) {
         console.error('No member ID received in drop event');
+        setIsProcessingDrop(false);
         return;
       }
       
-      onDrop(memberId, team.id);
+      console.log('Processing drop of member', memberId, 'to team', team.id);
+      
+      // Process the drop with a delay to ensure DOM is ready
+      // This helps prevent the team from disappearing
+      requestAnimationFrame(() => {
+        onDrop(memberId, team.id);
+        
+        // Reset the processing state after a short delay
+        setTimeout(() => {
+          setIsProcessingDrop(false);
+        }, 300);
+      });
     };
   
     // Calculate role distributions
@@ -1829,9 +2008,9 @@ const StaticTeams = () => {
             <Grid container spacing={2}>
               {/* Use a div with display:flex to make teams appear in a row */}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', width: '100%' }}>
-                {teams.map((team, index) => (
+                {teams && teams.length > 0 ? teams.map((team, index) => team && (
                   <Box 
-                    key={team.id}
+                    key={`team-container-${team.id}`}
                     sx={{ 
                       width: { xs: '100%', md: '50%', lg: '33.333%' },
                       p: 1,
@@ -1866,7 +2045,9 @@ const StaticTeams = () => {
                       setTeams(newTeams);
                     }}
                   >
+                    {/* Force Team component to re-render by providing a unique key when members change */}
                     <Team 
+                      key={`team-${team.id}-members-${team.members?.length || 0}`}
                       team={team} 
                       onDrop={handleDrop}
                       onRemove={handleDeleteTeam}
@@ -1874,7 +2055,13 @@ const StaticTeams = () => {
                       canEdit={hasEditPermission()}
                     />
                   </Box>
-                ))}
+                )) : (
+                  <Box sx={{ width: '100%', p: 3, textAlign: 'center' }}>
+                    <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                      No teams available. Create a team to get started.
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             </Grid>
           </Grid>
@@ -1971,4 +2158,11 @@ const StaticTeams = () => {
   );
 };
 
-export default StaticTeams;
+// Wrap the StaticTeams component with the ErrorBoundary
+const SafeStaticTeams = () => (
+  <ErrorBoundary>
+    <StaticTeams />
+  </ErrorBoundary>
+);
+
+export default SafeStaticTeams;

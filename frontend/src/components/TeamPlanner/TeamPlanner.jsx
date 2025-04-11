@@ -238,13 +238,22 @@ const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
       console.log('Setting drag data with ID:', memberId);
 
       try {
+        // Set the primary data
         e.dataTransfer.setData('text/plain', memberId);
         e.dataTransfer.setData('memberId', memberId);
+        
+        // Set a custom format instead of duplicating 'text/plain'
+        e.dataTransfer.setData('application/x-member-id', memberId);
+        
+        // Set the drag image to the current element to avoid flicker
+        if (e.dataTransfer.setDragImage) {
+          e.dataTransfer.setDragImage(currentEl, 20, 20);
+        }
+        
+        currentEl.classList.add('dragging');
       } catch (err) {
         console.error('Error setting drag data:', err);
       }
-      
-      currentEl.classList.add('dragging');
     };
     
     const handleDragEnd = () => {
@@ -1516,8 +1525,75 @@ const TeamPlanner = () => {
                             JSON.parse(member.selected_build) : null) ||
                            (member.builds && member.builds.length > 0 ? member.builds[0] : null);
   
-      // Preserve the role when making API request
-      // Set status to CONFIRMED when adding to a team, regardless of previous status
+      // Update the UI state first to prevent blank screen
+      // When processing UI updates, ensure we keep the role and build info
+      if (sourceTeamId) {
+        // Update teams state (moving between teams)
+        setTeams(prev => prev.map(team => {
+          if (team.id === sourceTeamId) {
+            return {
+              ...team,
+              members: team.members.filter(m => 
+                m.id !== memberId && 
+                m.user_id !== memberId && 
+                (m.User?.id !== memberId)
+              )
+            };
+          }
+          if (team.id === teamId) {
+            return {
+              ...team,
+              members: [...(team.members || []), {
+                ...member,
+                role: member.role, // Keep the original role
+                selectedBuild: selectedBuild, // Keep the selected build
+                status: 'CONFIRMED' // Make sure status is set to CONFIRMED
+              }]
+            };
+          }
+          return team;
+        }));
+      } else {
+        // Remove from regular participants if they came from there
+        if (!isTentative) {
+          setParticipants(prev => prev.filter(p => 
+            p.id !== memberId && 
+            p.user_id !== memberId && 
+            (p.User?.id !== memberId)
+          ));
+        } else {
+          // Remove from tentative participants if they came from there
+          setTentativeParticipants(prev => prev.filter(p => 
+            p.id !== memberId && 
+            p.user_id !== memberId && 
+            (p.User?.id !== memberId)
+          ));
+        }
+        
+        // Add to team
+        setTeams(prev => prev.map(team => {
+          if (team.id === teamId) {
+            return {
+              ...team,
+              members: [...(team.members || []), {
+                ...member,
+                role: member.role, // Keep the original role
+                selectedBuild: selectedBuild, // Keep the selected build
+                status: 'CONFIRMED' // Make sure status is set to CONFIRMED
+              }]
+            };
+          }
+          return team;
+        }));
+      }
+      
+      // Store the member's original status so we can restore it if they're removed later
+      setMemberOriginalStatuses(prev => ({
+        ...prev,
+        [userId]: isTentative ? 'TENTATIVE' : 'CONFIRMED'
+      }));
+
+      // Now make the API call after UI is updated
       const response = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1544,70 +1620,6 @@ const TeamPlanner = () => {
         role: updatedMember.role
       }});
       
-      // Store the member's original status so we can restore it if they're removed later
-      setMemberOriginalStatuses(prev => ({
-        ...prev,
-        [userId]: isTentative ? 'TENTATIVE' : 'CONFIRMED'
-      }));
-  
-      // When processing UI updates, ensure we keep the role and build info
-      if (sourceTeamId) {
-        setTeams(prev => prev.map(team => {
-          if (team.id === sourceTeamId) {
-            return {
-              ...team,
-              members: team.members.filter(m => 
-                m.id !== memberId && 
-                m.user_id !== memberId && 
-                (m.User?.id !== memberId)
-              )
-            };
-          }
-          if (team.id === teamId) {
-            return {
-              ...team,
-              members: [...(team.members || []), {
-                ...member,
-                role: member.role, // Keep the original role
-                selectedBuild: selectedBuild // Keep the selected build
-              }]
-            };
-          }
-          return team;
-        }));
-      } else {
-        // Remove from regular participants if they came from there
-        if (!isTentative) {
-          setParticipants(prev => prev.filter(p => 
-            p.id !== memberId && 
-            p.user_id !== memberId && 
-            (p.User?.id !== memberId)
-          ));
-        } else {
-          // Remove from tentative participants if they came from there
-          setTentativeParticipants(prev => prev.filter(p => 
-            p.id !== memberId && 
-            p.user_id !== memberId && 
-            (p.User?.id !== memberId)
-          ));
-        }
-        
-        setTeams(prev => prev.map(team => {
-          if (team.id === teamId) {
-            return {
-              ...team,
-              members: [...(team.members || []), {
-                ...member,
-                role: member.role, // Keep the original role
-                selectedBuild: selectedBuild, // Keep the selected build
-                status: 'CONFIRMED' // Make sure status is set to CONFIRMED
-              }]
-            };
-          }
-          return team;
-        }));
-      }
-      
       logEvent('STATE_UPDATED', {
         action: sourceTeamId ? 'Moved between teams' : 
                (isTentative ? 'Moved from tentative to team' : 'Moved from participants to team'),
@@ -1617,6 +1629,38 @@ const TeamPlanner = () => {
       console.error('Error updating team:', error);
       logEvent('DROP_ERROR', { error: error.message });
       setError('Failed to update team');
+      
+      // If there's an error, refresh the data to restore correct state
+      const fetchData = async () => {
+        try {
+          const response = await fetch(
+            `${API_URL}/api/events/${eventId}/team-planner-data?guildId=${guildId}`,
+            { credentials: 'include' }
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            setTeams(data.teams || []);
+            
+            // Process confirmed participants
+            const processedParticipants = (data.participants || []).map(participant => {
+              return formatMemberWithBuilds(participant);
+            });
+            
+            // Process tentative participants
+            const processedTentatives = (data.tentatives || []).map(tentative => {
+              return formatMemberWithBuilds(tentative);
+            });
+            
+            setParticipants(processedParticipants);
+            setTentativeParticipants(processedTentatives);
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing data after failure:', refreshError);
+        }
+      };
+      
+      fetchData();
     }
   };
 
@@ -1743,6 +1787,7 @@ const TeamPlanner = () => {
     const [isEditingName, setIsEditingName] = useState(false);
     const [teamName, setTeamName] = useState(team.name);
     const [isDropTarget, setIsDropTarget] = useState(false);
+    const [isProcessingDrop, setIsProcessingDrop] = useState(false);
   
     const handleDragOver = (e) => {
       e.preventDefault();
@@ -1757,32 +1802,53 @@ const TeamPlanner = () => {
   
     const handleDrop = (e) => {
       e.preventDefault();
-      if (!canEdit) return;
+      if (!canEdit || isProcessingDrop) return;
       setIsDropTarget(false);
+      setIsProcessingDrop(true);
   
       let memberId;
       try {
+        // Try all possible data formats
         memberId = e.dataTransfer.getData('memberId');
+        
         if (!memberId) {
-          const jsonData = e.dataTransfer.getData('application/json');
-          if (jsonData) {
-            const data = JSON.parse(jsonData);
-            memberId = data.id;
-          }
+          memberId = e.dataTransfer.getData('application/x-member-id');
         }
+        
         if (!memberId) {
           memberId = e.dataTransfer.getData('text/plain');
         }
+        
+        if (!memberId) {
+          const jsonData = e.dataTransfer.getData('application/json');
+          if (jsonData) {
+            try {
+              const data = JSON.parse(jsonData);
+              memberId = data.id;
+            } catch (parseErr) {
+              console.error('Error parsing JSON data:', parseErr);
+            }
+          }
+        }
       } catch (err) {
         console.error('Error getting drag data:', err);
+        setIsProcessingDrop(false);
+        return;
       }
       
       if (!memberId) {
         console.error('No member ID received in drop event');
+        setIsProcessingDrop(false);
         return;
       }
       
+      // Process the drop
       onDrop(memberId, team.id);
+      
+      // Reset the processing state after a short delay
+      setTimeout(() => {
+        setIsProcessingDrop(false);
+      }, 300);
     };
   
     const handleNameSave = () => {
@@ -2186,6 +2252,8 @@ const TeamPlanner = () => {
   return (
     <DndProvider backend={HTML5Backend}>
       <Box sx={{ p: 3 }}>
+        {/* Add key prop based on teams and participants to force proper re-rendering */}
+        <div key={`team-planner-${teams.length}-${participants.length}-${tentativeParticipants.length}`}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" sx={{ color: 'white' }}>
             Team Planner
@@ -2704,6 +2772,7 @@ const TeamPlanner = () => {
             </Alert>
           </Snackbar>
         )}
+        </div>
       </Box>
     </DndProvider>
   );

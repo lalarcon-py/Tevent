@@ -80,7 +80,16 @@ const DraggableMember = ({ member, onRemove }) => {
     const currentEl = dragRef.current;
     if (!currentEl) return;
     
+    // Track if we're in the middle of a drag operation
+    let isDragging = false;
+    
     const handleDragStart = (e) => {
+      // Prevent starting a new drag while one is in progress
+      if (isDragging) {
+        e.preventDefault();
+        return;
+      }
+      
       console.log('Drag started!');
       const memberId = member.user_id || member.id || (member.User?.id);
       
@@ -91,19 +100,34 @@ const DraggableMember = ({ member, onRemove }) => {
       }
       
       console.log('Setting drag data with ID:', memberId);
-
+      
       try {
+        // Set the primary data
         e.dataTransfer.setData('text/plain', memberId);
         e.dataTransfer.setData('memberId', memberId);
+        
+        // Set a custom format instead of duplicating 'text/plain'
+        e.dataTransfer.setData('application/x-member-id', memberId);
+        
+        // Set the drag image to the current element to avoid flicker
+        e.dataTransfer.setDragImage(currentEl, 20, 20);
+        
+        isDragging = true;
+        currentEl.classList.add('dragging');
       } catch (err) {
         console.error('Error setting drag data:', err);
+        e.preventDefault();
       }
-      
-      currentEl.classList.add('dragging');
     };
     
     const handleDragEnd = () => {
       currentEl.classList.remove('dragging');
+      isDragging = false;
+      
+      // Add a small delay to ensure the element is ready for the next drag
+      setTimeout(() => {
+        currentEl.style.opacity = 1;
+      }, 100);
     };
     
     // Directly attach event listeners to the DOM element
@@ -230,6 +254,8 @@ const DraggableMember = ({ member, onRemove }) => {
     <Box 
       ref={dragRef} 
       draggable={true}
+      role="button"
+      aria-label={`Drag ${member.User?.username || member.username}`}
       sx={{
         position: 'relative',
         padding: '10px 12px',
