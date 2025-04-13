@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   const authCheckInProgress = useRef(false);
   const lastAuthCheck = useRef(0);
   const intervalRef = useRef(null);
-  const AUTH_CHECK_THROTTLE = 5000; // Min time between auth checks (5 seconds)
+  const AUTH_CHECK_THROTTLE = 60000; // Min time between auth checks (60 seconds)
 
   // Store user data in ref to avoid dependency issues
   const userRef = useRef(null);
@@ -97,7 +97,7 @@ export const AuthProvider = ({ children }) => {
     // Set up interval for periodic checks - much less frequently
     intervalRef.current = setInterval(() => {
       checkAuth();
-    }, 300000); // Check every 5 minutes
+    }, 600000); // Check every 10 minutes instead of frequently
     
     return () => {
       clearInterval(intervalRef.current);

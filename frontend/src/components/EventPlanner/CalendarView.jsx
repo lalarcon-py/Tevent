@@ -21,6 +21,40 @@ const CalendarView = ({ events, onEventClick, onSignUp, onMarkAbsent }) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedDayEvents, setSelectedDayEvents] = useState([]);
+  
+  // Helper function to format a time in a specific timezone
+  const formatTimeInTimezone = (dateString, timezone) => {
+    try {
+      const date = new Date(dateString);
+      const options = {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: timezone || 'UTC'
+      };
+      return new Intl.DateTimeFormat('en-US', options).format(date);
+    } catch (error) {
+      console.error('Error formatting time with timezone:', error);
+      return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  };
+  
+  // Helper function to format timezone name nicely
+  const formatTimezoneName = (timezone) => {
+    if (!timezone) return 'UTC';
+    try {
+      // Extract the location part after the '/' if it exists
+      const parts = timezone.split('/');
+      if (parts.length > 1) {
+        // Replace underscores with spaces and capitalize words
+        return parts[1].replace(/_/g, ' ').replace(/\w\S*/g, txt => 
+          txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+        );
+      }
+      return timezone;
+    } catch (error) {
+      return timezone;
+    }
+  };
 
   const getDaysInMonth = (date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -30,10 +64,56 @@ const CalendarView = ({ events, onEventClick, onSignUp, onMarkAbsent }) => {
     return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   };
 
+  // Helper function to display a date according to its timezone
+  const getAdjustedDate = (dateString, timezone) => {
+    try {
+      // Create a date object from the ISO string (it's in UTC)
+      const utcDate = new Date(dateString);
+      
+      if (!timezone) {
+        return utcDate; // Default to UTC if no timezone specified
+      }
+      
+      // For display and calendar positioning purposes, we need to understand what day/month/year
+      // this event falls on in the specified timezone
+      const options = {
+        timeZone: timezone,
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric'
+      };
+      
+      // Get the date components in the target timezone
+      const formatter = new Intl.DateTimeFormat('en-US', options);
+      const parts = formatter.formatToParts(utcDate);
+      
+      // Extract parts
+      const year = parseInt(parts.find(p => p.type === 'year').value);
+      const month = parseInt(parts.find(p => p.type === 'month').value) - 1; // JS months are 0-indexed
+      const day = parseInt(parts.find(p => p.type === 'day').value);
+      const hour = parseInt(parts.find(p => p.type === 'hour').value);
+      const minute = parseInt(parts.find(p => p.type === 'minute').value);
+      
+      // Create a new date object that would have the same display in the local timezone
+      // as the original UTC date would have in the specified timezone
+      const localEquivalent = new Date(year, month, day, hour, minute);
+      
+      return localEquivalent;
+    } catch (error) {
+      console.error('Error adjusting date for timezone:', error);
+      return new Date(dateString);
+    }
+  };
+
   const getDayEvents = useMemo(() => {
     const eventsByDay = {};
     events.forEach(event => {
-      const eventDate = new Date(event.event_time);
+      // Use timezone-adjusted date
+      const eventDate = getAdjustedDate(event.event_time, event.timezone);
+      
       if (
         eventDate.getMonth() === currentDate.getMonth() &&
         eventDate.getFullYear() === currentDate.getFullYear()
@@ -151,23 +231,42 @@ const CalendarView = ({ events, onEventClick, onSignUp, onMarkAbsent }) => {
     
         {hasEvents && !isMobile && (
           <>
-            <Typography
-              sx={{
-                color: 'rgba(255, 255, 255, 0.6)',
-                fontSize: '0.875rem',
-                mt: 1,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                transition: 'color 0.2s ease',
-                '.MuiBox-root:hover &': {
-                  color: 'rgba(255, 255, 255, 0.87)'
-                }
-              }}
-            >
-              {dayEvents[0].title}
-            </Typography>
+            <Box>
+              <Typography
+                sx={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.875rem',
+                  mt: 1,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 1,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  transition: 'color 0.2s ease',
+                  '.MuiBox-root:hover &': {
+                    color: 'rgba(255, 255, 255, 0.87)'
+                  }
+                }}
+              >
+                {dayEvents[0].title}
+              </Typography>
+              <Typography
+                sx={{
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  fontSize: '0.75rem',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 1,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  transition: 'color 0.2s ease',
+                  '.MuiBox-root:hover &': {
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  }
+                }}
+              >
+                {formatTimeInTimezone(dayEvents[0].event_time, dayEvents[0].timezone)}
+                {dayEvents[0].timezone ? ` (${formatTimezoneName(dayEvents[0].timezone)})` : ''}
+              </Typography>
+            </Box>
             
             <Box sx={{ display: 'flex', gap: '4px', mt: 1, justifyContent: 'space-between' }}>
               <Button
@@ -362,8 +461,11 @@ const CalendarView = ({ events, onEventClick, onSignUp, onMarkAbsent }) => {
                 <Typography variant="subtitle1" sx={{ color: 'white', mb: 1 }}>
                   {event.title}
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)', mb: 2 }}>
-                  {new Date(event.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                  {formatTimeInTimezone(event.event_time, event.timezone)}
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', mb: 2, fontSize: '0.75rem' }}>
+                  {formatTimezoneName(event.timezone)}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Button

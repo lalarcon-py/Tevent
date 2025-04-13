@@ -1,5 +1,5 @@
 // EventForm.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -7,9 +7,29 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Grid
+  Grid,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import { useGuildSettings } from '../../contexts/GuildSettingsContext';
+
+// List of common timezones with labels
+const COMMON_TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (EST/EDT)' },
+  { value: 'America/Chicago', label: 'Central Time (CST/CDT)' },
+  { value: 'America/Denver', label: 'Mountain Time (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PST/PDT)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKST/AKDT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)' },
+  { value: 'Europe/London', label: 'UK Time (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Central European Time (CET/CEST)' },
+  { value: 'Europe/Moscow', label: 'Moscow Time (MSK)' },
+  { value: 'Asia/Shanghai', label: 'China Time (CST)' },
+  { value: 'Asia/Tokyo', label: 'Japan Time (JST)' },
+  { value: 'Australia/Sydney', label: 'Australian Eastern Time (AEST/AEDT)' },
+];
 
 const EventForm = ({ onSubmit, onClose, initialData }) => {
   const { settings } = useGuildSettings(); // Import and use the GuildSettings context
@@ -26,13 +46,32 @@ const EventForm = ({ onSubmit, onClose, initialData }) => {
     healers: initialData?.healers || 4,
     dps: initialData?.dps || 24,
     requirements: initialData?.requirements || '',
-    dkpValue: initialData?.dkp_value || 0
+    dkpValue: initialData?.dkp_value || 0,
+    timezone: initialData?.timezone || 'America/New_York'
   });
+  
+  // Attempt to detect user's timezone on first render
+  useEffect(() => {
+    if (!initialData?.timezone) {
+      try {
+        const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        // Check if user's timezone is in our list
+        const found = COMMON_TIMEZONES.find(tz => tz.value === userTimeZone);
+        if (found) {
+          setFormData(prev => ({ ...prev, timezone: userTimeZone }));
+        }
+      } catch (e) {
+        console.error('Error detecting timezone:', e);
+        // Fallback to default
+      }
+    }
+  }, [initialData?.timezone]);
 
   const handleSubmit = () => {
     onSubmit({
       ...formData,
-      eventTime: new Date(formData.eventTime).toISOString()
+      eventTime: new Date(formData.eventTime).toISOString(),
+      timezone: formData.timezone
     });
   };
 
@@ -93,6 +132,31 @@ const EventForm = ({ onSubmit, onClose, initialData }) => {
                 }
               }}
             />
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth sx={{ 
+              '& .MuiInputLabel-root': { color: 'grey.300' },
+              '& .MuiOutlinedInput-root': { 
+                color: 'white',
+                '& fieldset': { borderColor: 'grey.500' }
+              },
+              '& .MuiSelect-icon': { color: 'grey.300' }
+            }}>
+              <InputLabel id="timezone-select-label">Timezone</InputLabel>
+              <Select
+                labelId="timezone-select-label"
+                value={formData.timezone}
+                label="Timezone"
+                onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+              >
+                {COMMON_TIMEZONES.map((tz) => (
+                  <MenuItem key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Grid>
 
           <Grid item xs={12} md={6}>

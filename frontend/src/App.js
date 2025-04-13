@@ -61,15 +61,15 @@ function AppContent() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Add effect to ensure auth is checked periodically
+  // Add effect to ensure auth is checked periodically, but less frequently
   useEffect(() => {
     // Check auth immediately on mount
     checkAuth();
     
-    // And set up interval for periodic checks
+    // And set up interval for periodic checks, but with a much longer interval
     const interval = setInterval(() => {
       checkAuth();
-    }, 300000); // Check every 5 minutes
+    }, 600000); // Check every 10 minutes instead of 5 minutes
     
     return () => clearInterval(interval);
   }, [checkAuth]);

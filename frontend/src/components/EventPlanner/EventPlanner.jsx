@@ -3,14 +3,17 @@ import { useState, useEffect } from 'react';
 import { 
   Box, Button, Dialog, Snackbar, Alert, Typography, 
   DialogActions, useMediaQuery, useTheme, Fab, 
-  BottomNavigation, BottomNavigationAction, Paper 
+  BottomNavigation, BottomNavigationAction, Paper,
+  ButtonGroup
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ListIcon from '@mui/icons-material/List';
 import CalendarView from './CalendarView';
 import EventListView from './EventListView';
 import EventForm from './EventForm';
+import ImportEventForm from './ImportEventForm';
 import EventDetails from './EventDetails';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import { getWeaponComponents } from '../../utils/weaponUtils';
@@ -20,6 +23,7 @@ const API_URL = process.env.REACT_APP_API_URL;
 const EventPlanner = () => {
   const [events, setEvents] = useState([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [error, setError] = useState(null);
@@ -385,26 +389,38 @@ const EventPlanner = () => {
     }
   };
 
-  // Render a floating action button for mobile when user has permission to create events
-  const floatingActionButton = isMobile && hasEventCreationPermission() && (
-    <Fab
-      color="primary"
-      aria-label="add"
-      onClick={() => {
-        setSelectedEvent(null);
-        setIsCreateDialogOpen(true);
-      }}
-      sx={{
-        position: 'fixed',
-        bottom: 80, // Position above bottom navigation
-        right: 16,
-        bgcolor: '#90caf9',
-        '&:hover': { bgcolor: '#64b5f6' },
-        zIndex: 1000
-      }}
-    >
-      <AddIcon />
-    </Fab>
+  // Render floating action buttons for mobile when user has permission to create events
+  const floatingActionButtons = isMobile && hasEventCreationPermission() && (
+    <Box sx={{ position: 'fixed', bottom: 80, right: 16, zIndex: 1000 }}>
+      <Fab
+        color="primary"
+        aria-label="add"
+        onClick={() => {
+          setSelectedEvent(null);
+          setIsCreateDialogOpen(true);
+        }}
+        sx={{
+          mb: 2,
+          bgcolor: '#90caf9',
+          '&:hover': { bgcolor: '#64b5f6' }
+        }}
+      >
+        <AddIcon />
+      </Fab>
+      <Fab
+        color="primary"
+        aria-label="import"
+        onClick={() => {
+          setIsImportDialogOpen(true);
+        }}
+        sx={{
+          bgcolor: '#90caf9',
+          '&:hover': { bgcolor: '#64b5f6' }
+        }}
+      >
+        <FileUploadIcon />
+      </Fab>
+    </Box>
   );
 
   // View mode switcher for mobile
@@ -477,17 +493,29 @@ const EventPlanner = () => {
           {!isMobile && (
             <Box sx={{ mb: 2 }}>
               {hasEventCreationPermission() ? (
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => {
-                    setSelectedEvent(null);
-                    setIsCreateDialogOpen(true);
-                  }}
-                  sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
-                >
-                  Create Event
-                </Button>
+                <ButtonGroup>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => {
+                      setSelectedEvent(null);
+                      setIsCreateDialogOpen(true);
+                    }}
+                    sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
+                  >
+                    Create Event
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<FileUploadIcon />}
+                    onClick={() => {
+                      setIsImportDialogOpen(true);
+                    }}
+                    sx={{ bgcolor: '#90caf9', '&:hover': { bgcolor: '#64b5f6' } }}
+                  >
+                    Import Event
+                  </Button>
+                </ButtonGroup>
               ) : (
                 <Typography variant="body2" color="text.secondary">
                   Only Guild Master, Guild Advisor, and Guild Guardian can create events
@@ -513,7 +541,7 @@ const EventPlanner = () => {
             )}
           </Box>
 
-          {floatingActionButton}
+          {floatingActionButtons}
           {viewSwitcher}
 
           <Dialog 
@@ -551,6 +579,31 @@ const EventPlanner = () => {
                 setIsCreateDialogOpen(false);
                 setSelectedEvent(null);
               }}
+            />
+          </Dialog>
+
+          {/* Import Event Dialog */}
+          <Dialog
+            open={isImportDialogOpen}
+            onClose={() => setIsImportDialogOpen(false)}
+            maxWidth="md"
+            fullWidth
+            fullScreen={isMobile}
+          >
+            <ImportEventForm
+              onSubmit={async (importResult) => {
+                try {
+                  console.log('Import result:', importResult);
+                  setIsImportDialogOpen(false);
+                  // Refresh events after import
+                  await fetchEvents();
+                } catch (error) {
+                  console.error('Error importing event:', error);
+                  setError(error.message || 'Failed to import event');
+                }
+              }}
+              onClose={() => setIsImportDialogOpen(false)}
+              guildId={guildId}
             />
           </Dialog>
 

@@ -5,6 +5,7 @@ const { Event, User, EventParticipant, Team, TeamMember } = require('../models')
 const db = require('../models');
 const { sequelize } = require('../config/database');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
 
 // Authentication middleware
 const isAuthenticated = (req, res, next) => {
@@ -673,6 +674,7 @@ router.put('/:id',
       title: req.body.title || event.title,
       description: req.body.description || event.description,
       event_time: req.body.event_time || req.body.eventTime || event.event_time,
+      timezone: req.body.timezone || event.timezone,
       location: req.body.location || event.location,
       tanks: req.body.tanks !== undefined ? req.body.tanks : event.tanks,
       healers: req.body.healers !== undefined ? req.body.healers : event.healers,
@@ -843,6 +845,7 @@ router.post('/',
       title: req.body.title,
       description: req.body.description,
       event_time: req.body.eventTime || req.body.event_time, // Handle both field naming conventions
+      timezone: req.body.timezone || 'America/New_York', // Add timezone field with default
       location: req.body.location,
       tanks: req.body.tanks,
       healers: req.body.healers,
@@ -908,5 +911,261 @@ router.post('/',
     });
   }
 });
+
+// Import event from Raid Helper
+router.post('/import', 
+  isAuthenticated, 
+  hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']),
+  async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      // Get guild ID from request
+      const guildId = req.guildId || req.query.guildId || req.body.guildId;
+      
+      if (!guildId) {
+        await t.rollback();
+        return res.status(400).json({ error: 'Guild ID is required' });
+      }
+
+      const { event: eventData, participants } = req.body;
+      
+      console.log('Importing event data:', {
+        eventData: { ...eventData, description: eventData.description?.substring(0, 50) + '...' },
+        participantsCount: participants?.length,
+        originalTimestamp: eventData.originalTimestamp,
+        timezone: eventData.timezone
+      });
+
+      // Handle original timestamp directly if available
+      let eventTime = null;
+      
+      if (eventData.originalTimestamp) {
+        try {
+          const timestamp = parseInt(eventData.originalTimestamp) * 1000; // Convert to milliseconds
+          if (!isNaN(timestamp)) {
+            eventTime = new Date(timestamp);
+            console.log('Using original timestamp for event creation:', eventTime);
+          } else {
+            console.error('Invalid timestamp:', eventData.originalTimestamp);
+          }
+        } catch (e) {
+          console.error('Error parsing originalTimestamp:', e);
+        }
+      }
+      
+      // If we couldn't use originalTimestamp, try eventTime
+      if (!eventTime && eventData.eventTime) {
+        try {
+          eventTime = new Date(eventData.eventTime);
+          if (!isNaN(eventTime.getTime())) {
+            console.log('Using ISO string for event creation:', eventTime);
+          } else {
+            console.error('Invalid eventTime:', eventData.eventTime);
+            eventTime = null;
+          }
+        } catch (e) {
+          console.error('Error parsing eventTime:', e);
+        }
+      }
+
+      // If still no valid time, try closingTime or other backups
+      if (!eventTime) {
+        // First, try using closingTimeFormatted if available
+        if (eventData.closingTimeFormatted) {
+          try {
+            eventTime = new Date(eventData.closingTimeFormatted);
+            console.log('Using pre-processed closingTime:', eventTime);
+            
+            // Check if date is valid
+            if (isNaN(eventTime.getTime())) {
+              console.warn('Invalid closingTimeFormatted format, trying alternatives');
+              eventTime = null;
+            }
+          } catch (e) {
+            console.error('Error parsing closingTimeFormatted:', e);
+            eventTime = null;
+          }
+        }
+        
+        // If still no valid eventTime, try raw closingTime
+        if (!eventTime && eventData.closingTime) {
+          try {
+            // closingTime is typically in seconds, convert to milliseconds
+            const timestamp = parseInt(eventData.closingTime) * 1000;
+            if (!isNaN(timestamp)) {
+              eventTime = new Date(timestamp);
+              console.log('Using raw closingTime:', eventTime);
+            }
+          } catch (e) {
+            console.error('Error parsing closing time:', e);
+          }
+        }
+        
+        // Last resort: use current time
+        if (!eventTime) {
+          console.warn('No valid time information found, using current time');
+          eventTime = new Date();
+        }
+      }
+      
+      // Create the event
+      const event = await Event.create({
+        guild_id: guildId,
+        title: eventData.title,
+        description: eventData.description || 'Imported from Raid Helper',
+        event_time: eventTime, // Use the parsed time
+        location: eventData.location || '',
+        tanks: eventData.tanks || 0,
+        healers: eventData.healers || 0,
+        dps: eventData.dps || 0,
+        requirements: eventData.requirements || '',
+        timezone: eventData.timezone || 'America/New_York', // Use the selected timezone or default to EST
+        created_by: req.user.id
+      }, { transaction: t });
+      
+      console.log('Created event with timezone:', event.timezone, 'and time:', event.event_time);
+
+      // 2. Process participants if available
+      const participantResults = { imported: 0, skipped: 0 };
+      const participantRecords = [];
+      
+      if (participants && Array.isArray(participants)) {
+        // Process each participant
+        for (const participant of participants) {
+          try {
+            // Look up the user by Discord ID if available
+            let userId = null;
+            
+            if (participant.discordId) {
+              const user = await db.User.findOne({
+                where: { discord_id: participant.discordId }
+              }, { transaction: t });
+              
+              if (user) {
+                userId = user.id;
+              }
+            }
+            
+            // Skip if user not found
+            if (!userId) {
+              participantResults.skipped++;
+              console.log(`User with Discord ID ${participant.discordId} not found, skipping`);
+              continue;
+            }
+            
+            // Determine if we should create a participant or an absentee
+            if (participant.status === 'ABSENT') {
+              // Create absentee record
+              await db.EventAbsentee.create({
+                guild_id: guildId,
+                event_id: event.id,
+                user_id: userId,
+              }, { transaction: t });
+              
+              console.log(`Marked user ${participant.name} as ABSENT`);
+            } else {
+              // Create participant record with appropriate status (CONFIRMED or TENTATIVE)
+              const participantRecord = await EventParticipant.create({
+                guild_id: guildId,
+                event_id: event.id,
+                user_id: userId,
+                role: participant.role,
+                status: participant.status || 'CONFIRMED',
+                is_late: participant.isLate || false, // Add late flag
+                notes: participant.isLate ? 'Marked as arriving late' : '' // Add note for late arrivals
+              }, { transaction: t });
+              
+              console.log(`Added user ${participant.name} as ${participant.status || 'CONFIRMED'}`);
+              participantRecords.push(participantRecord);
+            }
+            
+            participantResults.imported++;
+          } catch (participantError) {
+            console.error('Error importing participant:', participantError);
+            participantResults.skipped++;
+          }
+        }
+      }
+
+      // 3. Create teams for the event (one team per tank)
+      const teamResults = { created: 0 };
+      const tankParticipants = participants.filter(p => p.role === 'TANK');
+      
+      for (const tank of tankParticipants) {
+        // Look up the tank's user ID
+        const tankUser = await db.User.findOne({
+          where: { discord_id: tank.discordId }
+        }, { transaction: t });
+        
+        if (!tankUser) continue;
+        
+        // Create a team
+        const team = await Team.create({
+          guild_id: guildId,
+          name: `Team ${teamResults.created + 1}`,
+          event_id: event.id,
+          is_static: false,
+          created_by: req.user.id
+        }, { transaction: t });
+        
+        // Add the tank as first member
+        await TeamMember.create({
+          guild_id: guildId,
+          team_id: team.id,
+          user_id: tankUser.id,
+          role: 'TANK',
+          position: 1
+        }, { transaction: t });
+        
+        teamResults.created++;
+      }
+
+      await t.commit();
+      
+      // Notify Discord bot about the new event
+      try {
+        // Use the Railway internal URL for the Discord bot
+        const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
+        
+        console.log(`Notifying Discord bot about new imported event ${event.id}`);
+        
+        // Send the webhook notification
+        await axios.post(`${discordBotUrl}/webhook/new-event`, {
+          guildId: event.guild_id,
+          eventId: event.id,
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+        
+        console.log(`Successfully notified Discord bot about event ${event.id}`);
+      } catch (webhookError) {
+        // Just log the error but don't fail the request
+        console.error('Failed to notify Discord bot about new imported event:', {
+          message: webhookError.message,
+          stack: webhookError.stack,
+          eventId: event.id
+        });
+      }
+
+      // Return success with details
+      res.status(201).json({
+        event,
+        participants: participantResults,
+        teams: teamResults
+      });
+    } catch (error) {
+      await t.rollback();
+      console.error('Event import error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        body: req.body
+      });
+      res.status(500).json({ 
+        error: 'Failed to import event',
+        details: error.message 
+      });
+    }
+  }
+);
 
 module.exports = router;

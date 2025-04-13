@@ -111,6 +111,24 @@ async function verifyMembershipDeletions() {
   try {
     console.log('🧹 Starting verification of recent guild membership deletions...');
     
+    // First check if the deleted_at column exists
+    const [columnsCheck] = await sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'guild_members' 
+      AND column_name = 'deleted_at'
+    `);
+    
+    // If column doesn't exist yet, we can't proceed with this check
+    if (columnsCheck.length === 0) {
+      console.log('🧹 deleted_at column not found in guild_members table. Skipping orphaned membership check.');
+      return { 
+        success: true,
+        columnMissing: true,
+        orphanedRemoved: 0
+      };
+    }
+    
     // Additional verification to ensure deletions are permanent
     // This runs separate verification queries as a safety check
     const [orphanedMembers] = await sequelize.query(`

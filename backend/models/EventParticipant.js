@@ -58,6 +58,15 @@ module.exports = (sequelize, DataTypes) => {
     selected_build: {
       type: DataTypes.JSONB,
       allowNull: true
+    },
+    is_late: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
     }
   }, {
     sequelize,

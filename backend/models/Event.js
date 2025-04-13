@@ -49,6 +49,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: false
     },
+    timezone: {
+      type: DataTypes.STRING,
+      defaultValue: 'America/New_York'
+    },
     location: {
       type: DataTypes.STRING
     },

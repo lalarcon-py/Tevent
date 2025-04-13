@@ -1,5 +1,4 @@
-// frontend/src/components/StaticTeams/StaticTeams.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import html2canvas from 'html2canvas';
@@ -19,7 +18,8 @@ import {
   Tooltip,
   IconButton,
   Alert,
-  Snackbar
+  Snackbar,
+  MenuItem
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -604,6 +604,16 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// Wrap components with error safe rendering
+const SafeRender = ({ children, fallback = null }) => {
+  try {
+    return children;
+  } catch (error) {
+    console.error('Render error caught:', error);
+    return fallback;
+  }
+};
+
 const StaticTeams = () => {
   const { simulatedRole } = useSimulatedRole();
   const { user } = useAuth();
@@ -624,6 +634,50 @@ const StaticTeams = () => {
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [editingTeam, setEditingTeam] = useState(null);
+  const [eventContext, setEventContext] = useState('Main Event');
+  const [availableContexts, setAvailableContexts] = useState([
+    'Main Event', 'Inter-server', 'War Game', 'BoonStone', 'Riftstone', 'Archboss', 'Peace Boss'
+  ]);
+  const [selectedContext, setSelectedContext] = useState('All Teams');
+  const [contextDialogOpen, setContextDialogOpen] = useState(false);
+  const [editingContext, setEditingContext] = useState('');
+  const [newContextName, setNewContextName] = useState('');
+  const [assignedMembersByContext, setAssignedMembersByContext] = useState({
+    'Main Event': new Set(),
+    'Inter-server': new Set(),
+    'War Game': new Set(),
+    'BoonStone': new Set(),
+    'Riftstone': new Set(),
+    'Archboss': new Set(),
+    'Peace Boss': new Set()
+  });
+  
+  // Filter members that aren't already in a team of the selected context
+  const filteredMembers = useMemo(() => {
+    // Safeguard against empty/undefined members array
+    if (!members || !Array.isArray(members)) return [];
+  
+    // Safeguard against empty/undefined assignedMembersByContext
+    const safeAssignedMembersByContext = assignedMembersByContext || {};
+  
+    if (!selectedContext || selectedContext === 'All Teams') {
+      // If viewing all teams, show all members
+      // Each member can be in multiple teams (one per event type)
+      return members.filter(member => {
+        if (!member) return false;
+        const memberId = member.user_id || member.id || (member.User?.id);
+        return !!memberId; // Just filter out members without IDs
+      });
+    } else {
+      // When viewing a specific context, show members not assigned to that context
+      const assignedIds = safeAssignedMembersByContext[selectedContext] || new Set();
+      return members.filter(member => {
+        if (!member) return false;
+        const memberId = member.user_id || member.id || (member.User?.id);
+        return memberId && !assignedIds.has(memberId);
+      });
+    }
+  }, [members, selectedContext, assignedMembersByContext]);
 
   // Helper function to determine if user has permission to edit teams
   const hasEditPermission = () => {
@@ -791,38 +845,76 @@ const StaticTeams = () => {
           const fetchedTeams = teamsResponse.data || [];
           
           // Ensure teams array has valid data
-          const validTeams = fetchedTeams.filter(team => team && typeof team === 'object');
+          // Make sure event_context is set for each team
+          const validTeams = fetchedTeams
+            .filter(team => team && typeof team === 'object')
+            .map(team => ({
+              ...team,
+              event_context: team.event_context || 'Main Event',
+              members: Array.isArray(team.members) ? team.members : []
+            }));
+          
           setTeams(validTeams);
           
-          // Collect all member IDs already assigned to teams
-          const assignedMemberIds = new Set();
+          // Get unique event contexts
+          // Fetch event contexts from API
+          try {
+            const contextsResponse = await axiosInstance.get(`/api/static-teams/event-contexts?guildId=${guildId}`);
+            if (contextsResponse.status === 200) {
+              // Ensure we have array data
+              const apiContexts = Array.isArray(contextsResponse.data) ? contextsResponse.data : [];
+                
+              // Filter out any undefined or null values
+              const validApiContexts = apiContexts.filter(context => context && typeof context === 'string');
+                
+              // Merge with our default contexts
+              const defaults = ['Main Event', 'Inter-server', 'War Game', 'BoonStone', 'Riftstone', 'Archboss', 'Peace Boss'];
+              const allContexts = [...new Set([...validApiContexts, ...defaults])];
+              setAvailableContexts(allContexts);
+            }
+          } catch (contextsError) {
+            console.error('Error fetching event contexts:', contextsError);
+            // Fallback to contexts from teams
+            const contexts = [...new Set(validTeams.map(team => team.event_context || 'Main Event'))];
+            if (contexts.length > 0) {
+              // Merge with default contexts, removing duplicates
+              const allContexts = [...new Set([...contexts, ...availableContexts])];
+              setAvailableContexts(allContexts);
+            }
+          }
+          
+          // Collect all member IDs already assigned to teams, organized by event context
+          const assignedByContext = {};
           validTeams.forEach(team => {
+            const context = team.event_context || 'Main Event';
+            if (!assignedByContext[context]) {
+              assignedByContext[context] = new Set();
+            }
+            
             if (team && Array.isArray(team.members)) {
               team.members.forEach(member => {
                 if (member) {
                   const memberId = member.user_id || member.id || (member.User?.id);
                   if (memberId) {
-                    assignedMemberIds.add(memberId);
+                    assignedByContext[context].add(memberId);
                   }
                 }
               });
             }
           });
+          
+          // Update the state with the collected data
+          setAssignedMembersByContext(assignedByContext);
   
           try {
             // Fetch all guild members
             const membersResponse = await axiosInstance.get(`/api/guilds/${guildId}/members`);
             if (membersResponse.status === 200 && Array.isArray(membersResponse.data)) {
               // Process members to ensure they have the correct structure
-              // AND filter out members who are already in teams
+              // Unlike before, we don't filter out all assigned members, we'll filter by context later
               const processedMembers = membersResponse.data
                 .filter(member => member !== null && typeof member === 'object') // Filter out null or invalid member entries
-                .map(formatMemberWithBuilds)
-                .filter(member => {
-                  if (!member) return false;
-                  const memberId = member.user_id || member.id || (member.User?.id);
-                  return memberId && !assignedMemberIds.has(memberId);
-                });
+                .map(formatMemberWithBuilds);
                 
               setMembers(processedMembers);
             }
@@ -850,7 +942,8 @@ const StaticTeams = () => {
     try {
       const response = await axiosInstance.post('/api/static-teams', {
         name: newTeamName || `Team ${teams.length + 1}`,
-        guildId
+        guildId,
+        event_context: eventContext
       });
 
       if (response.status === 201) {
@@ -874,13 +967,22 @@ const StaticTeams = () => {
     try {
       const response = await axiosInstance.put(`/api/static-teams/${team.id}`, {
         name: newTeamName,
-        guildId
+        guildId,
+        event_context: eventContext
       });
 
       if (response.status === 200) {
-        setTeams(teams.map(t => t.id === team.id ? { ...t, name: newTeamName } : t));
+        // Make sure we don't try to update an undefined team
+        const safeTeams = Array.isArray(teams) ? teams : [];
+        const updatedTeams = safeTeams.map(t => {
+          if (!t || typeof t !== 'object') return t;
+          return t.id === team.id ? { ...t, name: newTeamName, event_context: eventContext } : t;
+        });
+        
+        setTeams(updatedTeams);
         setTeamDialogOpen(false);
         setNewTeamName('');
+        setEventContext('Main Event');
         setEditingTeam(null);
       }
     } catch (error) {
@@ -923,6 +1025,22 @@ const StaticTeams = () => {
     }
 
     try {
+      // Safeguard against undefined teams
+      if (!teams || !Array.isArray(teams)) {
+        console.error('Teams array is not valid');
+        return;
+      }
+      
+      // Find the target team
+      const targetTeam = teams.find(t => t && typeof t === 'object' && t.id === teamId);
+      if (!targetTeam) {
+        console.error('Target team not found:', teamId);
+        return;
+      }
+      
+      // Define a default event context if it's not set
+      const targetEventContext = targetTeam.event_context || 'Main Event';
+
       // Find the member
       let member = members.find(m => 
         m.id === memberId || m.user_id === memberId || 
@@ -935,7 +1053,7 @@ const StaticTeams = () => {
       // If not found in available members, check teams
       if (!member) {
         for (const team of teams) {
-          if (!team || !team.members) continue;
+        if (!team || typeof team !== 'object' || !team.members) continue;
           
           const foundMember = team.members.find(m => 
             m.id === memberId || m.user_id === memberId || 
@@ -956,8 +1074,48 @@ const StaticTeams = () => {
         return;
       }
 
+      // Check if this is a move within the same team
       if (sourceTeamId === teamId) {
         return; // Same team, no change needed
+      }
+
+      // Check if the member is already in a team of the same event context
+      let sameContextTeamId = null;
+      if (sourceTeam && (sourceTeam?.event_context || 'Main Event') !== targetEventContext) {
+        // Moving between different event contexts, check if already in a team of target context
+        for (const team of teams) {
+          if (!team || typeof team !== 'object') continue; // Skip undefined or null teams
+          if (team.id === teamId) continue; // Skip target team
+          if ((team?.event_context || 'Main Event') !== targetEventContext) continue; // Skip different contexts
+          
+          const foundInContextTeam = team.members?.some(m => 
+            m.id === memberId || m.user_id === memberId || 
+            (m.User && m.User.id === memberId)
+          );
+          
+          if (foundInContextTeam) {
+            sameContextTeamId = team.id;
+            break;
+          }
+        }
+      } else if (!sourceTeam) {
+        // Check if already in any team of this context
+        for (const team of teams) {
+          if (!team || typeof team !== 'object') continue; // Skip undefined or null teams
+          if (team.id === teamId) continue; // Skip target team
+          if ((team?.event_context || 'Main Event') !== targetEventContext) continue; // Skip different contexts
+          
+          const foundInContextTeam = team.members?.some(m => 
+            m.id === memberId || m.user_id === memberId || 
+            (m.User && m.User.id === memberId)
+          );
+          
+          if (foundInContextTeam) {
+            sameContextTeamId = team.id;
+            sourceTeamId = team.id; // Set as source for removal
+            break;
+          }
+        }
       }
 
       const userId = member.user_id || member.id || (member.User && member.User.id);
@@ -991,10 +1149,12 @@ const StaticTeams = () => {
         selected_build: selectedBuild
       };
       
-      if (sourceTeamId) {
-        // Moving between teams
-        // Find the source team
-        const sourceTeamIndex = updatedTeams.findIndex(t => t && t.id === sourceTeamId);
+      // Handle removal from source team (if same context or explicit source)
+      if (sameContextTeamId || sourceTeamId) {
+        // Find the team to remove from
+        const removeFromTeamId = sameContextTeamId || sourceTeamId;
+        const sourceTeamIndex = updatedTeams.findIndex(t => t && t.id === removeFromTeamId);
+        
         if (sourceTeamIndex >= 0) {
           // Remove member from source team
           updatedTeams[sourceTeamIndex] = {
@@ -1005,47 +1165,61 @@ const StaticTeams = () => {
               (m.User?.id !== memberId)
             ) || []
           };
-          
-          // Add member to target team
-          updatedTeams[targetTeamIndex] = {
-            ...updatedTeams[targetTeamIndex],
-            members: [
-              ...(updatedTeams[targetTeamIndex].members || []),
-              memberToAdd
-            ]
-          };
         }
-      } else {
-        // Moving from available members to team
-        // Remove from available members
-        const filteredMembers = updatedMembers.filter(m => 
-          m.id !== memberId && 
-          m.user_id !== memberId && 
-          (m.User?.id !== memberId)
+      }
+
+      // Add member to target team
+      updatedTeams[targetTeamIndex] = {
+        ...updatedTeams[targetTeamIndex],
+        members: [
+          ...(updatedTeams[targetTeamIndex].members || []),
+          memberToAdd
+        ]
+      };
+
+      // If member was in available pool (not in any team), remove them
+      if (!sourceTeamId && !sameContextTeamId) {
+        const memberIndex = updatedMembers.findIndex(m => 
+          m.id === memberId || 
+          m.user_id === memberId || 
+          (m.User?.id === memberId)
         );
         
-        // Add to target team
-        updatedTeams[targetTeamIndex] = {
-          ...updatedTeams[targetTeamIndex],
-          members: [
-            ...(updatedTeams[targetTeamIndex].members || []),
-            memberToAdd
-          ]
-        };
+        if (memberIndex >= 0) {
+          updatedMembers.splice(memberIndex, 1);
+        }
         
         // Update members state
-        setMembers(filteredMembers);
+        setMembers(updatedMembers);
       }
       
       // Force a fresh render of the entire component by creating a deep copy
       const deepCopiedTeams = JSON.parse(JSON.stringify(updatedTeams));
       setTeams(deepCopiedTeams);
 
+      // Update assignedMembersByContext
+      const updatedAssignedMembersByContext = { ...assignedMembersByContext };
+      
+      // Add member to new context
+      if (typeof targetEventContext === 'string') {
+        // Ensure context exists
+        if (!updatedAssignedMembersByContext[targetEventContext]) {
+          updatedAssignedMembersByContext[targetEventContext] = new Set();
+        }
+        // Add member to context
+        if (userId) {
+          updatedAssignedMembersByContext[targetEventContext].add(userId);
+        }
+      }
+      
+      // Update state
+      setAssignedMembersByContext(updatedAssignedMembersByContext);
+
       // Now make the API call after UI has been updated
       const response = await axiosInstance.post(`/api/static-teams/${teamId}/members`, {
         memberId: userId,
         role: role,
-        sourceTeamId,
+        sourceTeamId: sameContextTeamId || sourceTeamId,
         guildId,
         selectedBuild
       });
@@ -1112,6 +1286,30 @@ const StaticTeams = () => {
           }
           return team;
         }));
+        
+        // Update assignedMembersByContext
+        const team = teams.find(t => t.id === teamId);
+        if (team && typeof team === 'object') {
+          const context = team.event_context || 'Main Event';
+          
+          // Make a proper copy of the state with Sets
+          const updatedAssignedMembersByContext = {};
+          
+          // Copy all sets from the existing state
+          Object.keys(assignedMembersByContext).forEach(key => {
+            if (assignedMembersByContext[key] instanceof Set) {
+              updatedAssignedMembersByContext[key] = new Set(assignedMembersByContext[key]);
+            } else {
+              updatedAssignedMembersByContext[key] = new Set();
+            }
+          });
+          
+          // Remove the member from the context
+          if (updatedAssignedMembersByContext[context] && userId) {
+            updatedAssignedMembersByContext[context].delete(userId);
+            setAssignedMembersByContext(updatedAssignedMembersByContext);
+          }
+        }
       }
     } catch (error) {
       console.error('Error removing team member:', error);
@@ -1580,11 +1778,11 @@ const StaticTeams = () => {
       });
     };
   
-    // Calculate role distributions
+    // Calculate role distributions with extra safeguards
     const roleCounts = {
-      tank: team.members?.filter(m => m.role?.toUpperCase() === 'TANK').length || 0,
-      healer: team.members?.filter(m => m.role?.toUpperCase() === 'HEALER').length || 0,
-      dps: team.members?.filter(m => m.role?.toUpperCase() === 'DPS').length || 0
+    tank: Array.isArray(team?.members) ? team.members.filter(m => m && m.role && m.role.toUpperCase() === 'TANK').length : 0,
+    healer: Array.isArray(team?.members) ? team.members.filter(m => m && m.role && m.role.toUpperCase() === 'HEALER').length : 0,
+    dps: Array.isArray(team?.members) ? team.members.filter(m => m && m.role && m.role.toUpperCase() === 'DPS').length : 0
     };
   
     return (
@@ -1629,6 +1827,7 @@ const StaticTeams = () => {
               if (canEdit) {
                 setEditingTeam(team);
                 setNewTeamName(team.name);
+                setEventContext(team.event_context || 'Main Event');
                 setTeamDialogOpen(true);
               }
             }}
@@ -1944,9 +2143,11 @@ const StaticTeams = () => {
     <DndProvider backend={HTML5Backend}>
       <Box sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" sx={{ color: 'white' }}>
-            Static Teams
-          </Typography>
+          <Box>
+            <Typography variant="h4" sx={{ color: 'white' }}>
+              Static Teams
+            </Typography>
+          </Box>
           <Box sx={{ display: 'flex', gap: 2 }}>
             {hasEditPermission() && (
               <>
@@ -1955,6 +2156,7 @@ const StaticTeams = () => {
                   onClick={() => {
                     setEditingTeam(null);
                     setNewTeamName('');
+                    setEventContext('Main Event');
                     setTeamDialogOpen(true);
                   }}
                   startIcon={<AddIcon />}
@@ -1999,16 +2201,106 @@ const StaticTeams = () => {
         <Grid container spacing={3}>
           <Grid item xs={12} md={3}>
             <MemberPool 
-              members={members}
-              getRoleStyles={getRoleStyles} 
+            members={filteredMembers}
+            getRoleStyles={getRoleStyles} 
             />
           </Grid>
     
           <Grid item xs={12} md={9}>
-            <Grid container spacing={2}>
-              {/* Use a div with display:flex to make teams appear in a row */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', width: '100%' }}>
-                {teams && teams.length > 0 ? teams.map((team, index) => team && (
+            {/* Teams type selector */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, px: 1 }}>
+              <Typography variant="body1" sx={{ color: 'white', mr: 2 }}>
+                View teams by type:
+              </Typography>
+              <TextField
+                select
+                value={selectedContext}
+                onChange={(e) => setSelectedContext(e.target.value)}
+                variant="outlined"
+                size="small"
+                sx={{
+                  minWidth: 200,
+                  '& .MuiInputBase-root': {
+                    color: 'white',
+                    backgroundColor: 'rgba(30, 30, 40, 0.6)',
+                    borderColor: 'rgba(255, 255, 255, 0.23)',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(255, 255, 255, 0.23)'
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  },
+                  '& .MuiSelect-select': {
+                    paddingY: '8px'
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(255, 255, 255, 0.5)'
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'primary.main'
+                  }
+                }}
+              >
+                <MenuItem value="All Teams">All Teams</MenuItem>
+                {availableContexts.map(context => (
+                  <MenuItem key={context} value={context}>{context}</MenuItem>
+                ))}
+              </TextField>
+              {hasEditPermission() && (
+                <Button 
+                  sx={{ ml: 2, textTransform: 'none' }}
+                  onClick={() => {
+                    setContextDialogOpen(true);
+                  }}
+                >
+                  Manage Types
+                </Button>
+              )}
+            </Box>
+            
+            {/* Group teams by event context */}
+            <SafeRender fallback={
+              <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'rgba(255, 0, 0, 0.1)', borderRadius: 2 }}>
+                <Typography sx={{ color: 'white' }}>Error rendering teams. Please try again.</Typography>
+              </Box>
+            }>
+              {teams && Array.isArray(teams) && teams.length > 0 ? (
+              // If All Teams is selected, show all contexts
+              // Otherwise filter to just show the selected context
+              (selectedContext === 'All Teams' ? availableContexts : [selectedContext]).map(context => {
+                if (!context) return null; // Skip if context is undefined
+                
+                // Filter teams for this context - ensure we only filter defined team objects
+                const contextTeams = teams.filter(team => {
+                  if (!team || typeof team !== 'object') return false;
+                  const teamContext = team.event_context || 'Main Event';
+                  return teamContext === context;
+                });
+                
+                if (!contextTeams || contextTeams.length === 0) return null;
+                
+                return (
+                  <Box key={`context-${context}`} sx={{ mb: 3 }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      mb: 1,
+                      px: 1 
+                    }}>
+                      <Typography variant="h6" sx={{ color: 'white' }}>
+                        {context}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                        {contextTeams.length} team{contextTeams.length !== 1 ? 's' : ''}
+                      </Typography>
+                    </Box>
+                    
+                    <Grid container spacing={2}>
+                      {/* Use a div with display:flex to make teams appear in a row */}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', width: '100%' }}>
+                        {contextTeams.filter(team => team && typeof team === 'object').map((team, index) => (
                   <Box 
                     key={`team-container-${team.id}`}
                     sx={{ 
@@ -2055,15 +2347,20 @@ const StaticTeams = () => {
                       canEdit={hasEditPermission()}
                     />
                   </Box>
-                )) : (
-                  <Box sx={{ width: '100%', p: 3, textAlign: 'center' }}>
-                    <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                      No teams available. Create a team to get started.
-                    </Typography>
+                ))}
+                      </Box>
+                    </Grid>
                   </Box>
-                )}
-              </Box>
-            </Grid>
+                );
+              })
+            ) : (
+            <Box sx={{ width: '100%', p: 3, textAlign: 'center' }}>
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+            No teams available. Create a team to get started.
+            </Typography>
+            </Box>
+            )}
+            </SafeRender>
           </Grid>
         </Grid>
     
@@ -2090,9 +2387,37 @@ const StaticTeams = () => {
                 '& .MuiOutlinedInput-root': {
                   '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
                   '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' }
-                }
+                },
+                mb: 2
               }}
             />
+            <Box sx={{ bgcolor: '#333', p: 1, borderRadius: 1, mb: 1 }}>
+              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)', mb: 1 }}>
+                Team Type
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {availableContexts.map((context) => (
+                  <Box
+                    key={context}
+                    onClick={() => setEventContext(context)}
+                    sx={{
+                      px: 2,
+                      py: 1,
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      bgcolor: eventContext === context ? 'primary.main' : 'rgba(255, 255, 255, 0.1)',
+                      color: eventContext === context ? 'white' : 'rgba(255, 255, 255, 0.7)',
+                      '&:hover': {
+                        bgcolor: eventContext === context ? 'primary.dark' : 'rgba(255, 255, 255, 0.2)'
+                      }
+                    }}
+                  >
+                    {context}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setTeamDialogOpen(false)} sx={{ color: 'white' }}>
@@ -2122,6 +2447,146 @@ const StaticTeams = () => {
           onSelectBuild={handleBuildChange}
         />
     
+        {/* Context management dialog */}
+        <Dialog 
+          open={contextDialogOpen} 
+          onClose={() => setContextDialogOpen(false)}
+          PaperProps={{ sx: { bgcolor: '#1e1e1e', maxWidth: '500px' } }}
+        >
+          <DialogTitle sx={{ color: 'white' }}>
+            Manage Team Types
+          </DialogTitle>
+          <DialogContent>
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', mb: 2 }}>
+              Rename team types or add new ones.
+            </Typography>
+            
+            <List sx={{ mb: 2 }}>
+              {availableContexts.map(context => (
+                <ListItem 
+                  key={context}
+                  sx={{ 
+                    borderRadius: 1, 
+                    mb: 1, 
+                    bgcolor: 'rgba(255, 255, 255, 0.05)',
+                  }}
+                  secondaryAction={
+                    <IconButton 
+                      edge="end" 
+                      sx={{ color: 'rgba(255, 255, 255, 0.5)' }}
+                      onClick={() => {
+                        setEditingContext(context);
+                        setNewContextName(context);
+                      }}
+                    >
+                      <SettingsIcon fontSize="small" />
+                    </IconButton>
+                  }
+                >
+                  <ListItemText 
+                    primary={
+                      <Typography sx={{ color: 'white' }}>{context}</Typography>
+                    }
+                    secondary={
+                      <SafeRender fallback={<Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>0 teams</Typography>}>
+                        <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                          {Array.isArray(teams) ? teams.filter(team => team && typeof team === 'object' && (team.event_context || 'Main Event') === context).length : 0} teams
+                        </Typography>
+                      </SafeRender>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <TextField
+                placeholder="New Team Type"
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={editingContext ? newContextName : ''}
+                onChange={(e) => setNewContextName(e.target.value)}
+                sx={{
+                  '& .MuiInputBase-input': { color: 'white' },
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.23)' },
+                    '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.5)' }
+                  }
+                }}
+              />
+              <Button 
+                variant="contained" 
+                sx={{ ml: 1 }}
+                disabled={!newContextName.trim() || (editingContext && newContextName.trim() === editingContext)}
+                onClick={() => {
+                  if (editingContext) {
+                    // Call API to rename context
+                    axiosInstance.put(`/api/static-teams/event-contexts/${encodeURIComponent(editingContext)}`, {
+                      newContext: newContextName,
+                      guildId
+                    }).then(response => {
+                      if (response.status === 200) {
+                        // Update all teams with this context
+                        const updatedTeams = teams.map(team => {
+                          if ((team.event_context || 'Main Event') === editingContext) {
+                            return { ...team, event_context: newContextName };
+                          }
+                          return team;
+                        });
+                        
+                        // Update availableContexts
+                        const updatedContexts = availableContexts.map(c => 
+                          c === editingContext ? newContextName : c
+                        );
+                        
+                        setTeams(updatedTeams);
+                        setAvailableContexts(updatedContexts);
+                        
+                        // If we're currently viewing the renamed context, update selected context
+                        if (selectedContext === editingContext) {
+                          setSelectedContext(newContextName);
+                        }
+                      } else {
+                        setError('Failed to update team type');
+                      }
+                    }).catch(error => {
+                      console.error('Error updating team type:', error);
+                      setError('Failed to update team type: ' + (error.message || 'Unknown error'));
+                    }).finally(() => {
+                      // Reset form
+                      setEditingContext('');
+                      setNewContextName('');
+                    });
+                  } else {
+                    // Add new context
+                    setAvailableContexts([...availableContexts, newContextName]);
+                    setNewContextName('');
+                  }
+                }}
+              >
+                {editingContext ? 'Update' : 'Add'}
+              </Button>
+              {editingContext && (
+                <Button 
+                  sx={{ ml: 1 }}
+                  onClick={() => {
+                    setEditingContext('');
+                    setNewContextName('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setContextDialogOpen(false)} sx={{ color: 'white' }}>
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
+        
         {/* Screenshot notification */}
         <Snackbar 
           open={screenshotSuccess !== null} 

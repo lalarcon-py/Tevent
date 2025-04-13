@@ -244,17 +244,50 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
     DPS: event.participants?.filter(p => p.role === 'DPS').length || 0
   };
 
-  const formatEventTime = (dateString) => {
+  const formatEventTime = (dateString, timezone) => {
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) {
         console.error('Invalid date:', dateString);
         return 'Invalid date';
       }
+      
+      if (timezone) {
+        // Use Intl.DateTimeFormat to format the date with the correct timezone
+        const options = {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: 'numeric',
+          timeZone: timezone
+        };
+        return new Intl.DateTimeFormat('en-US', options).format(date);
+      }
+      
+      // Fallback to date-fns if no timezone
       return format(date, 'MMMM dd, yyyy HH:mm');
     } catch (error) {
       console.error('Error formatting date:', error);
       return 'Invalid date';
+    }
+  };
+  
+  // Helper function to format timezone name nicely
+  const formatTimezoneName = (timezone) => {
+    if (!timezone) return 'UTC';
+    try {
+      // Extract the location part after the '/' if it exists
+      const parts = timezone.split('/');
+      if (parts.length > 1) {
+        // Replace underscores with spaces and capitalize words
+        return parts[1].replace(/_/g, ' ').replace(/\w\S*/g, txt => 
+          txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+        );
+      }
+      return timezone;
+    } catch (error) {
+      return timezone;
     }
   };
 
@@ -939,7 +972,12 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Typography variant="subtitle1" color="grey.400">Time</Typography>
-          <Typography>{formatEventTime(event.event_time)}</Typography>
+          <Typography>{formatEventTime(event.event_time, event.timezone)}</Typography>
+          
+          <Box mt={1}>
+            <Typography variant="subtitle1" color="grey.400">Timezone</Typography>
+            <Typography>{formatTimezoneName(event.timezone) || 'UTC'}</Typography>
+          </Box>
           
           <Box mt={2}>
             <Typography variant="subtitle1" color="grey.400">Location</Typography>

@@ -108,17 +108,60 @@ async function checkDuplicateMembers() {
 
 /**
  * Verifies that deleted members are actually removed from the database
- * This function is now a no-op since guild_members table doesn't use soft deletion
+ * Checks for and removes any soft-deleted members
  */
 async function cleanupSoftDeletedMembers() {
   try {
-    console.log('🧹 Soft-deleted member cleanup not needed (table does not use soft delete)');
+    console.log('🧹 Starting soft-deleted member cleanup check...');
     
-    // The guild_members table doesn't have soft deletion, so this is now a no-op
+    // First check if the deleted_at column exists
+    const [columnsCheck] = await sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'guild_members' 
+      AND column_name = 'deleted_at'
+    `);
+    
+    // If column doesn't exist yet, we can't proceed with this check
+    if (columnsCheck.length === 0) {
+      console.log('🧹 deleted_at column not found in guild_members table. Skipping soft deletion cleanup.');
+      return { 
+        success: true,
+        columnMissing: true,
+        removed: 0
+      };
+    }
+    
+    // Find soft-deleted members
+    const [softDeletedCount] = await sequelize.query(`
+      SELECT COUNT(*) as count
+      FROM guild_members
+      WHERE deleted_at IS NOT NULL
+    `);
+    
+    const count = softDeletedCount[0]?.count || 0;
+    
+    if (count === 0) {
+      console.log('🧹 No soft-deleted members found.');
+      return { 
+        success: true,
+        removed: 0 
+      };
+    }
+    
+    console.log(`🧹 Found ${count} soft-deleted members to clean up`);
+    
+    // Hard delete the soft-deleted records
+    await sequelize.query(`
+      DELETE FROM guild_members
+      WHERE deleted_at IS NOT NULL
+    `);
+    
+    console.log(`🧹 Successfully removed ${count} soft-deleted members`);
+    
     return { 
       success: true,
-      removed: 0,
-      message: 'No action needed - guild_members table does not use soft delete'
+      removed: count
     };
   } catch (error) {
     console.error('Error in cleanupSoftDeletedMembers:', error);
