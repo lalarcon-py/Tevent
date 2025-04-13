@@ -2694,59 +2694,57 @@ const MemberPool = ({ members, getRoleStyles }) => {
                         el.classList.remove('dragging-team');
                       });
                       
-                      // Check if this is a team drop
-                      let isTeamDrag = false;
-                      try {
-                        isTeamDrag = e.dataTransfer.types.includes('application/x-team-drag');
-                      } catch (err) {
-                        console.error('Error checking drag type:', err);
-                      }
-                      
-                      if (!isTeamDrag) {
-                        console.log('Not a team drag, ignoring');
-                        return; // Let the Team component handle member drops
-                      }
-                      
-                      console.log('Processing team drop');
-                      
                       // Get the dragged team index
-                      let sourceIndex;
-                      try {
-                        const sourceIndexStr = e.dataTransfer.getData('application/x-team-index');
-                        sourceIndex = parseInt(sourceIndexStr, 10);
-                        console.log('Source index:', sourceIndex, 'Target index:', index);
-                      } catch (err) {
-                        console.error('Error getting source index:', err);
+                      const draggedIndexStr = e.dataTransfer.getData('application/x-team-index');
+                      if (!draggedIndexStr) return; // Exit if not a team drop
+                      
+                      const draggedIndex = parseInt(draggedIndexStr);
+                      if (draggedIndex === index) return; // Same position, no change
+                      
+                      console.log(`Reordering team from index ${draggedIndex} to index ${index}`);
+                      
+                      // Get the actual teams for this context
+                      const contextTeams = teams.filter(t => {
+                        if (!t || typeof t !== 'object') return false;
+                        const teamContext = t.event_context || 'Main Event';
+                        return teamContext === context;
+                      });
+                      
+                      // Get the actual teams we're working with
+                      const draggedTeam = contextTeams[draggedIndex];
+                      const targetTeam = contextTeams[index];
+                      
+                      if (!draggedTeam || !targetTeam) {
+                        console.error('Could not find teams to reorder');
                         return;
                       }
                       
-                      if (isNaN(sourceIndex) || sourceIndex === index) {
-                        console.log('Invalid source index or same position');
-                        return; // Invalid source or same position
+                      // We need to reorder in the main teams array, not just the filtered view
+                      const allTeams = [...teams];
+                      
+                      // Find the indices in the main array
+                      const mainDraggedIndex = allTeams.findIndex(t => t && t.id === draggedTeam.id);
+                      const mainTargetIndex = allTeams.findIndex(t => t && t.id === targetTeam.id);
+                      
+                      if (mainDraggedIndex === -1 || mainTargetIndex === -1) {
+                        console.error('Could not find teams in main array');
+                        return;
                       }
                       
-                      // Simple direct reordering approach
-                      console.log('Reordering teams...');
-                      const newTeams = [...teams];
-                      const teamToMove = newTeams[sourceIndex];
+                      console.log(`Found teams in main array: dragged=${mainDraggedIndex}, target=${mainTargetIndex}`);
                       
-                      // Allow moving teams regardless of context
-                      console.log('Moving team between positions (regardless of context)');
-                      // We could potentially update the team's context here if desired
-                      // teamToMove.event_context = team.event_context; // Uncomment to change context
+                      // Remove dragged team from its position
+                      const teamToMove = allTeams.splice(mainDraggedIndex, 1)[0];
                       
-                      // Remove from source position
-                      newTeams.splice(sourceIndex, 1);
+                      // Adjust target index if needed (if drag source is before target)
+                      const adjustedTargetIndex = mainDraggedIndex < mainTargetIndex ? mainTargetIndex - 1 : mainTargetIndex;
                       
-                      // Insert at target position (accounting for the removed item)
-                      const targetInsertIndex = index > sourceIndex ? index - 1 : index;
-                      newTeams.splice(targetInsertIndex, 0, teamToMove);
+                      // Insert at the new position
+                      allTeams.splice(adjustedTargetIndex, 0, teamToMove);
                       
-                      console.log('Teams reordered, updating state');
-                      // Update state and force a re-render
-                      setTeams([...newTeams]);
-                      // Force a re-render of the entire component
-                      setForceRender(prev => prev + 1);
+                      // Update state with new array
+                      setTeams(allTeams);
+                      console.log('Teams reordered successfully');
                     }}
                   >
                     {/* Force Team component to re-render */}
