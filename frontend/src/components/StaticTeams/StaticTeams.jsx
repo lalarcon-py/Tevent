@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { FaCrown } from 'react-icons/fa';
+import { MdHeadset } from 'react-icons/md';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import html2canvas from 'html2canvas';
@@ -191,7 +193,7 @@ const BuildSelectionDialog = ({ open, member, onClose, onSelectBuild }) => {
 };
 
 // The draggable member component
-const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
+const DraggableMember = ({ member, onRemove, getRoleStyles, isTeamLeader, isShotCaller }) => {
   const dragRef = React.useRef(null);
   
   // Store member ID for comparison to detect changes
@@ -459,20 +461,42 @@ const DraggableMember = ({ member, onRemove, getRoleStyles }) => {
         flexGrow: 1,
         overflow: 'hidden'
       }}>
-        {/* Character name */}
-        <Typography 
-          variant="body2"
-          sx={{
-            fontSize: '0.95rem',
-            fontWeight: 500,
-            color: 'white',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}
-        >
-          {member.User?.username || member.username}
-        </Typography>
+        {/* Character name with crown if team leader */}
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography 
+            variant="body2"
+            sx={{
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              color: 'white',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {member.User?.username || member.username}
+          </Typography>
+          {isTeamLeader && (
+            <FaCrown 
+              style={{ 
+                color: '#FFD700', 
+                fontSize: '0.95rem', 
+                marginLeft: '6px',
+                filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.5))'
+              }} 
+            />
+          )}
+          {isShotCaller && (
+            <MdHeadset 
+              style={{ 
+                color: '#9966FF', 
+                fontSize: '1.1rem', 
+                marginLeft: '6px',
+                filter: 'drop-shadow(0 0 2px rgba(0, 0, 0, 0.5))'
+              }} 
+            />
+          )}
+        </Box>
         
         {/* Role and spec text */}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -642,6 +666,9 @@ const StaticTeams = () => {
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [editingContext, setEditingContext] = useState('');
   const [newContextName, setNewContextName] = useState('');
+  const [teamLeaders, setTeamLeaders] = useState({});
+  const [shotCallers, setShotCallers] = useState({});
+  const [forceRender, setForceRender] = useState(0); // Add this state for force re-renders
   const [assignedMembersByContext, setAssignedMembersByContext] = useState({
     'Main Event': new Set(),
     'Inter-server': new Set(),
@@ -652,6 +679,63 @@ const StaticTeams = () => {
     'Peace Boss': new Set()
   });
   
+  // Load team leaders and shot callers from localStorage when component mounts
+  useEffect(() => {
+    // Only try to load if we have guildId (ensures we're loading the right data)
+    if (guildId) {
+      try {
+        // Load team leaders
+        const savedTeamLeaders = localStorage.getItem(`teamLeaders_${guildId}`);
+        if (savedTeamLeaders) {
+          setTeamLeaders(JSON.parse(savedTeamLeaders));
+        }
+        
+        // Load shot callers
+        const savedShotCallers = localStorage.getItem(`shotCallers_${guildId}`);
+        if (savedShotCallers) {
+          setShotCallers(JSON.parse(savedShotCallers));
+        }
+      } catch (e) {
+        console.error('Error loading team roles from localStorage:', e);
+      }
+    }
+  }, [guildId]);
+  
+  // Save team leaders to localStorage whenever they change
+  useEffect(() => {
+    if (guildId) {
+      if (Object.keys(teamLeaders).length > 0) {
+        localStorage.setItem(`teamLeaders_${guildId}`, JSON.stringify(teamLeaders));
+      } else {
+        // If there are no team leaders but we previously had some, clear localStorage
+        const savedTeamLeaders = localStorage.getItem(`teamLeaders_${guildId}`);
+        if (savedTeamLeaders && JSON.parse(savedTeamLeaders) && Object.keys(JSON.parse(savedTeamLeaders)).length > 0) {
+          localStorage.setItem(`teamLeaders_${guildId}`, JSON.stringify({}));
+        }
+      }
+    }
+  }, [teamLeaders, guildId]);
+  
+  // Save shot callers to localStorage whenever they change
+  useEffect(() => {
+    if (guildId) {
+      if (Object.keys(shotCallers).length > 0) {
+        localStorage.setItem(`shotCallers_${guildId}`, JSON.stringify(shotCallers));
+      } else {
+        // If there are no shot callers but we previously had some, clear localStorage
+        const savedShotCallers = localStorage.getItem(`shotCallers_${guildId}`);
+        if (savedShotCallers && JSON.parse(savedShotCallers) && Object.keys(JSON.parse(savedShotCallers)).length > 0) {
+          localStorage.setItem(`shotCallers_${guildId}`, JSON.stringify({}));
+        }
+      }
+    }
+  }, [shotCallers, guildId]);
+
+  // Ensure component re-renders when teams state changes
+  useEffect(() => {
+    console.log('Teams state updated, teams length:', teams.length);
+  }, [teams, forceRender]); // Track both teams and forceRender
+
   // Filter members that aren't already in a team of the selected context
   const filteredMembers = useMemo(() => {
     // Safeguard against empty/undefined members array
@@ -965,7 +1049,7 @@ const StaticTeams = () => {
     }
 
     try {
-      const response = await axiosInstance.put(`/api/static-teams/${team.id}`, {
+      const response = await axiosInstance.post(`/api/static-teams/${team.id}/update-name`, {
         name: newTeamName,
         guildId,
         event_context: eventContext
@@ -1403,7 +1487,15 @@ const StaticTeams = () => {
 
   // Handle screenshot capture
   const captureTeamScreenshot = async () => {
-    if (teams.length === 0) return;
+    // Get the teams that should be shown in the screenshot based on current view
+    const teamsToShow = selectedContext === 'All Teams' 
+      ? teams
+      : teams.filter(team => (team.event_context || 'Main Event') === selectedContext);
+
+    if (teamsToShow.length === 0) {
+      setError('No teams to screenshot in the current view');
+      return;
+    }
     
     setIsScreenshotting(true);
     
@@ -1419,7 +1511,10 @@ const StaticTeams = () => {
       
       // Add title
       const title = document.createElement('h2');
-      title.textContent = 'Static Teams';
+      // Set title based on the selected context
+      title.textContent = selectedContext === 'All Teams' 
+        ? 'Static Teams' 
+        : `${selectedContext} Teams`;
       title.style.color = 'white';
       title.style.marginBottom = '20px';
       screenshotContainer.appendChild(title);
@@ -1431,7 +1526,7 @@ const StaticTeams = () => {
       gridContainer.style.gap = '16px';
       
       // Add each team
-      teams.forEach(team => {
+      teamsToShow.forEach(team => {
         const teamElement = document.createElement('div');
         teamElement.style.backgroundColor = '#1e1e1e';
         teamElement.style.borderRadius = '8px';
@@ -1549,6 +1644,11 @@ const StaticTeams = () => {
             contentContainer.style.flexGrow = '1';
             contentContainer.style.overflow = 'hidden';
             
+            // Username with role indicators
+            const usernameContainer = document.createElement('div');
+            usernameContainer.style.display = 'flex';
+            usernameContainer.style.alignItems = 'center';
+            
             // Username
             const username = document.createElement('div');
             username.style.fontSize = '0.95rem';
@@ -1558,7 +1658,49 @@ const StaticTeams = () => {
             username.style.overflow = 'hidden';
             username.style.textOverflow = 'ellipsis';
             username.textContent = member.User?.username || member.username;
-            contentContainer.appendChild(username);
+            usernameContainer.appendChild(username);
+            
+            // Add leadership indicators
+            const memberId = member.user_id || member.id || (member.User?.id);
+            
+            // Create leadership label container
+            const labelContainer = document.createElement('div');
+            labelContainer.style.display = 'flex';
+            labelContainer.style.marginLeft = '6px';
+            labelContainer.style.gap = '4px';
+            
+            // Add team lead label if applicable
+            if (memberId && teamLeaders[team.id] === memberId) {
+              const leadLabel = document.createElement('div');
+              leadLabel.textContent = '(Lead)';
+              leadLabel.style.color = '#FFD700';
+              leadLabel.style.fontSize = '0.8rem';
+              leadLabel.style.fontWeight = 'bold';
+              leadLabel.style.backgroundColor = 'rgba(255, 215, 0, 0.1)';
+              leadLabel.style.padding = '0px 4px';
+              leadLabel.style.borderRadius = '4px';
+              labelContainer.appendChild(leadLabel);
+            }
+            
+            // Add shot caller label if applicable
+            if (memberId && shotCallers[team.id] === memberId) {
+              const callerLabel = document.createElement('div');
+              callerLabel.textContent = '(Caller)';
+              callerLabel.style.color = '#9966FF';
+              callerLabel.style.fontSize = '0.8rem';
+              callerLabel.style.fontWeight = 'bold';
+              callerLabel.style.backgroundColor = 'rgba(153, 102, 255, 0.1)';
+              callerLabel.style.padding = '0px 4px';
+              callerLabel.style.borderRadius = '4px';
+              labelContainer.appendChild(callerLabel);
+            }
+            
+            // Add labels to username container if any exist
+            if (labelContainer.children.length > 0) {
+              usernameContainer.appendChild(labelContainer);
+            }
+            
+            contentContainer.appendChild(usernameContainer);
             
             // Role and spec
             const roleSpecContainer = document.createElement('div');
@@ -1662,7 +1804,9 @@ const StaticTeams = () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'static-teams.png';
+            a.download = selectedContext === 'All Teams' 
+              ? 'static-teams.png' 
+              : `${selectedContext.toLowerCase().replace(/\s+/g, '-')}-teams.png`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1697,6 +1841,8 @@ const StaticTeams = () => {
 
   // Team component
   const Team = ({ team, onDrop, onRemove, onRemoveMember, onEdit, canEdit }) => {
+    const [teamLeaderId, setTeamLeaderId] = useState(teamLeaders[team.id] || null);
+    const [shotCallerId, setShotCallerId] = useState(shotCallers[team.id] || null);
     const [isEditingName, setIsEditingName] = useState(false);
     const [teamName, setTeamName] = useState(team?.name || '');
     const [isDropTarget, setIsDropTarget] = useState(false);
@@ -1722,11 +1868,80 @@ const StaticTeams = () => {
       setIsDropTarget(false);
     };
   
+    // Update team leader ID when teamLeaders state changes
+    useEffect(() => {
+      if (team && team.id && teamLeaders[team.id]) {
+        setTeamLeaderId(teamLeaders[team.id]);
+      }
+    }, [team, teamLeaders]);
+    
+    // Update shotcaller ID when shotCallers state changes
+    useEffect(() => {
+      if (team && team.id && shotCallers[team.id]) {
+        setShotCallerId(shotCallers[team.id]);
+      }
+    }, [team, shotCallers]);
+    
+    const handleSetTeamLeader = (memberId) => {
+      if (!canEdit) return;
+      
+      // Update local state
+      const updatedTeamLeaders = { ...teamLeaders };
+      
+      // If clicking the current leader, remove leadership
+      if (teamLeaderId === memberId) {
+        delete updatedTeamLeaders[team.id];
+        setTeamLeaderId(null);
+      } else {
+        updatedTeamLeaders[team.id] = memberId;
+        setTeamLeaderId(memberId);
+      }
+      
+      setTeamLeaders(updatedTeamLeaders);
+      
+      // Save to backend if needed
+      // This would be a good place to add a call to update the team leader in the database
+      // For now we're just storing it in local state
+    };
+
+    const handleSetShotCaller = (memberId) => {
+      if (!canEdit) return;
+      
+      // Update local state
+      const updatedShotCallers = { ...shotCallers };
+      
+      // If clicking the current shotcaller, remove the role
+      if (shotCallerId === memberId) {
+        delete updatedShotCallers[team.id];
+        setShotCallerId(null);
+      } else {
+        updatedShotCallers[team.id] = memberId;
+        setShotCallerId(memberId);
+      }
+      
+      setShotCallers(updatedShotCallers);
+      
+      // Save to backend if needed
+      // This would be a good place to add a call to update the shotcaller in the database
+      // For now we're just storing it in local state
+    };
+
     const handleDrop = (e) => {
       e.preventDefault();
       if (!canEdit || isProcessingDrop) return;
       setIsDropTarget(false);
       setIsProcessingDrop(true);
+      
+      // Check if this is a team drop (we want to handle member drops only)
+      try {
+        const isTeamDrag = e.dataTransfer.types.includes('application/x-team-drag');
+        if (isTeamDrag) {
+          setIsProcessingDrop(false);
+          return; // Exit early, let the team container handler process team drops
+        }
+      } catch (err) {
+        console.error('Error checking drag type:', err);
+      }
   
       let memberId;
       try {
@@ -1738,7 +1953,11 @@ const StaticTeams = () => {
         }
         
         if (!memberId) {
-          memberId = e.dataTransfer.getData('text/plain');
+          // Only use text/plain if it's not 'team'
+          const textData = e.dataTransfer.getData('text/plain');
+          if (textData && textData !== 'team') {
+            memberId = textData;
+          }
         }
         
         if (!memberId) {
@@ -1918,14 +2137,82 @@ const StaticTeams = () => {
           backgroundColor: isDropTarget ? 'rgba(76, 175, 80, 0.05)' : 'transparent'
         }}>
           {team.members?.length > 0 ? (
-            team.members.map(member => (
-              <DraggableMember 
-                key={member.id || member.user_id || (member.User?.id)} 
-                member={member} 
-                onRemove={canEdit ? () => onRemoveMember(team.id, member) : null} 
-                getRoleStyles={getRoleStyles}
-              />
-            ))
+            team.members.map(member => {
+              const memberId = member.id || member.user_id || (member.User?.id);
+              const isLeader = teamLeaderId === memberId;
+              const isShotCaller = shotCallerId === memberId;
+              
+              return (
+                <Box key={memberId} sx={{ position: 'relative' }}>
+                  <DraggableMember 
+                    member={member} 
+                    onRemove={canEdit ? () => onRemoveMember(team.id, member) : null} 
+                    getRoleStyles={getRoleStyles}
+                    isTeamLeader={isLeader}
+                    isShotCaller={isShotCaller}
+                  />
+                  {/* Team Leader button */}
+                  {canEdit && onRemove && (
+                    <Tooltip title={isLeader ? "Remove as Team Leader" : "Set as Team Leader"}>
+                      <IconButton 
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetTeamLeader(memberId);
+                        }}
+                        sx={{
+                          position: 'absolute',
+                          top: 10,
+                          right: 62, // Position to the left of the remove button
+                          color: isLeader ? '#FFD700' : 'rgba(255, 255, 255, 0.4)',
+                          bgcolor: isLeader ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
+                          '&:hover': { 
+                            bgcolor: isLeader ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)', 
+                            color: isLeader ? '#FFD700' : 'rgba(255, 255, 255, 0.7)'
+                          },
+                          width: 24,
+                          height: 24,
+                          padding: 0,
+                          zIndex: 2
+                        }}
+                      >
+                        <FaCrown style={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  
+                  {/* Shot Caller button */}
+                  {canEdit && onRemove && (
+                    <Tooltip title={isShotCaller ? "Remove as Shot Caller" : "Set as Shot Caller"}>
+                      <IconButton 
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetShotCaller(memberId);
+                        }}
+                        sx={{
+                          position: 'absolute',
+                          top: 10,
+                          right: 42, // Position to the left of the leader button
+                          color: isShotCaller ? '#9966FF' : 'rgba(255, 255, 255, 0.4)',
+                          bgcolor: isShotCaller ? 'rgba(153, 102, 255, 0.1)' : 'transparent',
+                          '&:hover': { 
+                            bgcolor: isShotCaller ? 'rgba(153, 102, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)', 
+                            color: isShotCaller ? '#9966FF' : 'rgba(255, 255, 255, 0.7)'
+                          },
+                          width: 24,
+                          height: 24,
+                          padding: 0,
+                          zIndex: 2
+                        }}
+                      >
+                        <MdHeadset style={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+              );
+            })
           ) : (
             <Box sx={{
               height: '100%',
@@ -1954,189 +2241,206 @@ const StaticTeams = () => {
   };
 
   // MemberPool component
-  const MemberPool = ({ members, getRoleStyles }) => {
-    // Group members by their build specs
-    const roleGroups = {
-      tank: members.filter(m => getMemberSpec(m) === 'Tank'),
-      healer: members.filter(m => getMemberSpec(m) === 'Healer'),
-      dps: members.filter(m => !['Tank', 'Healer'].includes(getMemberSpec(m)))
-    };
+const MemberPool = ({ members, getRoleStyles }) => {
+  // Group members by their build specs
+  const roleGroups = {
+    tank: members.filter(m => getMemberSpec(m) === 'Tank'),
+    healer: members.filter(m => getMemberSpec(m) === 'Healer'),
+    dps: members.filter(m => !['Tank', 'Healer'].includes(getMemberSpec(m)))
+  };
   
-    const roleIconMap = {
-      tank: <ShieldIcon sx={{ fontSize: 20 }} />,
-      healer: <LocalHospitalIcon sx={{ fontSize: 20 }} />,
-      dps: <FlashOnIcon sx={{ fontSize: 20 }} />
-    };
+  const roleIconMap = {
+    tank: <ShieldIcon sx={{ fontSize: 20 }} />,
+    healer: <LocalHospitalIcon sx={{ fontSize: 20 }} />,
+    dps: <FlashOnIcon sx={{ fontSize: 20 }} />
+  };
   
-    const RoleCategoryHeader = ({ title, count, icon, color }) => (
+  const RoleCategoryHeader = ({ title, count, icon, color }) => (
+    <Box sx={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      p: 1.5,
+      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: 'rgba(0, 0, 0, 0.2)'
+    }}>
       <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        p: 1.5,
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        backgroundColor: 'rgba(0, 0, 0, 0.2)'
+        mr: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        color: color
       }}>
-        <Box sx={{ 
-          mr: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-          color: color
-        }}>
-          {icon}
-        </Box>
-        <Typography variant="subtitle1" sx={{ 
-          color: 'white', 
-          fontWeight: 600,
-          fontSize: '1rem'
-        }}>
-          {title}
+        {icon}
+      </Box>
+      <Typography variant="subtitle1" sx={{ 
+        color: 'white', 
+        fontWeight: 600,
+        fontSize: '1rem'
+      }}>
+        {title}
+      </Typography>
+      <Box sx={{
+        ml: 1,
+        px: 1.5,
+        py: 0.5,
+        borderRadius: '50px',
+        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: '0.75rem',
+        fontWeight: 500
+      }}>
+        {count}
+      </Box>
+    </Box>
+  );
+  
+  // Create a container to hold all sticky elements
+  return (
+    <Box 
+      sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        position: 'sticky',
+        top: 72, // Increased top value to avoid header overlap
+        maxHeight: 'calc(100vh - 88px)',
+    overflowY: 'auto'
+    }}
+    >
+      {/* Tank Section */}
+      <Box 
+        sx={{ 
+        bgcolor: '#1e1e1e',
+        borderRadius: 2,
+          overflow: 'hidden',
+          mb: 2,
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          zIndex: 10
+        }}
+      >
+        <RoleCategoryHeader 
+        title="Tanks" 
+        count={roleGroups.tank.length} 
+        icon={roleIconMap.tank} 
+          color="#66b3ff" 
+        />
+        <Box sx={{ p: 2, maxHeight: '250px', overflowY: 'auto' }}>
+          {roleGroups.tank.length > 0 ? (
+          roleGroups.tank.map(member => {
+          // Create a new member object with combat role properly set
+        const memberWithCombatRole = {
+          ...member,
+              // Set the role to TANK for display purposes
+                role: 'TANK'
+              };
+            
+        return (
+          <DraggableMember 
+        key={member.id || member.user_id || (member.User?.id)} 
+                member={memberWithCombatRole}
+                  getRoleStyles={getRoleStyles} 
+                />
+              );
+            })
+          ) : (
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
+            No tanks available
         </Typography>
-        <Box sx={{
-          ml: 1,
-          px: 1.5,
-          py: 0.5,
-          borderRadius: '50px',
-          backgroundColor: 'rgba(0, 0, 0, 0.2)',
-          color: 'rgba(255, 255, 255, 0.7)',
-          fontSize: '0.75rem',
-          fontWeight: 500
-        }}>
-          {count}
+        )}
         </Box>
       </Box>
-    );
-  
-    return (
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <Box 
-          sx={{ 
-            bgcolor: '#1e1e1e',
-            borderRadius: 2,
-            overflow: 'hidden',
-            mb: 2,
-            border: '1px solid rgba(255, 255, 255, 0.08)'
-          }}
-        >
-          <RoleCategoryHeader 
-            title="Tanks" 
-            count={roleGroups.tank.length} 
-            icon={roleIconMap.tank} 
-            color="#66b3ff" 
-          />
-          <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
-            {roleGroups.tank.length > 0 ? (
-              roleGroups.tank.map(member => {
-                // Create a new member object with combat role properly set
-                const memberWithCombatRole = {
-                  ...member,
-                  // Set the role to TANK for display purposes
-                  role: 'TANK'
-                };
-                
-                return (
-                  <DraggableMember 
-                    key={member.id || member.user_id || (member.User?.id)} 
-                    member={memberWithCombatRole}
-                    getRoleStyles={getRoleStyles} 
-                  />
-                );
-              })
-            ) : (
-              <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
-                No tanks available
-              </Typography>
-            )}
-          </Box>
-        </Box>
-  
-        <Box 
-          sx={{ 
-            bgcolor: '#1e1e1e',
-            borderRadius: 2,
-            overflow: 'hidden',
-            mb: 2,
-            border: '1px solid rgba(255, 255, 255, 0.08)'
-          }}
-        >
-          <RoleCategoryHeader 
-            title="Healers" 
-            count={roleGroups.healer.length} 
-            icon={roleIconMap.healer} 
-            color="#66ff66" 
-          />
-          <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
-            {roleGroups.healer.length > 0 ? (
-              roleGroups.healer.map(member => {
-                // Create a new member object with combat role properly set
-                const memberWithCombatRole = {
-                  ...member,
-                  // Set the role to HEALER for display purposes
-                  role: 'HEALER'
-                };
-                
-                return (
-                  <DraggableMember 
-                    key={member.id || member.user_id || (member.User?.id)} 
-                    member={memberWithCombatRole}
-                    getRoleStyles={getRoleStyles} 
-                  />
-                );
-              })
-            ) : (
-              <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
-                No healers available
-              </Typography>
-            )}
-          </Box>
-        </Box>
-  
-        <Box 
-          sx={{ 
-            bgcolor: '#1e1e1e',
-            borderRadius: 2,
-            overflow: 'hidden',
-            mb: 2,
-            border: '1px solid rgba(255, 255, 255, 0.08)'
-          }}
-        >
-          <RoleCategoryHeader 
-            title="DPS" 
-            count={roleGroups.dps.length} 
-            icon={roleIconMap.dps} 
-            color="#ff6666" 
-          />
-          <Box sx={{ p: 2, maxHeight: '300px', overflowY: 'auto' }}>
-            {roleGroups.dps.length > 0 ? (
-              roleGroups.dps.map(member => {
-                // Create a new member object with combat role properly set
-                const memberWithCombatRole = {
-                  ...member,
-                  // Set the role to DPS for display purposes
-                  role: 'DPS'
-                };
-                
-                return (
-                  <DraggableMember 
-                    key={member.id || member.user_id || (member.User?.id)} 
-                    member={memberWithCombatRole}
-                    getRoleStyles={getRoleStyles} 
-                  />
-                );
-              })
-            ) : (
-              <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
-                No DPS available
-              </Typography>
-            )}
-          </Box>
+      
+      {/* Healer Section */}
+      <Box 
+        sx={{ 
+          bgcolor: '#1e1e1e',
+          borderRadius: 2,
+          overflow: 'hidden',
+          mb: 2,
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          zIndex: 9
+        }}
+      >
+        <RoleCategoryHeader 
+          title="Healers" 
+          count={roleGroups.healer.length} 
+          icon={roleIconMap.healer} 
+          color="#66ff66" 
+        />
+        <Box sx={{ p: 2, maxHeight: '250px', overflowY: 'auto' }}>
+          {roleGroups.healer.length > 0 ? (
+        roleGroups.healer.map(member => {
+      // Create a new member object with combat role properly set
+        const memberWithCombatRole = {
+            ...member,
+            // Set the role to HEALER for display purposes
+            role: 'HEALER'
+          };
+          
+  return (
+        <DraggableMember 
+              key={member.id || member.user_id || (member.User?.id)} 
+                  member={memberWithCombatRole}
+                  getRoleStyles={getRoleStyles} 
+                />
+              );
+            })
+          ) : (
+        <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
+            No healers available
+            </Typography>
+          )}
         </Box>
       </Box>
-    );
+    
+    {/* DPS Section */}
+      <Box 
+        sx={{ 
+          bgcolor: '#1e1e1e',
+          borderRadius: 2,
+          overflow: 'hidden',
+          mb: 2,
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          zIndex: 8
+        }}
+      >
+        <RoleCategoryHeader 
+          title="DPS" 
+          count={roleGroups.dps.length} 
+          icon={roleIconMap.dps} 
+          color="#ff6666" 
+      />
+      <Box sx={{ p: 2, maxHeight: '250px', overflowY: 'auto' }}>
+      {roleGroups.dps.length > 0 ? (
+          roleGroups.dps.map(member => {
+            // Create a new member object with combat role properly set
+        const memberWithCombatRole = {
+        ...member,
+      // Set the role to DPS for display purposes
+      role: 'DPS'
+    };
+    
+   return (
+   <DraggableMember 
+   key={member.id || member.user_id || (member.User?.id)} 
+     member={memberWithCombatRole}
+       getRoleStyles={getRoleStyles} 
+       />
+       );
+       })
+       ) : (
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', py: 2 }}>
+              No DPS available
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </Box>
+  );
   };
 
   return (
@@ -2302,44 +2606,152 @@ const StaticTeams = () => {
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', width: '100%' }}>
                         {contextTeams.filter(team => team && typeof team === 'object').map((team, index) => (
                   <Box 
-                    key={`team-container-${team.id}`}
+                    key={`team-container-${team.id}-${index}-${forceRender}`}
                     sx={{ 
                       width: { xs: '100%', md: '50%', lg: '33.333%' },
                       p: 1,
-                      cursor: hasEditPermission() ? 'move' : 'default'
+                      cursor: hasEditPermission() ? 'move' : 'default',
+                      position: 'relative',
+                      '&.dragging-team': {
+                        opacity: 0.4,
+                        '& > div': { outline: '2px dashed #90caf9' }
+                      },
+                      '&.drop-target': {
+                        '&::before': {
+                          content: '""',
+                          position: 'absolute',
+                          top: 0,
+                          left: 8,
+                          width: 4,
+                          height: '100%',
+                          backgroundColor: '#4CAF50',
+                          borderRadius: 4,
+                          zIndex: 10
+                        }
+                      }
                     }}
                     draggable={hasEditPermission()}
                     onDragStart={(e) => {
                       if (!hasEditPermission()) return;
-                      e.dataTransfer.setData('teamIndex', index.toString());
+                      console.log('Team drag start:', index);
+                      
+                      // Add visual feedback
+                      e.currentTarget.classList.add('dragging-team');
+                      
+                      // Set required data
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('application/x-team-drag', 'true');
+                      e.dataTransfer.setData('application/x-team-index', index.toString());
+                      
+                      // Set drag image
+                      try {
+                        const dragImg = e.currentTarget.querySelector('.MuiBox-root');
+                        if (dragImg) {
+                          e.dataTransfer.setDragImage(dragImg, 20, 20);
+                        }
+                      } catch (err) {
+                        console.error('Error setting drag image:', err);
+                      }
                     }}
                     onDragOver={(e) => {
                       if (!hasEditPermission()) return;
                       e.preventDefault();
+                      e.stopPropagation();
+                      
+                      // Check if this is a team drag operation
+                      try {
+                        const isTeamDrag = e.dataTransfer.types.includes('application/x-team-drag');
+                        if (isTeamDrag) {
+                          e.dataTransfer.dropEffect = 'move';
+                          e.currentTarget.classList.add('drop-target');
+                        }
+                      } catch (err) {
+                        console.error('Error in dragover:', err);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('drop-target');
+                    }}
+                    onDragEnd={(e) => {
+                      // Clean up any visual classes when drag ends
+                      document.querySelectorAll('.dragging-team').forEach(el => {
+                        el.classList.remove('dragging-team');
+                      });
+                      document.querySelectorAll('.drop-target').forEach(el => {
+                        el.classList.remove('drop-target');
+                      });
                     }}
                     onDrop={(e) => {
-                      if (!hasEditPermission()) return;
+                      // Always prevent default to stop browser handling
                       e.preventDefault();
-                      const draggedIndex = parseInt(e.dataTransfer.getData('teamIndex'));
-                      if (draggedIndex === index) return; // Same position, no change
+                      e.stopPropagation();
                       
-                      // Create a new teams array with the reordered teams
+                      if (!hasEditPermission()) return;
+                      
+                      // Remove visual feedback
+                      e.currentTarget.classList.remove('drop-target');
+                      document.querySelectorAll('.dragging-team').forEach(el => {
+                        el.classList.remove('dragging-team');
+                      });
+                      
+                      // Check if this is a team drop
+                      let isTeamDrag = false;
+                      try {
+                        isTeamDrag = e.dataTransfer.types.includes('application/x-team-drag');
+                      } catch (err) {
+                        console.error('Error checking drag type:', err);
+                      }
+                      
+                      if (!isTeamDrag) {
+                        console.log('Not a team drag, ignoring');
+                        return; // Let the Team component handle member drops
+                      }
+                      
+                      console.log('Processing team drop');
+                      
+                      // Get the dragged team index
+                      let sourceIndex;
+                      try {
+                        const sourceIndexStr = e.dataTransfer.getData('application/x-team-index');
+                        sourceIndex = parseInt(sourceIndexStr, 10);
+                        console.log('Source index:', sourceIndex, 'Target index:', index);
+                      } catch (err) {
+                        console.error('Error getting source index:', err);
+                        return;
+                      }
+                      
+                      if (isNaN(sourceIndex) || sourceIndex === index) {
+                        console.log('Invalid source index or same position');
+                        return; // Invalid source or same position
+                      }
+                      
+                      // Simple direct reordering approach
+                      console.log('Reordering teams...');
                       const newTeams = [...teams];
-                      const draggedTeam = newTeams[draggedIndex];
+                      const teamToMove = newTeams[sourceIndex];
                       
-                      // Remove the dragged team
-                      newTeams.splice(draggedIndex, 1);
+                      // Allow moving teams regardless of context
+                      console.log('Moving team between positions (regardless of context)');
+                      // We could potentially update the team's context here if desired
+                      // teamToMove.event_context = team.event_context; // Uncomment to change context
                       
-                      // Insert it at the new position
-                      newTeams.splice(index, 0, draggedTeam);
+                      // Remove from source position
+                      newTeams.splice(sourceIndex, 1);
                       
-                      // Update state
-                      setTeams(newTeams);
+                      // Insert at target position (accounting for the removed item)
+                      const targetInsertIndex = index > sourceIndex ? index - 1 : index;
+                      newTeams.splice(targetInsertIndex, 0, teamToMove);
+                      
+                      console.log('Teams reordered, updating state');
+                      // Update state and force a re-render
+                      setTeams([...newTeams]);
+                      // Force a re-render of the entire component
+                      setForceRender(prev => prev + 1);
                     }}
                   >
-                    {/* Force Team component to re-render by providing a unique key when members change */}
+                    {/* Force Team component to re-render */}
                     <Team 
-                      key={`team-${team.id}-members-${team.members?.length || 0}`}
+                      key={`team-${team.id}-pos-${index}-${forceRender}`}
                       team={team} 
                       onDrop={handleDrop}
                       onRemove={handleDeleteTeam}

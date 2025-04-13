@@ -352,6 +352,52 @@ router.put('/:id', isAuthenticated, async (req, res) => {
   }
 });
 
+// Specific endpoint for updating team name
+router.post('/:id/update-name', isAuthenticated, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { name, guildId, event_context } = req.body;
+    const teamId = req.params.id;
+    
+    if (!name || !guildId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Name and guildId are required' });
+    }
+    
+    // Event context is optional, but default to Main Event if not provided
+    const eventContext = event_context || 'Main Event';
+    
+    // Use raw SQL to update the team directly
+    await sequelize.query(
+      `UPDATE static_teams 
+       SET name = :name, event_context = :eventContext, updated_at = NOW() 
+       WHERE id = :teamId AND guild_id = :guildId`,
+      {
+        replacements: { name, eventContext, teamId, guildId },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction: t
+      }
+    );
+    
+    // Get the updated team
+    const [updatedTeam] = await sequelize.query(
+      `SELECT * FROM static_teams WHERE id = :teamId`,
+      {
+        replacements: { teamId },
+        type: sequelize.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+    
+    await t.commit();
+    res.json(updatedTeam);
+  } catch (error) {
+    await t.rollback();
+    console.error('Error updating team name:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete a static team
 router.delete('/:id', isAuthenticated, async (req, res) => {
   const t = await sequelize.transaction();
