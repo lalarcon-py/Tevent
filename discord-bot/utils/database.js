@@ -139,7 +139,10 @@ module.exports = {
    * Create a loot request
    */
   createLootRequest: async (guildId, itemId, discordUserId, requestType) => {
-    requestType = requestType || 'NEED_ITEM'; // Default to NEED_ITEM if no type specified
+    if (!requestType) {
+      console.error(`[ERROR] No request type specified for loot request`);
+      return { success: false, message: 'No request type specified' };
+    }
     console.log(`[DEBUG] createLootRequest called with guildId: ${guildId}, itemId: ${itemId}, discordUserId: ${discordUserId}, requestType: ${requestType}`);
     
     try {
@@ -200,8 +203,8 @@ module.exports = {
       
       // Validate requestType
       if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(requestType)) {
-        console.log(`[DEBUG] Invalid request type: ${requestType}, defaulting to NEED_ITEM`);
-        requestType = 'NEED_ITEM';
+        console.error(`[ERROR] Invalid request type: ${requestType}`);
+        return { success: false, message: `Invalid request type: ${requestType}` };
       }
       
       console.log(`[DEBUG] Creating new loot request with type: ${requestType}`);

@@ -1965,8 +1965,17 @@ client.on('interactionCreate', async (interaction) => {
     
     // Process loot request buttons (Need Item, Need Trait, Greed)
     if (customId.startsWith('need_item_') || customId.startsWith('need_trait_') || customId.startsWith('greed_item_')) {
+      // Immediately defer before any other operations
+      let interactionDeferred = false;
       try {
         await interaction.deferReply({ ephemeral: true });
+        interactionDeferred = true;
+      } catch (deferError) {
+        console.error(`[ERROR] Error deferring reply for ${customId}: ${deferError.message}`);
+        // Log the error but DO NOT return early - continue processing
+      }
+      
+      try {
         
         console.log(`[INFO] Processing loot button: ${customId}`);
         const parts = customId.split('_');
@@ -2046,14 +2055,33 @@ client.on('interactionCreate', async (interaction) => {
             });
           }
           
-          // Create the request using database utility to ensure proper requestType
+          // Make sure requestType is a valid value
+          if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(requestType)) {
+            console.error(`[ERROR] Invalid request type detected: ${requestType}`);
+            
+            if (interactionDeferred) {
+              await interaction.editReply({
+                content: `An error occurred: Invalid request type.`,
+                ephemeral: true
+              }).catch(err => console.error(`Failed to send error response: ${err.message}`));
+            }
+            return; // Stop processing if request type is invalid
+          }
+          
+          console.log(`[INFO] Processing ${requestType} request for item ${itemId} by user ${discordUserId}`);
+          
+          // Create the request using database utility
           const result = await database.createLootRequest(guildId, itemId, discordUserId, requestType);
           
           if (!result.success) {
-            return await interaction.editReply({
-              content: result.message || 'Failed to create request.',
-              ephemeral: true
-            });
+            console.error(`[ERROR] Failed to create request: ${result.message}`);
+            if (interactionDeferred) {
+              await interaction.editReply({
+                content: result.message || 'Failed to create request.',
+                ephemeral: true
+              }).catch(err => console.error(`Failed to send error response: ${err.message}`));
+            }
+            return;
           }
           
           const requestId = result.requestId;
@@ -2078,10 +2106,22 @@ client.on('interactionCreate', async (interaction) => {
           // Update the message embed with the new counts
           await updateItemEmbed(itemId);
           
-          await interaction.editReply({
-            content: `✅ You have successfully requested **${item.name}** as **${requestType === 'NEED_ITEM' ? 'Need Item' : requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}**.`,
-            ephemeral: true
-          });
+          // Handle the response safely in case the interaction has expired
+          try {
+            // Only try to reply if we successfully deferred earlier
+            if (interactionDeferred) {
+              await interaction.editReply({
+                content: `✅ You have successfully requested **${item.name}** as **${requestType === 'NEED_ITEM' ? 'Need Item' : requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}**.`,
+                ephemeral: true
+              });
+            } else {
+              console.log(`[INFO] Could not send success message to user for ${customId} - interaction was not deferred successfully`);
+              // Database operation was still completed successfully
+            }
+          } catch (replyError) {
+            console.log(`[INFO] Could not send success reply: ${replyError.message}`);
+            // We still completed the database operation successfully
+          }
         } catch (error) {
           console.error(`[ERROR] Error creating loot request: ${error.message}`);
           console.error(error.stack);
