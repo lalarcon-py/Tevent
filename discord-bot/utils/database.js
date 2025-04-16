@@ -512,11 +512,6 @@ module.exports = {
           }
         }
       }
-      } catch (createErr) {
-        console.error(`[ERROR] Failed to create event participant: ${createErr.message}`);
-        console.error(createErr.stack);
-        throw createErr;
-      }
       
       console.log(`[DEBUG] Signup created successfully`);
       return { 
@@ -955,8 +950,6 @@ module.exports = {
       throw error;
     }
   },
-
-  
   
   /**
    * Get a user by Discord ID
@@ -980,7 +973,7 @@ module.exports = {
     }
   },
 
-    /**
+  /**
    * Update event participants with robust error handling and transaction management
    * @param {string} eventId - Event UUID
    * @param {string} userId - User UUID
