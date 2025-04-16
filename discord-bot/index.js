@@ -812,7 +812,157 @@ client.on('ready', () => {
   registerCommands();
   recoverEventTracking();
   setupScheduledPostings(client);
+  
+  // Set up periodic cleanup of stale item messages
+  scheduleItemMessageCleanup(client);
 });
+
+// Register slash commands
+async function registerCommands() {
+  try {
+    console.log('Registering slash commands...');
+    
+    // Define commands
+    const commands = [
+      // Existing commands would be here
+      
+      // Add cleanup-storage command
+      {
+        name: 'cleanup-storage',
+        description: 'Clean up Discord messages for items no longer in storage',
+        default_permission: false, // Restrict by default
+        default_member_permissions: '8' // Administrator permission (8 = ADMINISTRATOR)
+      }
+      // Add other commands if needed
+    ];
+    
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+    
+    // Register globally if in production, to a test guild if in development
+    if (IS_DEV && TEST_GUILD_ID) {
+      await rest.put(
+        Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, TEST_GUILD_ID),
+        { body: commands }
+      );
+      console.log(`Registered commands to test guild ${TEST_GUILD_ID}`);
+    } else {
+      await rest.put(
+        Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
+        { body: commands }
+      );
+      console.log('Registered global commands');
+    }
+  } catch (error) {
+    console.error('Error registering commands:', error);
+  }
+}
+
+// Function to clean up Discord messages for items that no longer exist in storage
+async function scheduleItemMessageCleanup(discordClient) {
+  // Run cleanup hourly
+  cron.schedule('0 * * * *', async () => {
+    try {
+      console.log(`[INFO] Running scheduled cleanup of stale item messages`);
+      
+      // Find tracking entries for items that no longer exist in storage
+      const query = `
+        SELECT imt.item_id, imt.channel_id, imt.message_id 
+        FROM item_message_tracking imt
+        LEFT JOIN guild_storage_items gsi ON imt.item_id = gsi.id
+        WHERE gsi.id IS NULL
+      `;
+      
+      const result = await pool.query(query);
+      console.log(`[INFO] Found ${result.rows.length} stale item messages to clean up`);
+      
+      // Process each stale message
+      for (const row of result.rows) {
+        const { item_id, channel_id, message_id } = row;
+        
+        try {
+          // Try to fetch and delete the message
+          const channel = await discordClient.channels.fetch(channel_id);
+          if (channel) {
+            const message = await channel.messages.fetch(message_id);
+            if (message) {
+              await message.delete();
+              console.log(`[INFO] Deleted stale message for item ${item_id}`);
+            }
+          }
+          
+          // Remove the tracking entry regardless of whether message deletion succeeded
+          await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
+          console.log(`[INFO] Removed tracking entry for item ${item_id}`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to clean up message for item ${item_id}: ${error.message}`);
+          
+          // Still remove the tracking entry if the message couldn't be found
+          if (error.code === 10008) { // Unknown Message error
+            await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
+            console.log(`[INFO] Removed tracking entry for already deleted message for item ${item_id}`);
+          }
+        }
+        
+        // Add a small delay between operations to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (error) {
+      console.error(`[ERROR] Error in item message cleanup: ${error.message}`);
+    }
+  });
+  
+  // Run cleanup immediately on startup
+  setTimeout(async () => {
+    try {
+      console.log(`[INFO] Running initial cleanup of stale item messages`);
+      
+      // Find tracking entries for items that no longer exist in storage
+      const query = `
+        SELECT imt.item_id, imt.channel_id, imt.message_id 
+        FROM item_message_tracking imt
+        LEFT JOIN guild_storage_items gsi ON imt.item_id = gsi.id
+        WHERE gsi.id IS NULL
+      `;
+      
+      const result = await pool.query(query);
+      console.log(`[INFO] Found ${result.rows.length} stale item messages to clean up`);
+      
+      // Process each stale message
+      for (const row of result.rows) {
+        const { item_id, channel_id, message_id } = row;
+        
+        try {
+          // Try to fetch and delete the message
+          const channel = await discordClient.channels.fetch(channel_id);
+          if (channel) {
+            const message = await channel.messages.fetch(message_id);
+            if (message) {
+              await message.delete();
+              console.log(`[INFO] Deleted stale message for item ${item_id}`);
+            }
+          }
+          
+          // Remove the tracking entry regardless of whether message deletion succeeded
+          await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
+          console.log(`[INFO] Removed tracking entry for item ${item_id}`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to clean up message for item ${item_id}: ${error.message}`);
+          
+          // Still remove the tracking entry if the message couldn't be found
+          if (error.code === 10008) { // Unknown Message error
+            await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
+            console.log(`[INFO] Removed tracking entry for already deleted message for item ${item_id}`);
+          }
+        }
+        
+        // Add a small delay between operations to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (error) {
+      console.error(`[ERROR] Error in initial item message cleanup: ${error.message}`);
+    }
+  }, 5000); // Wait 5 seconds after startup before running initial cleanup
+}
 
 app.post('/webhook/new-item', async (req, res) => {
   try {
@@ -1794,7 +1944,7 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
-async function processLootApproval(requestId, discordGuildId, channelId, client) {
+async function processLootApproval(requestId, discordGuildId, channelId, discordClient) {
   try {
     // Get app guild ID
     const mappingResult = await pool.query(
@@ -1887,11 +2037,50 @@ async function processLootApproval(requestId, discordGuildId, channelId, client)
         
         // Update other pending requests
         await dbClient.query(
-          `UPDATE loot_requests 
-           SET status = 'Denied - Granted to other', updated_at = NOW()
-           WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
-          [storageItemId, requestId]
+        `UPDATE loot_requests 
+        SET status = 'Denied - Granted to other', updated_at = NOW()
+        WHERE storage_item_id = $1 AND status = 'Pending' AND id != $2`,
+        [storageItemId, requestId]
         );
+      
+      // If this was the last item, delete the Discord message
+      if (willReachZero) {
+        try {
+          // Get message tracking info
+          const trackingResult = await dbClient.query(
+            `SELECT channel_id, message_id FROM item_message_tracking WHERE item_id = $1`,
+            [storageItemId]
+          );
+          
+          if (trackingResult.rows.length > 0) {
+            const { channel_id, message_id } = trackingResult.rows[0];
+            
+            // Delete the tracking entry
+            await dbClient.query(
+              `DELETE FROM item_message_tracking WHERE item_id = $1`,
+              [storageItemId]
+            );
+            
+            // Schedule message deletion after transaction
+            setTimeout(async () => {
+              try {
+                const channel = await discordClient.channels.fetch(channel_id);
+                if (channel) {
+                  const message = await channel.messages.fetch(message_id);
+                  if (message) {
+                    await message.delete();
+                    console.log(`[INFO] Successfully deleted message for unavailable item ${storageItemId}`);
+                  }
+                }
+              } catch (discordError) {
+                console.error(`[ERROR] Failed to delete Discord message: ${discordError.message}`);
+              }
+            }, 0);
+          }
+        } catch (trackingError) {
+          console.error(`[ERROR] Error handling message tracking: ${trackingError.message}`);
+        }
+      }
       }
       
       await dbClient.query('COMMIT');
@@ -2223,6 +2412,76 @@ client.on('interactionCreate', async (interaction) => {
       }
       else if (commandName === 'check-connection') {
         await handleCheckConnectionCommand(interaction, appGuildId);
+      }
+      else if (commandName === 'cleanup-storage') {
+        // Only allow administrators to run this command
+        if (!interaction.member.permissions.has('ADMINISTRATOR')) {
+          await interaction.reply({
+            content: 'You need administrator permissions to use this command.',
+            ephemeral: true
+          });
+          return;
+        }
+        
+        await interaction.deferReply();
+        
+        try {
+          // Find tracking entries for items that no longer exist in storage
+          const query = `
+            SELECT imt.item_id, imt.channel_id, imt.message_id 
+            FROM item_message_tracking imt
+            LEFT JOIN guild_storage_items gsi ON imt.item_id = gsi.id
+            WHERE gsi.id IS NULL AND imt.guild_id = $1
+          `;
+          
+          const result = await pool.query(query, [appGuildId]);
+          
+          if (result.rows.length === 0) {
+            await interaction.editReply('No stale item messages found. Everything is already clean! 🧹');
+            return;
+          }
+          
+          let deletedCount = 0;
+          let failedCount = 0;
+          
+          // Process each stale message
+          for (const row of result.rows) {
+            const { item_id, channel_id, message_id } = row;
+            
+            try {
+              // Try to fetch and delete the message
+              const channel = await client.channels.fetch(channel_id);
+              if (channel) {
+                const message = await channel.messages.fetch(message_id);
+                if (message) {
+                  await message.delete();
+                  deletedCount++;
+                }
+              }
+              
+              // Remove the tracking entry
+              await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
+            } catch (error) {
+              console.error(`[ERROR] Failed to clean up message for item ${item_id}: ${error.message}`);
+              failedCount++;
+              
+              // Still remove the tracking entry if the message couldn't be found
+              if (error.code === 10008) { // Unknown Message error
+                await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
+              }
+            }
+          }
+          
+          await interaction.editReply(
+            `Cleanup complete! 🧹\n` + 
+            `- Found ${result.rows.length} stale item messages\n` +
+            `- Successfully deleted ${deletedCount} messages from channels\n` +
+            `- Failed to delete ${failedCount} messages (deleted tracking entries anyway)\n`
+          );
+        } catch (error) {
+          console.error(`[ERROR] Error running manual storage cleanup: ${error.message}`);
+          await interaction.editReply('An error occurred while cleaning up storage messages. Check the logs for details.');
+        }
       }
     }
 

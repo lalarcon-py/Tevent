@@ -242,7 +242,7 @@ module.exports = {
   /**
    * Approve a loot request
    */
-  approveLootRequest: async (guildId, requestId) => {
+  approveLootRequest: async (guildId, requestId, discordClient) => {
     console.log(`[DEBUG] approveLootRequest called with guildId: ${guildId}, requestId: ${requestId}`);
     
     // Get a client from the pool for transaction
@@ -301,6 +301,12 @@ module.exports = {
         // If this is the last one, remove the item from storage
         console.log(`[DEBUG] This is the last of the item - removing from storage`);
         
+        // Get message tracking info before deleting the item
+        const trackingResult = await client.query(
+          `SELECT channel_id, message_id FROM item_message_tracking WHERE item_id = $1`,
+          [request.storage_item_id]
+        );
+        
         // Deny all other pending requests for this item with "out of stock" status
         await client.query(
           `UPDATE loot_requests 
@@ -314,6 +320,37 @@ module.exports = {
           `DELETE FROM guild_storage_items WHERE id = $1`,
           [request.storage_item_id]
         );
+        
+        // Try to delete the Discord message if discord client was provided
+        if (discordClient && trackingResult.rows.length > 0) {
+          try {
+            const { channel_id, message_id } = trackingResult.rows[0];
+            
+            // Delete the tracking entry
+            await client.query(
+              `DELETE FROM item_message_tracking WHERE item_id = $1`,
+              [request.storage_item_id]
+            );
+            
+            // Schedule Discord message deletion after transaction completes
+            setTimeout(async () => {
+              try {
+                const channel = await discordClient.channels.fetch(channel_id);
+                if (channel) {
+                  const message = await channel.messages.fetch(message_id);
+                  if (message) {
+                    await message.delete();
+                    console.log(`[INFO] Successfully deleted message for unavailable item ${request.storage_item_id}`);
+                  }
+                }
+              } catch (discordError) {
+                console.error(`[ERROR] Failed to delete Discord message: ${discordError.message}`);
+              }
+            }, 0);
+          } catch (trackingError) {
+            console.error(`[ERROR] Error handling message tracking: ${trackingError.message}`);
+          }
+        }
       } else {
         // Otherwise just decrement the quantity
         console.log(`[DEBUG] Decrementing item quantity from ${request.quantity} to ${request.quantity - 1}`);
