@@ -1959,6 +1959,157 @@ client.setMaxListeners(100);
 // Button interaction handler
 // Slash command and interaction handler
 client.on('interactionCreate', async (interaction) => {
+  // Handle loot request buttons first
+  if (interaction.isButton()) {
+    const customId = interaction.customId;
+    
+    // Process loot request buttons (Need Item, Need Trait, Greed)
+    if (customId.startsWith('need_item_') || customId.startsWith('need_trait_') || customId.startsWith('greed_item_')) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+        
+        console.log(`[INFO] Processing loot button: ${customId}`);
+        const parts = customId.split('_');
+        const requestType = customId.startsWith('need_item_') ? 'NEED_ITEM' : 
+                           customId.startsWith('need_trait_') ? 'NEED_TRAIT' : 'GREED';
+        const itemId = parts[parts.length - 1];
+        const discordUserId = interaction.user.id;
+        const discordGuildId = interaction.guild.id;
+        
+        // Get app guild ID from mapping
+        const mappingResult = await pool.query(
+          'SELECT app_guild_id FROM discord_guild_mappings WHERE discord_guild_id = $1',
+          [discordGuildId]
+        );
+        
+        if (!mappingResult.rows.length) {
+          return await interaction.editReply({
+            content: 'This Discord server is not linked to an application guild.',
+            ephemeral: true
+          });
+        }
+        
+        const guildId = mappingResult.rows[0].app_guild_id;
+        
+        // Check if user exists
+        const userResult = await pool.query(
+          'SELECT id FROM users WHERE discord_id = $1',
+          [discordUserId]
+        );
+        
+        if (!userResult.rows.length) {
+          return await interaction.editReply({
+            content: 'You need to register on the website first before requesting items.',
+            ephemeral: true
+          });
+        }
+        
+        // Create loot request
+        console.log(`[INFO] Creating loot request with type: ${requestType}`);
+        
+        try {
+          // Get database utility
+          const database = require('./utils/database');
+          
+          // Check if storage item exists
+          const itemResult = await pool.query(
+            `SELECT gsi.*, i.name 
+             FROM guild_storage_items gsi
+             JOIN items i ON gsi.item_id = i.id
+             WHERE gsi.id = $1 AND gsi.guild_id = $2`,
+            [itemId, guildId]
+          );
+          
+          if (!itemResult.rows.length) {
+            return await interaction.editReply({
+              content: 'This item no longer exists in storage.',
+              ephemeral: true
+            });
+          }
+          
+          const item = itemResult.rows[0];
+          
+          // Get user ID from discord ID
+          const userId = userResult.rows[0].id;
+          
+          // Check if request already exists
+          const existingRequest = await pool.query(
+            `SELECT id FROM loot_requests 
+             WHERE storage_item_id = $1 AND user_id = $2 AND status = 'Pending'`,
+            [itemId, userId]
+          );
+          
+          if (existingRequest.rows.length) {
+            return await interaction.editReply({
+              content: 'You already have a pending request for this item.',
+              ephemeral: true
+            });
+          }
+          
+          // Create the request using database utility to ensure proper requestType
+          const result = await database.createLootRequest(guildId, itemId, discordUserId, requestType);
+          
+          if (!result.success) {
+            return await interaction.editReply({
+              content: result.message || 'Failed to create request.',
+              ephemeral: true
+            });
+          }
+          
+          const requestId = result.requestId;
+          
+          // Update tracking count based on request type
+          if (requestType === 'GREED') {
+            await pool.query(
+              `UPDATE item_message_tracking 
+               SET greed_count = greed_count + 1, updated_at = NOW()
+               WHERE item_id = $1`,
+              [itemId]
+            );
+          } else {
+            await pool.query(
+              `UPDATE item_message_tracking 
+               SET need_count = need_count + 1, updated_at = NOW()
+               WHERE item_id = $1`,
+              [itemId]
+            );
+          }
+          
+          // Update the message embed with the new counts
+          await updateItemEmbed(itemId);
+          
+          await interaction.editReply({
+            content: `✅ You have successfully requested **${item.name}** as **${requestType === 'NEED_ITEM' ? 'Need Item' : requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}**.`,
+            ephemeral: true
+          });
+        } catch (error) {
+          console.error(`[ERROR] Error creating loot request: ${error.message}`);
+          console.error(error.stack);
+          
+          await interaction.editReply({
+            content: `❌ An error occurred while creating your request: ${error.message}`,
+            ephemeral: true
+          });
+        }
+        
+        return; // Early return to avoid the main interaction handler
+      } catch (error) {
+        console.error(`[ERROR] Error processing loot button: ${error.message}`);
+        console.error(error.stack);
+        
+        try {
+          await interaction.editReply({
+            content: 'An error occurred while processing your request. Please try again.',
+            ephemeral: true
+          });
+        } catch (replyError) {
+          console.error(`[ERROR] Failed to send error reply: ${replyError.message}`);
+        }
+        return;
+      }
+    }
+  }
+
   try {
     // Handle slash commands
     if (interaction.isCommand()) {

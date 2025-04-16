@@ -885,8 +885,8 @@ module.exports = {
   /**
    * Create a loot request
    */
-  createLootRequest: async (guildId, itemId, discordUserId) => {
-    console.log(`[DEBUG] createLootRequest called with guildId: ${guildId}, itemId: ${itemId}, discordUserId: ${discordUserId}`);
+  createLootRequest: async (guildId, itemId, discordUserId, requestType) => {
+    console.log(`[DEBUG] createLootRequest called with guildId: ${guildId}, itemId: ${itemId}, discordUserId: ${discordUserId}, requestType: ${requestType}`);
     try {
       console.log(`[DEBUG] Finding user with Discord ID: ${discordUserId}`);
       
@@ -933,16 +933,17 @@ module.exports = {
         return { success: false, message: 'You already have a pending request for this item' };
       }
       
-      console.log(`[DEBUG] Creating new loot request`);
-      // Create new request
+      console.log(`[DEBUG] Creating new loot request with type: ${requestType}`);
+      // Create new request with the specified request type
       const request = await db.LootRequest.create({
         storage_item_id: itemId,
         user_id: user.id,
         guild_id: guildId,
-        status: 'Pending'
+        status: 'Pending',
+        need_or_greed: requestType
       });
       
-      console.log(`[DEBUG] Loot request created: ${request.id}`);
+      console.log(`[DEBUG] Loot request created: ${request.id} with type ${requestType}`);
       return { 
         success: true,
         requestId: request.id,
