@@ -139,10 +139,18 @@ module.exports = {
    * Create a loot request
    */
   createLootRequest: async (guildId, itemId, discordUserId, requestType) => {
+    // FIX: Strictly validate requestType and throw error instead of defaulting
     if (!requestType) {
       console.error(`[ERROR] No request type specified for loot request`);
-      return { success: false, message: 'No request type specified' };
+      throw new Error('No request type specified');
     }
+
+    // Validate requestType before any database operations
+    if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(requestType)) {
+      console.error(`[ERROR] Invalid request type: ${requestType}`);
+      throw new Error(`Invalid request type: ${requestType}`);
+    }
+
     console.log(`[DEBUG] createLootRequest called with guildId: ${guildId}, itemId: ${itemId}, discordUserId: ${discordUserId}, requestType: ${requestType}`);
     
     try {
@@ -154,6 +162,7 @@ module.exports = {
         console.log(`[DEBUG] Basic connectivity test passed: ${JSON.stringify(testResult.rows[0])}`);
       } catch (testError) {
         console.error(`[ERROR] Basic connectivity test failed: ${testError.message}`);
+        throw new Error(`Database connection failed: ${testError.message}`);
       }
       
       // Find the user with the given Discord ID
@@ -199,12 +208,6 @@ module.exports = {
       if (existingResult.rows && existingResult.rows.length > 0) {
         console.log(`[DEBUG] Existing request found: ${existingResult.rows[0].id}`);
         return { success: false, message: 'You already have a pending request for this item' };
-      }
-      
-      // Validate requestType
-      if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(requestType)) {
-        console.error(`[ERROR] Invalid request type: ${requestType}`);
-        return { success: false, message: `Invalid request type: ${requestType}` };
       }
       
       console.log(`[DEBUG] Creating new loot request with type: ${requestType}`);

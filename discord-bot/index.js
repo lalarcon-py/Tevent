@@ -821,17 +821,18 @@ client.on('ready', () => {
 
 // Function to clean up Discord messages for items that no longer exist in storage
 async function scheduleItemMessageCleanup(discordClient) {
-  // Run cleanup hourly
-  cron.schedule('0 * * * *', async () => {
+  // Create a function that will perform the actual cleanup
+  const performMessageCleanup = async () => {
     try {
-      console.log(`[INFO] Running scheduled cleanup of stale item messages`);
+      console.log(`[INFO] Running cleanup of stale item messages`);
       
       // Find tracking entries for items that no longer exist in storage
+      // FIX: Improve the query to handle null references and ensure records are properly detected
       const query = `
         SELECT imt.item_id, imt.channel_id, imt.message_id 
         FROM item_message_tracking imt
         LEFT JOIN guild_storage_items gsi ON imt.item_id = gsi.id
-        WHERE gsi.id IS NULL
+        WHERE gsi.id IS NULL OR gsi.quantity <= 0
       `;
       
       const result = await pool.query(query);
@@ -843,12 +844,21 @@ async function scheduleItemMessageCleanup(discordClient) {
         
         try {
           // Try to fetch and delete the message
-          const channel = await discordClient.channels.fetch(channel_id);
+          const channel = await discordClient.channels.fetch(channel_id).catch(err => {
+            console.error(`[ERROR] Failed to fetch channel ${channel_id}: ${err.message}`);
+            return null;
+          });
+          
           if (channel) {
-            const message = await channel.messages.fetch(message_id);
-            if (message) {
-              await message.delete();
-              console.log(`[INFO] Deleted stale message for item ${item_id}`);
+            try {
+              const message = await channel.messages.fetch(message_id);
+              if (message) {
+                await message.delete();
+                console.log(`[INFO] Deleted stale message for item ${item_id}`);
+              }
+            } catch (messageError) {
+              console.error(`[ERROR] Failed to fetch/delete message ${message_id}: ${messageError.message}`);
+              // Continue with deletion from database regardless
             }
           }
           
@@ -859,7 +869,7 @@ async function scheduleItemMessageCleanup(discordClient) {
           console.error(`[ERROR] Failed to clean up message for item ${item_id}: ${error.message}`);
           
           // Still remove the tracking entry if the message couldn't be found
-          if (error.code === 10008) { // Unknown Message error
+          if (error.code === 10008 || error.message.includes('Unknown Message')) { // Unknown Message error
             await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
             console.log(`[INFO] Removed tracking entry for already deleted message for item ${item_id}`);
           }
@@ -871,59 +881,67 @@ async function scheduleItemMessageCleanup(discordClient) {
     } catch (error) {
       console.error(`[ERROR] Error in item message cleanup: ${error.message}`);
     }
-  });
+  };
+
+  // Run cleanup hourly
+  cron.schedule('0 * * * *', performMessageCleanup);
   
   // Run cleanup immediately on startup
-  setTimeout(async () => {
+  setTimeout(performMessageCleanup, 5000); // Wait 5 seconds after startup before running initial cleanup
+  
+  // FIX: Add a manual cleanup function as a property to the client so it can be called on demand
+  // This allows the cleanup to be triggered without requiring app redeployment
+  if (discordClient) {
+    discordClient.performMessageCleanup = performMessageCleanup;
+    console.log(`[INFO] Manual message cleanup function attached to Discord client`);
+  }
+  
+  // FIX: Add a listener for storage item deletions to trigger immediate message cleanup
+  const eventEmitter = new EventEmitter();
+  // Set up any event listeners needed
+  eventEmitter.on('item_deleted', async (itemId) => {
     try {
-      console.log(`[INFO] Running initial cleanup of stale item messages`);
+      console.log(`[INFO] Item deleted event received for item ${itemId}, cleaning up message`);
       
-      // Find tracking entries for items that no longer exist in storage
-      const query = `
-        SELECT imt.item_id, imt.channel_id, imt.message_id 
-        FROM item_message_tracking imt
-        LEFT JOIN guild_storage_items gsi ON imt.item_id = gsi.id
-        WHERE gsi.id IS NULL
-      `;
+      // Find the message for this specific item
+      const trackingResult = await pool.query(
+        'SELECT channel_id, message_id FROM item_message_tracking WHERE item_id = $1',
+        [itemId]
+      );
       
-      const result = await pool.query(query);
-      console.log(`[INFO] Found ${result.rows.length} stale item messages to clean up`);
-      
-      // Process each stale message
-      for (const row of result.rows) {
-        const { item_id, channel_id, message_id } = row;
+      if (trackingResult.rows.length > 0) {
+        const { channel_id, message_id } = trackingResult.rows[0];
         
         try {
-          // Try to fetch and delete the message
+          // Delete the message
           const channel = await discordClient.channels.fetch(channel_id);
           if (channel) {
             const message = await channel.messages.fetch(message_id);
             if (message) {
               await message.delete();
-              console.log(`[INFO] Deleted stale message for item ${item_id}`);
+              console.log(`[INFO] Deleted message for deleted item ${itemId}`);
             }
           }
           
-          // Remove the tracking entry regardless of whether message deletion succeeded
-          await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
-          console.log(`[INFO] Removed tracking entry for item ${item_id}`);
+          // Remove the tracking entry
+          await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [itemId]);
+          console.log(`[INFO] Removed tracking entry for deleted item ${itemId}`);
         } catch (error) {
-          console.error(`[ERROR] Failed to clean up message for item ${item_id}: ${error.message}`);
+          console.error(`[ERROR] Failed to clean up message for deleted item ${itemId}: ${error.message}`);
           
-          // Still remove the tracking entry if the message couldn't be found
-          if (error.code === 10008) { // Unknown Message error
-            await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [item_id]);
-            console.log(`[INFO] Removed tracking entry for already deleted message for item ${item_id}`);
-          }
+          // Still remove the tracking entry
+          await pool.query('DELETE FROM item_message_tracking WHERE item_id = $1', [itemId]);
         }
-        
-        // Add a small delay between operations to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
     } catch (error) {
-      console.error(`[ERROR] Error in initial item message cleanup: ${error.message}`);
+      console.error(`[ERROR] Error handling item_deleted event: ${error.message}`);
     }
-  }, 5000); // Wait 5 seconds after startup before running initial cleanup
+  });
+  
+  // Attach the event emitter to the global scope for use in other parts of the app
+  global.itemEvents = eventEmitter;
+  
+  return { performMessageCleanup, eventEmitter };
 }
 
 app.post('/webhook/new-item', async (req, res) => {
@@ -2127,11 +2145,26 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       try {
-        
         console.log(`[INFO] Processing loot button: ${customId}`);
         const parts = customId.split('_');
-        const requestType = customId.startsWith('need_item_') ? 'NEED_ITEM' : 
-                           customId.startsWith('need_trait_') ? 'NEED_TRAIT' : 'GREED';
+        
+        // FIX: Explicitly determine request type based on button ID prefix
+        let requestType;
+        if (customId.startsWith('need_item_')) {
+          requestType = 'NEED_ITEM';
+        } else if (customId.startsWith('need_trait_')) {
+          requestType = 'NEED_TRAIT';
+        } else if (customId.startsWith('greed_item_')) {
+          requestType = 'GREED';
+        } else {
+          throw new Error(`Unknown button ID: ${customId}`);
+        }
+        
+        // Validate that requestType is one of the allowed values
+        if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(requestType)) {
+          throw new Error(`Invalid request type: ${requestType}`);
+        }
+        
         const itemId = parts[parts.length - 1];
         const discordUserId = interaction.user.id;
         const discordGuildId = interaction.guild.id;
@@ -2206,81 +2239,95 @@ client.on('interactionCreate', async (interaction) => {
             });
           }
           
-          // Make sure requestType is a valid value
-          if (!['NEED_ITEM', 'NEED_TRAIT', 'GREED'].includes(requestType)) {
-            console.error(`[ERROR] Invalid request type detected: ${requestType}`);
+          console.log(`[INFO] Processing ${requestType} request for item ${itemId} by user ${discordUserId}`);
+          
+          try {
+            // FIX: Try-catch to properly handle errors from createLootRequest
+            // Create the request using database utility
+            const result = await database.createLootRequest(guildId, itemId, discordUserId, requestType);
+            
+            if (!result.success) {
+              console.error(`[ERROR] Failed to create request: ${result.message}`);
+              if (interactionDeferred) {
+                await interaction.editReply({
+                  content: result.message || 'Failed to create request.',
+                  ephemeral: true
+                }).catch(err => console.error(`Failed to send error response: ${err.message}`));
+              }
+              return;
+            }
+            
+            const requestId = result.requestId;
+            
+            // Update tracking count based on request type
+            if (requestType === 'GREED') {
+              await pool.query(
+                `UPDATE item_message_tracking 
+                 SET greed_count = greed_count + 1, updated_at = NOW()
+                 WHERE item_id = $1`,
+                [itemId]
+              );
+            } else {
+              await pool.query(
+                `UPDATE item_message_tracking 
+                 SET need_count = need_count + 1, updated_at = NOW()
+                 WHERE item_id = $1`,
+                [itemId]
+              );
+            }
+            
+            // Update the message embed with the new counts
+            await updateItemEmbed(itemId);
+            
+            // Trigger event to notify of the request
+            if (global.itemEvents) {
+              global.itemEvents.emit('item_requested', {
+                itemId,
+                requestType,
+                userId,
+                discordUserId,
+                requestId
+              });
+            }
+            
+            // Handle the response safely in case the interaction has expired
+            try {
+              // Only try to reply if we successfully deferred earlier
+              if (interactionDeferred) {
+                await interaction.editReply({
+                  content: `✅ You have successfully requested **${item.name}** as **${requestType === 'NEED_ITEM' ? 'Need Item' : requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}**.`,
+                  ephemeral: true
+                });
+              } else {
+                console.log(`[INFO] Could not send success message to user for ${customId} - interaction was not deferred successfully`);
+                // Database operation was still completed successfully
+              }
+            } catch (replyError) {
+              console.log(`[INFO] Could not send success reply: ${replyError.message}`);
+              // We still completed the database operation successfully
+            }
+          } catch (requestError) {
+            // FIX: Handle thrown errors from the createLootRequest function
+            console.error(`[ERROR] Error creating loot request: ${requestError.message}`);
+            console.error(requestError.stack);
             
             if (interactionDeferred) {
               await interaction.editReply({
-                content: `An error occurred: Invalid request type.`,
+                content: `❌ Error: ${requestError.message}`,
                 ephemeral: true
               }).catch(err => console.error(`Failed to send error response: ${err.message}`));
             }
-            return; // Stop processing if request type is invalid
-          }
-          
-          console.log(`[INFO] Processing ${requestType} request for item ${itemId} by user ${discordUserId}`);
-          
-          // Create the request using database utility
-          const result = await database.createLootRequest(guildId, itemId, discordUserId, requestType);
-          
-          if (!result.success) {
-            console.error(`[ERROR] Failed to create request: ${result.message}`);
-            if (interactionDeferred) {
-              await interaction.editReply({
-                content: result.message || 'Failed to create request.',
-                ephemeral: true
-              }).catch(err => console.error(`Failed to send error response: ${err.message}`));
-            }
-            return;
-          }
-          
-          const requestId = result.requestId;
-          
-          // Update tracking count based on request type
-          if (requestType === 'GREED') {
-            await pool.query(
-              `UPDATE item_message_tracking 
-               SET greed_count = greed_count + 1, updated_at = NOW()
-               WHERE item_id = $1`,
-              [itemId]
-            );
-          } else {
-            await pool.query(
-              `UPDATE item_message_tracking 
-               SET need_count = need_count + 1, updated_at = NOW()
-               WHERE item_id = $1`,
-              [itemId]
-            );
-          }
-          
-          // Update the message embed with the new counts
-          await updateItemEmbed(itemId);
-          
-          // Handle the response safely in case the interaction has expired
-          try {
-            // Only try to reply if we successfully deferred earlier
-            if (interactionDeferred) {
-              await interaction.editReply({
-                content: `✅ You have successfully requested **${item.name}** as **${requestType === 'NEED_ITEM' ? 'Need Item' : requestType === 'NEED_TRAIT' ? 'Need Trait' : 'Greed'}**.`,
-                ephemeral: true
-              });
-            } else {
-              console.log(`[INFO] Could not send success message to user for ${customId} - interaction was not deferred successfully`);
-              // Database operation was still completed successfully
-            }
-          } catch (replyError) {
-            console.log(`[INFO] Could not send success reply: ${replyError.message}`);
-            // We still completed the database operation successfully
           }
         } catch (error) {
           console.error(`[ERROR] Error creating loot request: ${error.message}`);
           console.error(error.stack);
           
-          await interaction.editReply({
-            content: `❌ An error occurred while creating your request: ${error.message}`,
-            ephemeral: true
-          });
+          if (interactionDeferred) {
+            await interaction.editReply({
+              content: `❌ An error occurred while creating your request: ${error.message}`,
+              ephemeral: true
+            }).catch(err => console.error(`Failed to send error response: ${err.message}`));
+          }
         }
         
         return; // Early return to avoid the main interaction handler
@@ -2289,10 +2336,12 @@ client.on('interactionCreate', async (interaction) => {
         console.error(error.stack);
         
         try {
-          await interaction.editReply({
-            content: 'An error occurred while processing your request. Please try again.',
-            ephemeral: true
-          });
+          if (interactionDeferred) {
+            await interaction.editReply({
+              content: `Error: ${error.message}`,
+              ephemeral: true
+            });
+          }
         } catch (replyError) {
           console.error(`[ERROR] Failed to send error reply: ${replyError.message}`);
         }
