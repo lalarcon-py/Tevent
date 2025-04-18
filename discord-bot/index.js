@@ -817,45 +817,7 @@ client.on('ready', () => {
   scheduleItemMessageCleanup(client);
 });
 
-// Register slash commands
-async function registerCommands() {
-  try {
-    console.log('Registering slash commands...');
-    
-    // Define commands
-    const commands = [
-      // Existing commands would be here
-      
-      // Add cleanup-storage command
-      {
-        name: 'cleanup-storage',
-        description: 'Clean up Discord messages for items no longer in storage',
-        default_permission: false, // Restrict by default
-        default_member_permissions: '8' // Administrator permission (8 = ADMINISTRATOR)
-      }
-      // Add other commands if needed
-    ];
-    
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-    
-    // Register globally if in production, to a test guild if in development
-    if (IS_DEV && TEST_GUILD_ID) {
-      await rest.put(
-        Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, TEST_GUILD_ID),
-        { body: commands }
-      );
-      console.log(`Registered commands to test guild ${TEST_GUILD_ID}`);
-    } else {
-      await rest.put(
-        Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-        { body: commands }
-      );
-      console.log('Registered global commands');
-    }
-  } catch (error) {
-    console.error('Error registering commands:', error);
-  }
-}
+
 
 // Function to clean up Discord messages for items that no longer exist in storage
 async function scheduleItemMessageCleanup(discordClient) {
