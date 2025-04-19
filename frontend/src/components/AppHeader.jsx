@@ -15,14 +15,16 @@ import {
   SupportAgent as SupportIcon,
   AccountCircle as AccountIcon,
   Receipt as BillingIcon,
-  MoreVert as MoreIcon
+  MoreVert as MoreIcon,
+  Menu as MenuIcon
 } from '@mui/icons-material';
 import TeventLogo from '../images/Tevent Logo.png';
 import UserProfileMenu from './Header/UserProfileMenu';
 import BillingMenu from './Header/BillingMenu';
 import SupportForm from './Header/SupportForm';
+import { MobileMenuToggle } from './MobileMenu';
 
-const AppHeader = ({ showNavItems = true }) => {
+const AppHeader = ({ showNavItems = true, onMenuClick }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
@@ -79,7 +81,11 @@ const AppHeader = ({ showNavItems = true }) => {
         }}
       >
       <Toolbar sx={{ justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+        {/* Hamburger menu for mobile */}
+        {isMobile && showNavItems && (
+          <MobileMenuToggle onClick={onMenuClick} />
+        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, ml: isMobile && showNavItems ? 0 : 2 }}>
           <img 
             src={TeventLogo} 
             alt="Tevent Logo" 

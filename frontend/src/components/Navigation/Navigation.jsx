@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Drawer, List, ListItem, ListItemIcon, ListItemText, 
   Divider, IconButton, Box, useMediaQuery, useTheme,
-  AppBar, Toolbar, Typography, Button, Tooltip, Badge
+  AppBar, Toolbar, Typography, Button, Tooltip, Badge,
+  SwipeableDrawer
 } from '@mui/material';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -25,12 +26,17 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import axiosInstance from '../../config/axios';
 import DiscordIcon from '@mui/icons-material/ConnectedTv';
 
-const Navigation = ({ guildId }) => {
+const Navigation = ({ guildId, mobileOpen: propMobileOpen, setMobileOpen: propSetMobileOpen }) => {
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // We maintain our own internal state for drawer open/close
+  const [internalMobileOpen, setInternalMobileOpen] = useState(false);
+  // Use the props if provided, otherwise use internal state
+  const drawerOpen = propMobileOpen !== undefined ? propMobileOpen : internalMobileOpen;
+  const setDrawerOpen = propSetMobileOpen || setInternalMobileOpen;
+  
   const { logout, user } = useAuth();
   const [guildRole, setGuildRole] = useState('');
   const [loading, setLoading] = useState(true);
@@ -86,13 +92,14 @@ const Navigation = ({ guildId }) => {
   
   // Close mobile drawer when route changes
   useEffect(() => {
-    if (isMobile && mobileOpen) {
-      setMobileOpen(false);
+    if (isMobile && drawerOpen) {
+      setDrawerOpen(false);
     }
-  }, [location.pathname, isMobile, mobileOpen]);
+  }, [location.pathname, isMobile, drawerOpen, setDrawerOpen]);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
+  const handleDrawerToggle = (e) => {
+    // Simple, direct approach
+    setDrawerOpen(!drawerOpen);
   };
 
   const getDiscordClientId = async () => {
@@ -249,29 +256,8 @@ const Navigation = ({ guildId }) => {
     }
   }
 
-  // Define mobile menu items separately - prioritize the most important features for mobile
-  const mobileMenuItems = [
-    {
-      text: 'Events',
-      icon: <CalendarMonthIcon />,
-      path: '/event-planner'
-    },
-    {
-      text: 'Summaries',
-      icon: <SummarizeIcon />,
-      path: '/event-summaries'
-    },
-    {
-      text: 'Teams',
-      icon: <GroupsIcon />,
-      path: '/team-planner'
-    },
-    {
-      text: 'Guild',
-      icon: <GroupIcon />,
-      path: '/guild-management'
-    }
-  ];
+  // Use the same menu items for mobile as for desktop
+  // We don't need separate mobile menu items since we're using the full drawer now
 
   const drawer = (
     <>
@@ -281,8 +267,8 @@ const Navigation = ({ guildId }) => {
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center', 
-        justifyContent: 'center', // Changed to center the content
-        p: 1,
+        justifyContent: 'space-between', // Changed to space between
+        p: 2,
         position: 'relative', // Added for absolute positioning of close button
         ...isMobile ? { py: 2 } : {}
       }}>
@@ -304,11 +290,16 @@ const Navigation = ({ guildId }) => {
             onClick={handleDrawerToggle} 
             sx={{ 
               color: 'white',
-              position: 'absolute',
-              right: 8
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+              '&:hover': {
+                bgcolor: 'rgba(255, 255, 255, 0.2)'
+              },
+              padding: '8px',
+              zIndex: 9999
             }}
+            size="small"
           >
-            <CloseIcon />
+            <CloseIcon fontSize="small" />
           </IconButton>
         )}
       </Box>
@@ -322,7 +313,16 @@ const Navigation = ({ guildId }) => {
       </Box>
       
       {/* Main menu items */}
-      <List sx={{ py: 2, overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}>
+      <List sx={{ 
+        py: 2, 
+        overflowY: 'auto', 
+        maxHeight: 'calc(100vh - 250px)',
+        '& .MuiListItem-root': {
+          borderRadius: isMobile ? '8px' : '4px',
+          mx: isMobile ? 1 : 0,
+          transition: 'all 0.2s ease'
+        } 
+      }}>
           {baseMenuItems.map((item) => (
             <Tooltip title={isMobile ? item.text : ""} placement="right" key={item.text}>
               <ListItem 
@@ -445,78 +445,68 @@ const Navigation = ({ guildId }) => {
     </>
   );
 
-  // Mobile Navigation Bar - use the mobile menu items
-  const mobileNavBar = isMobile && (
-    <AppBar
-      position="fixed"
-      sx={{
-        display: { sm: 'none' },
-        top: 'auto',
-        bottom: 0,
-        bgcolor: '#1a1a1a',
-        borderTop: '1px solid rgba(255, 255, 255, 0.12)',
-        zIndex: 1200
-      }}
-    >
-      <Toolbar sx={{ justifyContent: 'space-around', minHeight: '56px', px: 1 }}>
-        {mobileMenuItems.map((item) => (
-          <IconButton
-            key={item.text}
-            component={item.onClick ? 'div' : Link}
-            to={!item.onClick ? item.path : undefined}
-            onClick={item.onClick}
-            sx={{ 
-              color: location.pathname === item.path ? '#90caf9' : 'white',
-              display: 'flex',
-              flexDirection: 'column',
-              fontSize: '0.6rem'
-            }}
-          >
-            {item.icon}
-            <Typography variant="caption" sx={{ mt: 0.5, fontSize: '0.6rem' }}>
-              {item.text}
-            </Typography>
-          </IconButton>
-        ))}
-      </Toolbar>
-    </AppBar>
-  );
+  // We've moved the hamburger menu button to the AppHeader
 
+  // Define drawer styles for reuse
+  const drawerSx = {
+    width: isMobile ? '80%' : 240,
+    flexShrink: 0,
+    [`& .MuiDrawer-paper`]: {
+      width: isMobile ? '80%' : 240,
+      maxWidth: '300px',
+      backgroundColor: '#1e1e1e',
+      borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+      boxSizing: 'border-box',
+      boxShadow: isMobile ? '4px 0 10px rgba(0,0,0,0.25)' : 'none',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      paddingTop: '0',
+    },
+    '& .MuiBackdrop-root': {
+      backdropFilter: 'blur(4px)',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)'
+    }
+  };
+  
+  // Disable auto drawer closing for clicks inside the drawer
+  const handleDrawerContentClick = (e) => {
+    // Prevent drawer from closing when clicking on its content
+    e.stopPropagation();
+  };
+  
+  // Create simple drawer content without event handlers
+  const mobileDrawerContent = (
+    <div style={{ height: '100%' }}>
+      {drawer}
+    </div>
+  );
+  
   return (
     <>
-      {/* Main navigation drawer */}
-      <Drawer
-        variant={isMobile ? "temporary" : "permanent"}
-        open={isMobile ? mobileOpen : true}
-        onClose={isMobile ? handleDrawerToggle : undefined}
-        sx={{
-          width: 240,
-          flexShrink: 0,
-          [`& .MuiDrawer-paper`]: {
-            width: 240,
-            backgroundColor: '#1e1e1e',
-            borderRight: '1px solid rgba(255, 255, 255, 0.12)',
-            boxSizing: 'border-box',
-            boxShadow: isMobile ? '4px 0 10px rgba(0,0,0,0.25)' : 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            paddingTop: '0',
-          },
-          '& .MuiBackdrop-root': {
-            backdropFilter: 'blur(4px)',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }}
-        ModalProps={{
-          keepMounted: true
-        }}
-      >
-        {drawer}
-      </Drawer>
+      {/* Desktop permanent drawer */}
+      {!isMobile && (
+        <Drawer
+          variant="permanent"
+          open={true}
+          sx={drawerSx}
+        >
+          {drawer}
+        </Drawer>
+      )}
       
-      {/* Bottom navigation for mobile */}
-      {mobileNavBar}
+      {/* Mobile drawer */}
+      {isMobile && (
+        <Drawer
+          anchor="left"
+          open={drawerOpen}
+          onClose={handleDrawerToggle}
+          variant="temporary"
+          sx={drawerSx}
+        >
+          {mobileDrawerContent}
+        </Drawer>
+      )}
     </>
   );
 };

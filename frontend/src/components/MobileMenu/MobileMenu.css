@@ -1,0 +1,32 @@
+/* MobileMenu.css */
+.hidden-burger {
+  display: none !important;
+}
+
+/* Fix for page not scrolling when menu closed on mobile */
+.bm-menu-wrap {
+  transition: all 0.3s ease-in-out !important;
+}
+
+/* Hide scrollbar but allow scrolling */
+.bm-item-list {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.bm-item-list::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, and Opera */
+}
+
+.bm-overlay {
+  top: 0;
+  left: 0;
+}
+
+/* Mobile styles */
+@media (max-width: 767px) {
+  .bm-menu-wrap {
+    width: 80% !important;
+    max-width: 320px !important;
+  }
+}

@@ -6,7 +6,10 @@ const API_URL = process.env.REACT_APP_API_URL;
 const axiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache'
+    // Don't use 'Expires' header as it causes CORS issues
   },
   withCredentials: true // Add this to handle cookies
 });

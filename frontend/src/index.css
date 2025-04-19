@@ -7,6 +7,47 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Mobile Menu Styles */
+/* Hide the default burger menu button */
+.hidden-burger {
+  display: none !important;
+}
+
+/* Allow the menu to have proper transitions */
+.bm-menu-wrap {
+  transition: all 0.3s ease !important;
+}
+
+/* Hide scrollbar but allow scrolling */
+.bm-item-list {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.bm-item-list::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, and Opera */
+}
+
+.bm-overlay {
+  top: 0;
+  left: 0;
+}
+
+/* Mobile menu item styles */
+.bm-item {
+  display: block !important;
+  padding: 0 !important;
+  margin-bottom: 8px;
+}
+
+/* Mobile menu custom width */
+@media (max-width: 767px) {
+  .bm-menu-wrap {
+    width: 80% !important;
+    max-width: 300px !important;
+  }
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;

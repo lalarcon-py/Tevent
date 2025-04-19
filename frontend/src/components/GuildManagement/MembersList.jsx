@@ -1023,8 +1023,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
           credentials: 'include',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
+            'Pragma': 'no-cache'
+            // Removed 'Expires' header that was causing CORS issues
           }
         });
         
@@ -1054,8 +1054,8 @@ const MembersList = ({ searchTerm, members, setMembers, currentUser: propCurrent
         credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
+          'Pragma': 'no-cache'
+          // Removed 'Expires' header that was causing CORS issues
         }
       });
       

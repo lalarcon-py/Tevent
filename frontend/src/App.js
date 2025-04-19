@@ -1,10 +1,11 @@
 // frontend/src/App.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
 import AppHeader from './components/AppHeader';
 import Navigation from './components/Navigation/Navigation';
+import { MobileMenu } from './components/MobileMenu';
 import GuildManagement from './components/GuildManagement/GuildManagement';
 import LootManagement from './components/LootManagement/LootManagement';
 import GearCheck from './components/GearCheck/GearCheck';
@@ -49,6 +50,28 @@ function AppContent() {
   const [currentGuildId, setCurrentGuildId] = useState(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  
+  // Add a global event handler to catch any form submissions
+  useEffect(() => {
+    const preventSubmit = (e) => {
+      // Check if this is related to our hamburger menu
+      if (e.target.closest('[aria-label="menu"]')) {
+        console.log('Preventing form submission from menu');
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+    
+    // Add the event listener
+    document.addEventListener('submit', preventSubmit, true);
+    
+    return () => {
+      // Clean up the event listener
+      document.removeEventListener('submit', preventSubmit, true);
+    };
+  }, []);
 
   // Add effect for mouse tracking (visual effect)
   useEffect(() => {
@@ -225,19 +248,43 @@ function AppContent() {
   }
 
   // User is authenticated and has guild, show full app
-  return (
-    <Router>
-      <AppHeader showNavItems={true} />
-      <Navigation guildId={currentGuildId} />
+  
+  const handleDrawerToggle = (e) => {
+    // Don't need to do anything here - the MobileMenuToggle component will handle it
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    return false;
+  };
+  
+  // We don't need this function since we're using the RouteWithDrawerClosing component
+  
+  // Define a component to wrap our content
+  const RoutesWithDrawerHandling = () => {
+    const location = useLocation();
+    
+    // We'll disable this effect for now to prevent auto-closing issues
+    // useEffect(() => {
+    //   // Only close the drawer if the path actually changed and the drawer is open
+    //   if (isMobile && mobileDrawerOpen && prevPathRef.current !== location.pathname) {
+    //     setMobileDrawerOpen(false);
+    //     // Update the ref
+    //     prevPathRef.current = location.pathname;
+    //   }
+    // }, [location.pathname, isMobile, mobileDrawerOpen]);
+    
+    return (
+      <>
       <RoleSimulationBanner />
-      <Box
+        <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: isMobile ? 2 : 3,
           ml: isMobile ? 0 : '240px',
           mt: { xs: '56px', sm: '64px' },
-          mb: isMobile ? '64px' : 0,
+          mb: 0, // Removed bottom margin since we no longer have bottom navigation
           position: 'relative',
           '&::before': {
             content: '""',
@@ -277,6 +324,18 @@ function AppContent() {
           <Route path="/static-teams" element={<StaticTeams />} />
         </Routes>
       </Box>
+      </>
+    );
+  };
+
+  return (
+    <Router>
+      <AppHeader showNavItems={true} onMenuClick={handleDrawerToggle} />
+      {/* For desktop, use the original Navigation */}
+      {!isMobile && <Navigation guildId={currentGuildId} />}
+      {/* For mobile, use our new MobileMenu */}
+      {isMobile && <MobileMenu guildId={currentGuildId} />}
+      <RoutesWithDrawerHandling />
     </Router>
   );
 }
