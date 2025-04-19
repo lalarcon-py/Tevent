@@ -299,14 +299,43 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
         return;
       }
     
-      // First, check if the user is already signed up for this event
+      // Check if user is already signed up (in any status: confirmed or tentative)
       const isAlreadySignedUp = event.participants?.some(p => p.User?.id === currentUser.id);
+      const isCurrentlyTentative = isCurrentUserTentative();
       
       if (isAlreadySignedUp) {
         setSuccessMessage("You're already signed up for this event");
         setTimeout(() => setSuccessMessage(null), 3000);
         setLoading(false);
         return;
+      }
+      
+      // If user is currently tentative, we need to remove that status first
+      if (isCurrentlyTentative) {
+        console.log('User is currently tentative, removing that status first');
+        try {
+          // Remove the tentative status
+          const guildId = localStorage.getItem('guildId');
+          const response = await fetch(`${API_URL}/api/events/${event.id}/signup`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ 
+              userId: currentUser.id,
+              guildId
+            })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to remove tentative status');
+          }
+        } catch (error) {
+          console.warn('Error removing tentative status:', error);
+          // Continue anyway - the new signup should overwrite it
+        }
       }
       
       // Get user data from public users table
@@ -350,6 +379,11 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       
       // Sign up with the determined role and include the build
       await handleSignUp(role, primaryBuild);
+      
+      // Refresh tentatives list to ensure UI is accurate
+      await fetchTentatives();
+      await onEventUpdate();
+      
       setSuccessMessage(`Successfully signed up as ${role}`);
       setTimeout(() => setSuccessMessage(null), 3000);
       
@@ -625,6 +659,14 @@ const EventDetails = ({ event, onEventUpdate, onClose }) => {
       if (isCurrentUserTentative()) {
         setSuccessMessage("You're already marked as tentative for this event");
         setTimeout(() => setSuccessMessage(null), 3000);
+        setLoading(false);
+        return;
+      }
+      
+      // Check if user is already confirmed
+      const isAlreadyConfirmed = event.participants?.some(p => p.User?.id === currentUser?.id);
+      if (isAlreadyConfirmed) {
+        setError("You're already signed up for this event. Please remove your signup first before marking as tentative.");
         setLoading(false);
         return;
       }

@@ -321,13 +321,15 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
   try {
     const { role, selectedBuild, status = 'CONFIRMED' } = req.body; // Default status is CONFIRMED
     const eventId = req.params.id;
+    const userId = req.body.userId || req.user.id;
     
     // Debug what we're receiving
     console.log('Signup data received:', {
       role,
       status,
       selectedBuild: selectedBuild ? JSON.stringify(selectedBuild).substring(0, 100) + '...' : null,
-      eventId
+      eventId,
+      userId
     });
     
     // Get guildId (existing code)
@@ -373,28 +375,39 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
       }
     }
     
+    // First, check if user has any existing signup (confirmed or tentative) and remove it
+    // This prevents a user from being both confirmed and tentative at the same time
+    await EventParticipant.destroy({
+      where: {
+        event_id: eventId,
+        user_id: userId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+    
     // Remove any existing absentee record when signing up (whether confirmed or tentative)
     await db.EventAbsentee.destroy({
       where: {
         event_id: eventId,
-        user_id: req.body.userId || req.user.id,
+        user_id: userId,
         guild_id: guildId
       },
       transaction: t
     });
 
-    // Create or update the participant
-    const [participant] = await EventParticipant.upsert({
+    // Create new participant record with the desired status
+    const participant = await EventParticipant.create({
       guild_id: guildId,
       event_id: eventId,
-      user_id: req.body.userId || req.user.id,
+      user_id: userId,
       role,
       status, // New status field
       selected_build: processedBuild // Use the processed build
     }, { transaction: t });
 
-    // Log what was actually saved
-    console.log('Participant saved:', {
+    // Log what was created
+    console.log('Participant created:', {
       id: participant.id,
       role: participant.role,
       status: participant.status,
@@ -406,7 +419,7 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
     // Notify Discord bot about the signup
     try {
       // Get user details for the notification
-      const user = await db.User.findByPk(req.body.userId || req.user.id);
+      const user = await db.User.findByPk(userId);
       
       // Use the Railway internal URL for the Discord bot
       const discordBotUrl = "http://heartfelt-sparkle.railway.internal:3300";
@@ -416,7 +429,7 @@ router.post('/:id/signup', isAuthenticated, async (req, res) => {
       await axios.post(`${discordBotUrl}/webhook/update-event-signup`, {
         guildId,
         eventId,
-        userId: req.body.userId || req.user.id,
+        userId,
         username: user.username,
         action: 'signup',
         role,

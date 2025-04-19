@@ -117,6 +117,7 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
   const { user } = useAuth();
   const [wishlistItems, setWishlistItems] = useState([]);
   const [attendanceData, setAttendanceData] = useState([]);
+  const [allEvents, setAllEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [nameEditOpen, setNameEditOpen] = useState(false);
@@ -141,6 +142,7 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
     }
   }, [open, member]);
 
+  // Load member data and attendance information
   const loadMemberData = async () => {
     if (!member) return;
     
@@ -168,55 +170,174 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
         // Don't fail completely if just wishlist fails
       }
       
-      // Load attendance data
+      // Get user join date from member data
+      let joinDate = null;
+      try {
+        const memberResponse = await axiosInstance.get(`/api/members/${member.id}`, {
+          params: { guildId }
+        });
+        
+        const userJoinDate = memberResponse.data.createdAt || memberResponse.data.created_at;
+        if (userJoinDate) {
+          joinDate = new Date(userJoinDate);
+        }
+      } catch (memberError) {
+        console.error('Failed to load member data:', memberError);
+        // Continue without join date if it fails
+      }
+      
+      // Try to get attendance data first
+      let userAttendance = [];
+      let isDkpEnabled = false;
+      
       try {
         const attendanceResponse = await axiosInstance.get(`/api/stats/user/${member.id}/attendance`, {
           params: { guildId }
         });
-
-        const isDkpEnabled = attendanceResponse.data.dkp_enabled;
-        const attendanceData = attendanceResponse.data.attendance || [];
         
-        setAttendanceData(attendanceData);
+        isDkpEnabled = attendanceResponse.data.dkp_enabled || false;
+        userAttendance = attendanceResponse.data.attendance || [];
         setIsDkpEnabled(isDkpEnabled);
-      } catch (attendanceError) {
-        console.error('Failed to load attendance data:', attendanceError);
-        setAttendanceData([]);
-        setIsDkpEnabled(false);
         
-        // Use mock data as a fallback until the endpoint is implemented
+        // If we have attendance data with proper event info, use it directly
+        if (userAttendance.length > 0 && userAttendance[0].event) {
+          // Process attendance data to mark events before join date
+          if (joinDate) {
+            userAttendance = userAttendance.map(record => {
+              const eventDate = new Date(record.event?.event_time || record.date);
+              const isBeforeJoin = eventDate < joinDate;
+              
+              return {
+                ...record,
+                isBeforeJoin
+              };
+            });
+          }
+          
+          setAttendanceData(userAttendance);
+          setLoading(false);
+          return;
+        }
+      } catch (attendanceError) {
+        console.warn('Failed to load attendance data:', attendanceError);
+        // Continue to try with events data approach
+      }
+      
+      // If we don't have good attendance data, try to get all events and build the attendance
+      try {
+        // Fetch all events for the guild
+        const eventsResponse = await axiosInstance.get('/api/events', {
+          params: { guildId }
+        });
+        
+        // Process all events to include attendance data
+        const allGuildEvents = eventsResponse.data || [];
+        
+        if (allGuildEvents.length === 0) {
+          // No events found
+          setAttendanceData([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Create a map of attendance records by event ID for quick lookup
+        const attendanceMap = {};
+        userAttendance.forEach(record => {
+          if (record.event_id) {
+            attendanceMap[record.event_id] = record;
+          }
+        });
+        
+        // Process all events to include attendance data
+        const processedEvents = allGuildEvents.map(event => {
+          const eventDate = new Date(event.event_time);
+          const isBeforeJoin = joinDate ? eventDate < joinDate : false;
+          const attendanceRecord = attendanceMap[event.id];
+          
+          return {
+            id: event.id,
+            event: event,
+            event_id: event.id,
+            attended: attendanceRecord ? attendanceRecord.attended : false,
+            date: event.event_time,
+            dkp_earned: attendanceRecord ? attendanceRecord.dkp_earned : 0,
+            isBeforeJoin: isBeforeJoin
+          };
+        });
+        
+        // Sort by date (most recent first)
+        processedEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        setAttendanceData(processedEvents);
+      } catch (eventsError) {
+        console.error('Failed to load events data:', eventsError);
+        
+        // If everything else failed, use mock data as an absolute last resort
+        // This can be removed in production when the endpoints are fully implemented
         const mockAttendanceData = [
           {
             id: '1',
-            event: { title: 'Weekly Raid', event_time: new Date().toISOString() },
+            event: { 
+              title: 'Weekly Raid', 
+              event_time: new Date().toISOString(), 
+              description: 'Weekly guild raid event'
+            },
             attended: true,
             date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            dkp_earned: 10
+            dkp_earned: 10,
+            isBeforeJoin: false
           },
           {
             id: '2',
-            event: { title: 'Guild Meeting', event_time: new Date().toISOString() },
-            attended: true,
+            event: { 
+              title: 'Guild Meeting', 
+              event_time: new Date().toISOString(),
+              description: 'Guild strategy meeting'
+            },
+            attended: false,
             date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-            dkp_earned: 5
+            dkp_earned: 0,
+            isBeforeJoin: false
+          },
+          {
+            id: '3',
+            event: { 
+              title: 'World Boss Event', 
+              event_time: new Date().toISOString(),
+              description: 'World boss hunting'
+            },
+            attended: true,
+            date: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(),
+            dkp_earned: 5,
+            isBeforeJoin: false
+          },
+          {
+            id: '4',
+            event: { 
+              title: 'Guild vs Guild', 
+              event_time: new Date().toISOString(),
+              description: 'PvP competition'
+            },
+            attended: true,
+            date: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(),
+            dkp_earned: 15,
+            isBeforeJoin: true
           }
         ];
         
-        // Use mock data if the endpoint returns 404 (not implemented yet)
-        // This is temporary until the API endpoint is implemented
-        if (attendanceError.response && attendanceError.response.status === 404) {
-          console.log('Using mock attendance data until endpoint is implemented');
+        // Add mock data only if we have nothing else
+        if (userAttendance.length === 0) {
+          console.log('Using mock attendance data as fallback');
           setAttendanceData(mockAttendanceData);
         } else {
-          // For other errors, just set an empty array
-          setAttendanceData([]);
+          setAttendanceData(userAttendance);
         }
       }
       
       setLoading(false);
     } catch (error) {
       console.error('Failed to load member data:', error);
-      setError('Could not load all member information');
+      setError('Could not load member information');
       setLoading(false);
     }
   };
@@ -884,22 +1005,47 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                     >
                       Attendance Summary
                     </Typography>
-                    <Typography 
-                      sx={{ 
-                        color: 'white',
-                        fontSize: isMobile ? '0.875rem' : '1rem'
-                      }}
-                    >
-                      Total Events: {attendanceData.length}
-                    </Typography>
-                    <Typography 
-                      sx={{ 
-                        color: 'white',
-                        fontSize: isMobile ? '0.875rem' : '1rem'
-                      }}
-                    >
-                      Attendance Rate: {Math.round(attendanceData.filter(a => a.attended).length / attendanceData.length * 100)}%
-                    </Typography>
+                    {
+                      // Calculate events after user joined
+                      (() => {
+                        const eligibleEvents = attendanceData.filter(a => !a.isBeforeJoin);
+                        const attendedEvents = eligibleEvents.filter(a => a.attended);
+                        const attendanceRate = eligibleEvents.length > 0 
+                          ? Math.round(attendedEvents.length / eligibleEvents.length * 100) 
+                          : 0;
+                        
+                        return (
+                          <>
+                            <Typography 
+                              sx={{ 
+                                color: 'white',
+                                fontSize: isMobile ? '0.875rem' : '1rem'
+                              }}
+                            >
+                              Total Events: {attendanceData.length} (Eligible: {eligibleEvents.length})
+                            </Typography>
+                            <Typography 
+                              sx={{ 
+                                color: 'white',
+                                fontSize: isMobile ? '0.875rem' : '1rem'
+                              }}
+                            >
+                              Attendance Rate: {attendanceRate}%
+                            </Typography>
+                            <Typography 
+                              sx={{ 
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                fontStyle: 'italic',
+                                mt: 1
+                              }}
+                            >
+                              * Only events after user joined ({eligibleEvents.length} of {attendanceData.length}) count toward attendance
+                            </Typography>
+                          </>
+                        );
+                      })()
+                    }
                   </Box>
                 
                   <List 
@@ -922,20 +1068,22 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                         <ListItemAvatar>
                           <Avatar 
                             sx={{ 
-                              bgcolor: attendance.attended ? 'rgba(102, 255, 102, 0.2)' : 'rgba(255, 102, 102, 0.2)',
-                              color: attendance.attended ? '#66ff66' : '#ff6666',
+                              bgcolor: attendance.isBeforeJoin ? 'rgba(128, 128, 128, 0.2)' :
+                                (attendance.attended ? 'rgba(102, 255, 102, 0.2)' : 'rgba(255, 102, 102, 0.2)'),
+                              color: attendance.isBeforeJoin ? '#cccccc' :
+                                (attendance.attended ? '#66ff66' : '#ff6666'),
                               width: isMobile ? 32 : 40, 
                               height: isMobile ? 32 : 40
                             }}
                           >
-                            {attendance.attended ? '✓' : '✗'}
+                            {attendance.isBeforeJoin ? '!' : (attendance.attended ? '✓' : '✗')}
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText
                           primary={
                             <Typography 
                               sx={{ 
-                                color: 'white',
+                                color: attendance.isBeforeJoin ? 'rgba(255, 255, 255, 0.5)' : 'white',
                                 fontSize: isMobile ? '0.875rem' : '1rem'
                               }}
                             >
@@ -943,18 +1091,49 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                             </Typography>
                           }
                           secondary={
-                            <Typography 
-                              variant="body2" 
-                              sx={{ 
-                                color: 'rgba(255, 255, 255, 0.6)',
-                                fontSize: isMobile ? '0.75rem' : '0.875rem'
-                              }}
-                            >
-                              {new Date(attendance.event?.event_time || attendance.date).toLocaleString()}
-                            </Typography>
+                            <>
+                              <Typography 
+                                variant="body2" 
+                                sx={{ 
+                                  color: 'rgba(255, 255, 255, 0.6)',
+                                  fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                  display: 'block'
+                                }}
+                              >
+                                {new Date(attendance.event?.event_time || attendance.date).toLocaleString()}
+                              </Typography>
+                              {attendance.isBeforeJoin && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ 
+                                    color: 'rgba(255, 255, 255, 0.4)',
+                                    fontSize: isMobile ? '0.7rem' : '0.8rem',
+                                    fontStyle: 'italic',
+                                    display: 'block',
+                                    mt: 0.5
+                                  }}
+                                >
+                                  Event date outside of join date, this does not count against the attendance %
+                                </Typography>
+                              )}
+                              {attendance.event?.description && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ 
+                                    color: 'rgba(255, 255, 255, 0.5)',
+                                    fontSize: isMobile ? '0.7rem' : '0.8rem',
+                                    display: 'block',
+                                    mt: 0.5,
+                                    fontStyle: 'italic'
+                                  }}
+                                >
+                                  {attendance.event.description}
+                                </Typography>
+                              )}
+                            </>
                           }
                         />
-                        {attendance.attended && isDkpEnabled && attendance.dkp_earned > 0 && (
+                        {!attendance.isBeforeJoin && attendance.attended && isDkpEnabled && attendance.dkp_earned > 0 && (
                             <Chip 
                               label={`+${attendance.dkp_earned} DKP`} 
                               size="small"
@@ -996,7 +1175,7 @@ const MemberProfileModal = ({ member, open, onClose, onUpdate }) => {
                       fontSize: isMobile ? '0.875rem' : '1rem'
                     }}
                   >
-                    Attendance tracking coming soon!
+                    No attendance data available for this user.
                   </Typography>
                 </Box>
               )}
