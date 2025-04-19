@@ -6,14 +6,6 @@ import { loadStripe } from '@stripe/stripe-js';
 
 // Initialize Stripe with your publishable key - with better error handling
 let stripePromise = null;
-try {
-  const stripeKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
-  if (stripeKey && typeof stripeKey === 'string' && stripeKey.trim() !== '') {
-    stripePromise = loadStripe(stripeKey);
-  }
-} catch (error) {
-  console.error('Failed to initialize Stripe:', error);
-}
 
 const BillingContext = createContext();
 
@@ -22,7 +14,7 @@ export const BillingProvider = ({ children }) => {
     const [subscriptionData, setSubscriptionData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [stripe, setStripe] = useState(stripePromise);
+    const [stripe, setStripe] = useState(null);
     const { user } = useAuth();
 
   useEffect(() => {
@@ -80,8 +72,8 @@ export const BillingProvider = ({ children }) => {
       });
       
       // Handle client-side confirmation if required by your payment processor
-      if (response.data.requiresAction) {
-        const stripeInstance = await stripePromise;
+      if (response.data.requiresAction && response.data.clientSecret) {
+        const stripeInstance = await stripe;
         if (!stripeInstance) {
           throw new Error('Stripe failed to initialize');
         }
@@ -95,14 +87,13 @@ export const BillingProvider = ({ children }) => {
         }
       }
       
-      // Update subscription state
-      setSubscriptionStatus('active');
-      setSubscriptionData(response.data.subscriptionData);
+      // Reload subscription data to ensure we have the latest info
+      await loadSubscriptionDetails();
       
       return response.data;
     } catch (error) {
       console.error('Subscription failed:', error);
-      setError('Subscription failed. Please try again.');
+      setError(error.response?.data?.error || 'Subscription failed. Please try again.');
       throw error;
     } finally {
       setLoading(false);
@@ -115,14 +106,15 @@ export const BillingProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      await axiosInstance.post('/api/billing/cancel');
+      const response = await axiosInstance.post('/api/billing/cancel');
       
-      // Note: don't immediately change status as subscription remains active until the end of the period
+      // Reload subscription details to ensure we have the latest info
+      await loadSubscriptionDetails();
       
-      return true;
+      return response.data;
     } catch (error) {
       console.error('Cancellation failed:', error);
-      setError('Failed to cancel subscription. Please try again.');
+      setError(error.response?.data?.error || 'Failed to cancel subscription. Please try again.');
       throw error;
     } finally {
       setLoading(false);
@@ -135,22 +127,40 @@ export const BillingProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      await axiosInstance.post('/api/billing/update-payment', { paymentMethodId });
+      const response = await axiosInstance.post('/api/billing/update-payment', { paymentMethodId });
       
-      return true;
+      // Reload subscription details
+      await loadSubscriptionDetails();
+      
+      return response.data;
     } catch (error) {
       console.error('Payment update failed:', error);
-      setError('Failed to update payment method. Please try again.');
+      setError(error.response?.data?.error || 'Failed to update payment method. Please try again.');
       throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  // Check if guild is active
-  const isGuildActive = () => {
+  // Check if guild is active based on subscription status
+  const isGuildActive = useCallback(() => {
     return subscriptionStatus === 'active' || subscriptionStatus === 'trial';
-  };
+  }, [subscriptionStatus]);
+
+  // Refresh subscription status periodically
+  useEffect(() => {
+    if (user) {
+      // Load subscription details initially
+      loadSubscriptionDetails();
+      
+      // Set up periodic check every 5 minutes
+      const intervalId = setInterval(() => {
+        loadSubscriptionDetails();
+      }, 5 * 60 * 1000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [user, loadSubscriptionDetails]);
 
   const value = {
     subscriptionStatus,

@@ -3,6 +3,9 @@ const express = require('express');
 const router = express.Router();
 const billingController = require('../controllers/billingController');
 
+// Get Stripe configuration
+router.get('/config', billingController.getConfig);
+
 // Get current subscription
 router.get('/subscription', billingController.getSubscription);
 
@@ -21,11 +24,7 @@ router.post('/cancel', billingController.cancelSubscription);
 // Update payment method
 router.post('/update-payment', billingController.updatePaymentMethod);
 
-
-router.get('/config', (req, res) => {
-    res.json({
-      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
-    });
-  });
+// Webhook endpoint - this needs raw request body, so use bodyParser.raw middleware in app.js
+router.post('/webhook', express.raw({ type: 'application/json' }), billingController.handleWebhook);
 
 module.exports = router;

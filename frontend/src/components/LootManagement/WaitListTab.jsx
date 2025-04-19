@@ -36,6 +36,7 @@ import TimerIcon from '@mui/icons-material/Timer';
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
+import RollTypeEditor from './RollTypeEditor';
 
 const WaitListTab = ({ dkpEnabled, refreshData }) => {
   const { isAuthenticated, user } = useAuth();
@@ -605,15 +606,42 @@ const WaitListTab = ({ dkpEnabled, refreshData }) => {
                             </Box>
                           </TableCell>
                           <TableCell>
-                            <Chip 
-                              label={formatNeedOrGreed(request.need_or_greed)}
-                              size="small"
-                              sx={{ 
-                                bgcolor: getNeedOrGreedBgColor(request.need_or_greed),
-                                color: getNeedOrGreedColor(request.need_or_greed),
-                                fontWeight: 'medium'
-                              }}
-                            />
+                            {hasApprovalPermission() && request.status === 'Pending' ? (
+                              <RollTypeEditor
+                                userId={request.user_id || request.user?.id}
+                                guildId={localStorage.getItem('guildId')}
+                                currentRollType={request.need_or_greed}
+                                itemId={getStorageItem(request)?.id}
+                                requestId={request.id}
+                                onRollTypeChanged={(newRollType, data) => {
+                                  // Update local state
+                                  const updatedRequests = requests.map(req => {
+                                    if (req.id === request.id) {
+                                      return { ...req, need_or_greed: newRollType };
+                                    }
+                                    return req;
+                                  });
+                                  setRequests(updatedRequests);
+                                  
+                                  // Show success notification
+                                  setNotification({
+                                    open: true,
+                                    message: `Roll type updated to ${formatNeedOrGreed(newRollType)}`,
+                                    severity: 'success'
+                                  });
+                                }}
+                              />
+                            ) : (
+                              <Chip 
+                                label={formatNeedOrGreed(request.need_or_greed)}
+                                size="small"
+                                sx={{ 
+                                  bgcolor: getNeedOrGreedBgColor(request.need_or_greed),
+                                  color: getNeedOrGreedColor(request.need_or_greed),
+                                  fontWeight: 'medium'
+                                }}
+                              />
+                            )}
                           </TableCell>
                           <TableCell>
                             {request.roll_value ? (

@@ -14,14 +14,40 @@ const axiosInstance = axios.create({
   withCredentials: true // Add this to handle cookies
 });
 
+// Global state to avoid multiple inactive guild triggers
+const state = {
+  inactiveGuildTriggered: false
+};
+
+// Helper function to get event bus
+const getEventBus = () => {
+  if (!window.eventBus) {
+    window.eventBus = {
+      listeners: {},
+      on(event, callback) {
+        if (!this.listeners[event]) {
+          this.listeners[event] = [];
+        }
+        this.listeners[event].push(callback);
+      },
+      emit(event, data) {
+        if (this.listeners[event]) {
+          this.listeners[event].forEach(callback => callback(data));
+        }
+      }
+    };
+  }
+  return window.eventBus;
+};
+
 // Add response interceptor
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Don't automatically redirect for auth endpoints
+    const eventBus = getEventBus();
+    
+    // Handle authentication errors
     if (error.response?.status === 401 && !error.config.url.includes('/auth/')) {
-      // Instead of redirecting, you can set an auth state
-      // that your app can use to show the login UI
       console.error('Authentication required');
       // Only redirect if not already on an auth-related page
       if (!window.location.pathname.includes('/auth-error') && 
@@ -32,8 +58,39 @@ axiosInstance.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+    
+    // Handle guild inactive status (402 Payment Required)
+    if (error.response?.status === 402 && 
+        error.response?.data?.code === 'GUILD_INACTIVE' &&
+        !state.inactiveGuildTriggered) {
+      
+      // Set state to avoid multiple triggers
+      state.inactiveGuildTriggered = true;
+      
+      // Emit guild inactive event with any additional data
+      const daysRemaining = error.response?.data?.daysRemaining || 0;
+      eventBus.emit('GUILD_INACTIVE', { daysRemaining });
+      
+      // Reset the trigger prevention after a small delay (but not if we navigate to billing)
+      setTimeout(() => {
+        if (!window.location.pathname.includes('/billing')) {
+          state.inactiveGuildTriggered = false;
+        }
+      }, 2000);
+      
+      // Convert the error to a more specific one
+      const enhancedError = new Error('Guild is inactive due to expired subscription');
+      enhancedError.code = 'GUILD_INACTIVE';
+      enhancedError.originalError = error;
+      enhancedError.daysRemaining = daysRemaining;
+      return Promise.reject(enhancedError);
+    }
+    
     return Promise.reject(error);
   }
 );
 
 export default axiosInstance;
+
+// Export the event bus accessor for components to listen to events
+export const getGlobalEventBus = getEventBus;

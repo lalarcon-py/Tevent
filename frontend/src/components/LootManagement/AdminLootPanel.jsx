@@ -5,7 +5,8 @@ import {
   Autocomplete, Avatar, ListItem, ListItemAvatar, ListItemText,
   Grid, Divider, Alert, FormControl, InputLabel, Select, MenuItem,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  FormLabel, RadioGroup, FormControlLabel, Radio, CircularProgress, Snackbar
+  FormLabel, RadioGroup, FormControlLabel, Radio, CircularProgress, Snackbar,
+  Stack
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -14,6 +15,7 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Added for winn
 import axiosInstance from '../../config/axios.js';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
+import ManualWinnerSelector from './ManualWinnerSelector';
 
 const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
   const { user } = useAuth();
@@ -858,7 +860,7 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
                       <DeleteIcon />
                     </IconButton>
                     
-                    {/* New Force Roll button */}
+                    {/* Force Roll button */}
                     <IconButton
                       onClick={() => handleForceRoll(item.id)}
                       disabled={forcingRollItemId === item.id}
@@ -881,6 +883,28 @@ const AdminLootPanel = ({ dkpEnabled, refreshData }) => {
                         />
                       )}
                     </IconButton>
+                    
+                    {/* Manual Winner Selector - only visible to Guild Masters */}
+                    {(user.role === 'Guild Master' || simulatedRole === 'Guild Master') && (
+                      <ManualWinnerSelector 
+                        guildId={localStorage.getItem('guildId')}
+                        itemId={item.id}
+                        itemName={item.Item ? item.Item.name : item.name}
+                        onSuccess={() => {
+                          // Refresh data after manual winner selection
+                          fetchAddedItems();
+                          if (refreshData) refreshData();
+                          
+                          // Show success notification
+                          setNotification({
+                            open: true,
+                            message: 'Winner has been manually assigned',
+                            severity: 'success'
+                          });
+                        }}
+                        disabled={item.quantity <= 0}
+                      />
+                    )}
                   </Box>
                 </TableCell>
                 <TableCell>

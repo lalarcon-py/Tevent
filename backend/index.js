@@ -59,6 +59,7 @@ const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
 const staticTeamsRoutes = require('./routes/staticTeamsRoutes');
+const rollRoutes = require('./routes/rollRoutes');
 
 
 
@@ -237,8 +238,14 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use(guildContextMiddleware);
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies - except for Stripe webhook which needs raw body
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/billing/webhook') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 app.use(express.urlencoded({ extended: true }));
 
 // Create guildMembershipMiddleware if it doesn't exist yet
@@ -320,6 +327,7 @@ app.use('/api/team-presets', guildScopeMiddleware, validateGuildMembership, team
 app.use('/api/dashboard', guildScopeMiddleware, validateGuildMembership, dashboardRouter);
 app.use('/api/guild-applications', guildScopeMiddleware, validateGuildMembership, require('./routes/guildApplicationRoutes'));
 app.use('/api/static-teams', guildScopeMiddleware, validateGuildMembership, staticTeamsRoutes);
+app.use('/api/guilds', guildScopeMiddleware, rollRoutes); // Register roll routes
 
 const guildSettingsController = require('./controllers/guildSettingsController');
 

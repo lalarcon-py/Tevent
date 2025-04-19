@@ -11,7 +11,11 @@ import CasinoIcon from '@mui/icons-material/Casino';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import WarningIcon from '@mui/icons-material/Warning';
+import RepeatIcon from '@mui/icons-material/Repeat';
 import axiosInstance from '../../config/axios';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
+import ChangeWinnerDialog from './ChangeWinnerDialog';
 
 const RollHistoryTab = ({ refreshData }) => {
   const [history, setHistory] = useState([]);
@@ -19,6 +23,12 @@ const RollHistoryTab = ({ refreshData }) => {
   const [error, setError] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedRoll, setSelectedRoll] = useState(null);
+  const { user } = useAuth();
+  const { simulatedRole } = useSimulatedRole();
+  
+  // State for change winner dialog
+  const [changeWinnerDialogOpen, setChangeWinnerDialogOpen] = useState(false);
+  const [rollToChangeWinner, setRollToChangeWinner] = useState(null);
 
   useEffect(() => {
     fetchRollHistory();
@@ -64,6 +74,34 @@ const RollHistoryTab = ({ refreshData }) => {
   const handleShowDetails = (roll) => {
     setSelectedRoll(roll);
     setDetailsOpen(true);
+  };
+
+  const handleOpenChangeWinnerDialog = (roll) => {
+    setRollToChangeWinner(roll);
+    setChangeWinnerDialogOpen(true);
+  };
+  
+  // Check if user is a Guild Master
+  const isGuildMaster = () => {
+    if (!user) return false;
+    return user.role === 'Guild Master' || simulatedRole === 'Guild Master';
+  };
+  
+  // Handle successful winner change
+  const handleWinnerChanged = (result) => {
+    // Refresh the roll history data
+    fetchRollHistory();
+    
+    // If the currently selected roll is the one that was changed, update it
+    if (selectedRoll && selectedRoll.id === rollToChangeWinner.id) {
+      setSelectedRoll(prev => ({
+        ...prev,
+        winner_id: result.newWinner.id,
+        winner_name: result.newWinner.username,
+        reprocessed: true,
+        reprocessed_note: `Winner changed from ${result.originalWinner.name} to ${result.newWinner.username}`
+      }));
+    }
   };
 
   if (loading) {
@@ -196,25 +234,39 @@ const RollHistoryTab = ({ refreshData }) => {
                   </TableCell>
                   <TableCell>
                     {roll.reprocessed && (
-                      <Tooltip title="This roll was reprocessed with updated roll logic">
+                      <Tooltip title={roll.reprocessed_note ? roll.reprocessed_note : "This roll was reprocessed with updated roll logic"}>
                         <Chip
-                          label="Reprocessed"
+                          label={roll.reprocessed_note && roll.reprocessed_note.includes("Manually") ? "Manual Assignment" : "Reprocessed"}
                           size="small"
                           sx={{
-                            bgcolor: 'rgba(156, 39, 176, 0.1)',
-                            color: '#9c27b0',
-                            border: '1px solid rgba(156, 39, 176, 0.3)'
+                            bgcolor: roll.reprocessed_note && roll.reprocessed_note.includes("Manually") ? 'rgba(156, 39, 176, 0.1)' : 'rgba(33, 150, 243, 0.1)',
+                            color: roll.reprocessed_note && roll.reprocessed_note.includes("Manually") ? '#9c27b0' : '#2196f3',
+                            border: roll.reprocessed_note && roll.reprocessed_note.includes("Manually") ? '1px solid rgba(156, 39, 176, 0.3)' : '1px solid rgba(33, 150, 243, 0.3)'
                           }}
                         />
                       </Tooltip>
                     )}
                   </TableCell>
                   <TableCell>
-                    <Tooltip title="View Details">
-                      <IconButton onClick={() => handleShowDetails(roll)}>
-                        <VisibilityIcon />
-                      </IconButton>
-                    </Tooltip>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Tooltip title="View Details">
+                        <IconButton onClick={() => handleShowDetails(roll)}>
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      
+                      {/* Change Winner button - only for Guild Masters */}
+                      {isGuildMaster() && (
+                        <Tooltip title="Change Winner">
+                          <IconButton 
+                            onClick={() => handleOpenChangeWinnerDialog(roll)}
+                            sx={{ color: '#9c27b0' }}
+                          >
+                            <RepeatIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))}
@@ -328,20 +380,40 @@ const RollHistoryTab = ({ refreshData }) => {
                       fontWeight: 'medium'
                     }}
                   />
+                  
+                  {/* Change Winner button in the details dialog */}
+                  {isGuildMaster() && (
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      size="small"
+                      startIcon={<RepeatIcon />}
+                      onClick={() => {
+                        setDetailsOpen(false); // Close details dialog
+                        handleOpenChangeWinnerDialog(selectedRoll); // Open change winner dialog
+                      }}
+                      sx={{ ml: 'auto' }}
+                    >
+                      Change Winner
+                    </Button>
+                  )}
                 </Box>
               </Box>
               
-              {/* Reprocessed Roll Notice */}
+              {/* Reprocessed or Manual Roll Notice */}
               {selectedRoll.reprocessed && (
                 <Box sx={{ 
                   p: 2, 
                   mb: 3, 
-                  bgcolor: 'rgba(156, 39, 176, 0.1)', 
+                  bgcolor: selectedRoll.reprocessed_note && selectedRoll.reprocessed_note.includes("Manually") ? 'rgba(156, 39, 176, 0.1)' : 'rgba(33, 150, 243, 0.1)', 
                   borderRadius: 1,
-                  border: '1px solid rgba(156, 39, 176, 0.3)' 
+                  border: selectedRoll.reprocessed_note && selectedRoll.reprocessed_note.includes("Manually") ? '1px solid rgba(156, 39, 176, 0.3)' : '1px solid rgba(33, 150, 243, 0.3)' 
                 }}>
-                  <Typography variant="subtitle1" sx={{ color: '#9c27b0', fontWeight: 'medium' }}>
-                    Roll Logic Update Notice
+                  <Typography variant="subtitle1" sx={{ 
+                    color: selectedRoll.reprocessed_note && selectedRoll.reprocessed_note.includes("Manually") ? '#9c27b0' : '#2196f3', 
+                    fontWeight: 'medium' 
+                  }}>
+                    {selectedRoll.reprocessed_note && selectedRoll.reprocessed_note.includes("Manually") ? 'Manual Winner Assignment' : 'Roll Logic Update Notice'}
                   </Typography>
                   <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
                     {selectedRoll.reprocessed_note || 
@@ -451,6 +523,23 @@ const RollHistoryTab = ({ refreshData }) => {
           </>
         )}
       </Dialog>
+
+      {/* Change Winner Dialog */}
+      {rollToChangeWinner && (
+        <ChangeWinnerDialog
+          open={changeWinnerDialogOpen}
+          onClose={() => setChangeWinnerDialogOpen(false)}
+          rollHistoryId={rollToChangeWinner.id}
+          guildId={localStorage.getItem('guildId')}
+          currentWinner={{
+            id: rollToChangeWinner.winner_id,
+            username: rollToChangeWinner.winner_name,
+            avatarUrl: rollToChangeWinner.winner?.avatar_url
+          }}
+          itemName={rollToChangeWinner.item_name}
+          onSuccess={handleWinnerChanged}
+        />
+      )}
     </Box>
   );
 };

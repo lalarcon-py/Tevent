@@ -32,6 +32,7 @@ import { BillingProvider, useBilling } from './contexts/BillingContext';
 import BillingPage from './pages/BillingPage';
 import InactiveGuildOverlay from './components/Billing/InactiveGuildOverlay';
 import ApplyToGuildPage from './pages/ApplyToGuildPage';
+import { getGlobalEventBus } from './config/axios';
 import AdminPortal from './pages/AdminPortal';
 import DiscordSettingsPage from "./pages/DiscordSettingsPage";
 import DiscordSetupPage from './pages/DiscordSetupPage';
@@ -100,18 +101,58 @@ function AppContent() {
   const InactiveGuildOverlayWrapper = () => {
     const { isGuildActive, subscriptionStatus, subscriptionData } = useBilling();
     const location = useLocation();
+    const [showOverlay, setShowOverlay] = useState(false);
+    const [apiDaysRemaining, setApiDaysRemaining] = useState(0);
+    
+    // Listen for GUILD_INACTIVE events from API responses
+    useEffect(() => {
+      const eventBus = getGlobalEventBus();
+      
+      const handleGuildInactive = (data) => {
+        if (data && typeof data.daysRemaining === 'number') {
+          setApiDaysRemaining(data.daysRemaining);
+        }
+        setShowOverlay(true);
+      };
+      
+      eventBus.on('GUILD_INACTIVE', handleGuildInactive);
+      
+      return () => {
+        // Clean up listener when component unmounts
+        const listeners = eventBus.listeners['GUILD_INACTIVE'];
+        if (listeners) {
+          const index = listeners.indexOf(handleGuildInactive);
+          if (index !== -1) {
+            listeners.splice(index, 1);
+          }
+        }
+      };
+    }, []);
     
     // Don't show overlay on billing page or non-guild pages
     const excludedPaths = ['/billing', '/login', '/guilds/setup', '/applications', '/auth-error'];
     const shouldExclude = excludedPaths.some(path => location.pathname.includes(path));
     
-    if (shouldExclude || isGuildActive()) {
+    // Reset overlay when navigating to billing page
+    useEffect(() => {
+      if (location.pathname.includes('/billing')) {
+        setShowOverlay(false);
+      }
+    }, [location.pathname]);
+    
+    // Check subscription status 
+    const shouldShowFromStatus = !shouldExclude && !isGuildActive();
+    
+    // If we should show overlay either from API event or subscription status
+    if (!shouldShowFromStatus && !showOverlay) {
       return null;
     }
     
     // Calculate days remaining until guild deletion
-    let daysRemaining = 0;
-    if (subscriptionData?.lastActiveDate) {
+    let daysRemaining = apiDaysRemaining;
+    
+    // If we have subscription data and no API days remaining value, calculate from subscription
+    if (subscriptionData?.lastActiveDate && daysRemaining === 0) {
       const lastActiveDate = new Date(subscriptionData.lastActiveDate);
       const deletionDate = new Date(lastActiveDate);
       deletionDate.setDate(deletionDate.getDate() + 14);
