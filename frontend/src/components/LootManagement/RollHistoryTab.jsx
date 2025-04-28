@@ -12,10 +12,12 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import WarningIcon from '@mui/icons-material/Warning';
 import RepeatIcon from '@mui/icons-material/Repeat';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import axiosInstance from '../../config/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSimulatedRole } from '../../contexts/SimulatedRoleContext';
 import ChangeWinnerDialog from './ChangeWinnerDialog';
+import AddToRollDialog from './AddToRollDialog';
 
 const RollHistoryTab = ({ refreshData }) => {
   const [history, setHistory] = useState([]);
@@ -26,9 +28,11 @@ const RollHistoryTab = ({ refreshData }) => {
   const { user } = useAuth();
   const { simulatedRole } = useSimulatedRole();
   
-  // State for change winner dialog
+  // State for change winner and add to roll dialogs
   const [changeWinnerDialogOpen, setChangeWinnerDialogOpen] = useState(false);
   const [rollToChangeWinner, setRollToChangeWinner] = useState(null);
+  const [addToRollDialogOpen, setAddToRollDialogOpen] = useState(false);
+  const [rollToAddUser, setRollToAddUser] = useState(null);
 
   useEffect(() => {
     fetchRollHistory();
@@ -81,10 +85,22 @@ const RollHistoryTab = ({ refreshData }) => {
     setChangeWinnerDialogOpen(true);
   };
   
+  const handleOpenAddToRollDialog = (roll) => {
+    setRollToAddUser(roll);
+    setAddToRollDialogOpen(true);
+  };
+  
   // Check if user is a Guild Master
   const isGuildMaster = () => {
     if (!user) return false;
     return user.role === 'Guild Master' || simulatedRole === 'Guild Master';
+  };
+  
+  // Check if user has admin privileges (Guild Master, Advisor, or Guardian)
+  const hasAdminPrivileges = () => {
+    if (!user) return false;
+    const userRole = simulatedRole || user.role;
+    return ['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(userRole);
   };
   
   // Handle successful winner change
@@ -101,6 +117,33 @@ const RollHistoryTab = ({ refreshData }) => {
         reprocessed: true,
         reprocessed_note: `Winner changed from ${result.originalWinner.name} to ${result.newWinner.username}`
       }));
+    }
+  };
+  
+  // Handle successful user added to roll
+  const handleUserAddedToRoll = (result) => {
+    // Refresh the roll history data
+    fetchRollHistory();
+    
+    // If the currently selected roll is the one that was modified, update it
+    if (selectedRoll && selectedRoll.id === rollToAddUser.id) {
+      // Get updated roll data
+      fetchRollDetails(selectedRoll.id);
+    }
+  };
+  
+  // Fetch detailed roll information for a specific roll
+  const fetchRollDetails = async (rollId) => {
+    try {
+      const guildId = localStorage.getItem('guildId');
+      if (!guildId || !rollId) return;
+      
+      const response = await axiosInstance.get(`/api/guild-storage/roll-history/${rollId}?guildId=${guildId}`);
+      if (response.data) {
+        setSelectedRoll(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching roll details:', error);
     }
   };
 
@@ -266,6 +309,18 @@ const RollHistoryTab = ({ refreshData }) => {
                           </IconButton>
                         </Tooltip>
                       )}
+                      
+                      {/* Add to Roll button - for Guild Masters, Advisors, and Guardians */}
+                      {hasAdminPrivileges() && (
+                        <Tooltip title="Add User to Roll">
+                          <IconButton 
+                            onClick={() => handleOpenAddToRollDialog(roll)}
+                            sx={{ color: '#4caf50' }}
+                          >
+                            <AddCircleOutlineIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -381,22 +436,40 @@ const RollHistoryTab = ({ refreshData }) => {
                     }}
                   />
                   
-                  {/* Change Winner button in the details dialog */}
-                  {isGuildMaster() && (
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      size="small"
-                      startIcon={<RepeatIcon />}
-                      onClick={() => {
-                        setDetailsOpen(false); // Close details dialog
-                        handleOpenChangeWinnerDialog(selectedRoll); // Open change winner dialog
-                      }}
-                      sx={{ ml: 'auto' }}
-                    >
-                      Change Winner
-                    </Button>
-                  )}
+                  <Box sx={{ display: 'flex', ml: 'auto' }}>
+                    {/* Add to Roll button in the details dialog */}
+                    {hasAdminPrivileges() && (
+                      <Button
+                        variant="outlined"
+                        color="success"
+                        size="small"
+                        startIcon={<AddCircleOutlineIcon />}
+                        onClick={() => {
+                          setDetailsOpen(false); // Close details dialog
+                          handleOpenAddToRollDialog(selectedRoll); // Open add to roll dialog
+                        }}
+                        sx={{ mr: 1 }}
+                      >
+                        Add User
+                      </Button>
+                    )}
+                    
+                    {/* Change Winner button in the details dialog */}
+                    {isGuildMaster() && (
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        size="small"
+                        startIcon={<RepeatIcon />}
+                        onClick={() => {
+                          setDetailsOpen(false); // Close details dialog
+                          handleOpenChangeWinnerDialog(selectedRoll); // Open change winner dialog
+                        }}
+                      >
+                        Change Winner
+                      </Button>
+                    )}
+                  </Box>
                 </Box>
               </Box>
               
@@ -538,6 +611,19 @@ const RollHistoryTab = ({ refreshData }) => {
           }}
           itemName={rollToChangeWinner.item_name}
           onSuccess={handleWinnerChanged}
+        />
+      )}
+      
+      {/* Add User to Roll Dialog */}
+      {rollToAddUser && (
+        <AddToRollDialog
+          open={addToRollDialogOpen}
+          onClose={() => setAddToRollDialogOpen(false)}
+          rollHistoryId={rollToAddUser.id}
+          guildId={localStorage.getItem('guildId')}
+          itemName={rollToAddUser.item_name}
+          itemIcon={rollToAddUser.item_icon}
+          onSuccess={handleUserAddedToRoll}
         />
       )}
     </Box>

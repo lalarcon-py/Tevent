@@ -906,4 +906,59 @@ router.get('/roll-history', async (req, res) => {
   }
 });
 
+// Get specific roll history record
+router.get('/roll-history/:rollHistoryId', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    const { rollHistoryId } = req.params;
+    const guildId = req.guildId || req.query.guildId;
+    
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+    
+    // Check if table exists
+    const [tableCheck] = await db.sequelize.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'roll_history'
+      );
+    `);
+    
+    const tableExists = tableCheck[0].exists;
+    
+    if (!tableExists) {
+      return res.status(404).json({ error: 'Roll history table does not exist' });
+    }
+    
+    // Use raw SQL query to get the specific roll history record
+    const [history] = await db.sequelize.query(`
+      SELECT 
+        rh.*, 
+        u.username as "winner.username", 
+        u.avatar_url as "winner.avatar_url", 
+        u.discord_id as "winner.discord_id"
+      FROM roll_history rh
+      LEFT JOIN users u ON rh.winner_id = u.id
+      WHERE rh.id = :rollHistoryId AND rh.guild_id = :guildId
+    `, {
+      replacements: { rollHistoryId, guildId },
+      type: db.sequelize.QueryTypes.SELECT
+    });
+    
+    if (!history) {
+      return res.status(404).json({ error: 'Roll history record not found' });
+    }
+    
+    res.json(history);
+  } catch (error) {
+    console.error('Error fetching specific roll history:', error);
+    res.status(500).json({ error: 'Failed to fetch roll history record' });
+  }
+});
+
 module.exports = router;

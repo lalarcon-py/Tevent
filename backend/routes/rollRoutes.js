@@ -872,6 +872,304 @@ router.post('/:guildId/change-winner/:rollHistoryId', async (req, res) => {
   }
 });
 
+// Add user to a roll that has already completed
+router.post('/:guildId/rolls/add-to-roll/:rollHistoryId', async (req, res) => {
+  // Start a transaction to ensure data consistency
+  const t = await sequelize.transaction();
+  
+  try {
+    const { guildId, rollHistoryId } = req.params;
+    const { userId, rollType, note } = req.body;
+    
+    // Validate required input
+    if (!userId) {
+      await t.rollback();
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    // Validate rollType
+    const validRollTypes = ['NEED_ITEM', 'NEED_TRAIT', 'GREED'];
+    if (!validRollTypes.includes(rollType)) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Invalid roll type' });
+    }
+    
+    // Check if requester has permissions (Guild Master, Advisor, or Guardian)
+    const requesterMembership = await GuildMember.findOne({
+      where: { 
+        guild_id: guildId,
+        user_id: req.user.id
+      },
+      transaction: t
+    });
+    
+    if (!requesterMembership || !['Guild Master', 'Guild Advisor', 'Guild Guardian'].includes(requesterMembership.role)) {
+      await t.rollback();
+      return res.status(403).json({ 
+        error: 'Permission denied',
+        message: 'Only Guild Masters, Advisors, and Guardians can add users to rolls'
+      });
+    }
+    
+    // Get roll history record
+    const rollHistory = await RollHistory.findOne({
+      where: {
+        id: rollHistoryId,
+        guild_id: guildId
+      },
+      transaction: t
+    });
+    
+    if (!rollHistory) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Roll history record not found' });
+    }
+    
+    // Get the user details
+    const user = await User.findByPk(userId, { transaction: t });
+    if (!user) {
+      await t.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Check if the user is a member of the guild
+    const userMembership = await GuildMember.findOne({
+      where: {
+        guild_id: guildId,
+        user_id: userId
+      },
+      transaction: t
+    });
+    
+    if (!userMembership) {
+      await t.rollback();
+      return res.status(404).json({ error: 'User is not a member of this guild' });
+    }
+    
+    // Parse existing roll results
+    let rollResults = [];
+    
+    if (rollHistory.roll_results) {
+      if (Array.isArray(rollHistory.roll_results)) {
+        rollResults = rollHistory.roll_results;
+      } else if (typeof rollHistory.roll_results === 'string') {
+        try {
+          rollResults = JSON.parse(rollHistory.roll_results);
+        } catch (parseError) {
+          console.error('Error parsing roll_results string:', parseError);
+          rollResults = []; // Use empty array as fallback
+        }
+      } else if (typeof rollHistory.roll_results === 'object') {
+        // Handle case where it might be a JSONB object already
+        rollResults = Object.values(rollHistory.roll_results);
+      }
+    }
+    
+    // Check if user is already in the roll
+    const existingUserRoll = rollResults.find(r => r.user_id === userId || r.user_id?.toString() === userId?.toString());
+    
+    if (existingUserRoll) {
+      await t.rollback();
+      return res.status(400).json({ 
+        error: 'User already participated in this roll',
+        message: `${user.username} already rolled with a value of ${existingUserRoll.roll_value}`
+      });
+    }
+    
+    // Generate a roll value for the user (1-100)
+    const userRollValue = Math.floor(Math.random() * 100) + 1;
+    
+    // Determine if this user should be the new winner
+    let isNewWinner = false;
+    let originalWinnerId = rollHistory.winner_id;
+    let originalWinnerName = rollHistory.winner_name;
+    let originalWinnerRoll = rollHistory.winner_roll;
+    
+    // Priority order: NEED_ITEM > NEED_TRAIT > GREED
+    const needPriority = {
+      'NEED_ITEM': 3,
+      'NEED_TRAIT': 2,
+      'GREED': 1
+    };
+    
+    // Get current winner's priority
+    const currentWinnerPriority = needPriority[rollHistory.winner_need_type] || 0;
+    // Get new user's priority
+    const newUserPriority = needPriority[rollType] || 0;
+    
+    // Check if user should win based on priority and roll value
+    if (newUserPriority > currentWinnerPriority || 
+        (newUserPriority === currentWinnerPriority && userRollValue > rollHistory.winner_roll)) {
+      isNewWinner = true;
+    }
+    
+    // Create new roll result entry
+    const newRollResult = {
+      id: `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      user_id: userId,
+      username: user.username,
+      avatar_url: user.avatar_url || null,
+      roll_value: userRollValue,
+      need_or_greed: rollType,
+      winner: isNewWinner
+    };
+    
+    // Update all existing results if there's a new winner
+    if (isNewWinner) {
+      rollResults = rollResults.map(result => ({
+        ...result,
+        winner: false
+      }));
+    }
+    
+    // Add the new roll result
+    rollResults.push(newRollResult);
+    
+    // Check if the new user has previously won this item
+    let isRepeatedWin = false;
+    let previousWinDate = null;
+    
+    if (isNewWinner) {
+      const previousWins = await RollHistory.findAll({
+        where: {
+          guild_id: guildId,
+          winner_id: userId,
+          item_name: rollHistory.item_name,
+          winner_need_type: {
+            [Op.in]: ['NEED_ITEM', 'NEED_TRAIT']
+          },
+          id: { [Op.ne]: rollHistoryId } // Exclude current roll history
+        },
+        order: [['roll_time', 'ASC']],
+        transaction: t
+      });
+      
+      if (previousWins.length > 0) {
+        isRepeatedWin = true;
+        previousWinDate = previousWins[0].roll_time;
+      }
+    }
+    
+    // Create the change note
+    const changeNote = note || 
+      `User ${user.username} added to roll by ${req.user.username}${isNewWinner ? ' and became the new winner' : ''}`;
+    
+    // Update roll history
+    const updateData = {
+      roll_results: rollResults,
+      reprocessed: true,
+      reprocessed_note: changeNote
+    };
+    
+    // If there's a new winner, update winner data
+    if (isNewWinner) {
+      updateData.winner_id = userId;
+      updateData.winner_name = user.username;
+      updateData.winner_roll = userRollValue;
+      updateData.winner_need_type = rollType;
+      updateData.is_repeated_win = isRepeatedWin;
+      
+      if (previousWinDate) {
+        updateData.previous_win_date = previousWinDate;
+      }
+    }
+    
+    await rollHistory.update(updateData, { transaction: t });
+    
+    // Prepare response data
+    const responseData = {
+      success: true,
+      message: `${user.username} has been added to the roll${isNewWinner ? ' and is now the winner' : ''}`,
+      rollHistoryId: rollHistory.id,
+      addedUser: {
+        id: userId,
+        username: user.username,
+        roll: userRollValue,
+        rollType: rollType
+      }
+    };
+    
+    // Include original winner data if there's a change
+    if (isNewWinner) {
+      responseData.originalWinner = {
+        id: originalWinnerId,
+        name: originalWinnerName,
+        roll: originalWinnerRoll
+      };
+      responseData.newWinner = {
+        id: userId,
+        username: user.username,
+        roll: userRollValue,
+        rollType: rollType
+      };
+    }
+    
+    // Send Discord notification
+    try {
+      const discordBotUrl = process.env.DISCORD_BOT_URL || "http://localhost:3300";
+      const requester = await User.findByPk(req.user.id);
+      
+      if (isNewWinner) {
+        // Notify about winner change
+        await axios.post(`${discordBotUrl}/webhook/roll-results`, {
+          guildId: guildId,
+          itemName: rollHistory.item_name,
+          winner: {
+            userId: userId,
+            username: user.username,
+            roll: userRollValue,
+            needOrGreed: rollType
+          },
+          originalWinner: {
+            userId: originalWinnerId,
+            username: originalWinnerName,
+            roll: originalWinnerRoll
+          },
+          winnerChanged: true,
+          changeReason: `${user.username} was added to the roll and won with a ${userRollValue} ${formatRollType(rollType)} roll`,
+          assignedBy: req.user.username,
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+      } else {
+        // Notify about user added to roll
+        await axios.post(`${discordBotUrl}/webhook/roll-user-added`, {
+          guildId: guildId,
+          itemName: rollHistory.item_name,
+          user: {
+            userId: userId,
+            username: user.username,
+            roll: userRollValue,
+            needOrGreed: rollType
+          },
+          winner: {
+            userId: rollHistory.winner_id,
+            username: rollHistory.winner_name,
+            roll: rollHistory.winner_roll,
+            needOrGreed: rollHistory.winner_need_type
+          },
+          addedBy: req.user.username,
+          secret: process.env.BOT_WEBHOOK_SECRET
+        });
+      }
+    } catch (discordError) {
+      console.warn('Failed to send Discord notification:', discordError.message);
+      // Continue even if Discord notification fails
+    }
+    
+    // Commit transaction
+    await t.commit();
+    
+    return res.json(responseData);
+  } catch (error) {
+    // Rollback transaction on error
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    console.error('Error adding user to roll:', error);
+    res.status(500).json({ error: 'Failed to add user to roll' });
+  }
+});
+
 // Helper function to format roll type for display
 function formatRollType(type) {
   switch (type) {
