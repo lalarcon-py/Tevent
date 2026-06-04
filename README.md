@@ -1,6 +1,6 @@
 # TeventGM - Throne and Liberty Guild Management System
 
-**Copyright © 2024-2025 Luis Alarcon. All Rights Reserved.**
+**Copyright © 2024-2026 Luis Alarcon. All Rights Reserved.**
 
 ## 📜 Intellectual Property Notice
 
@@ -16,7 +16,7 @@ This project, **TeventGM (Throne and Liberty Guild Buddy)**, is the intellectual
 When using any part of this project, you must include:
 ```
 Based on TeventGM by Luis Alarcon (https://github.com/lalarcon-py/Tevent)
-Original Copyright © 2024-2025 Luis Alarcon. All Rights Reserved.
+Original Copyright © 2024-2026 Luis Alarcon. All Rights Reserved.
 ```
 
 ---
@@ -344,4 +344,4 @@ For questions, support, or commercial licensing inquiries, please contact Luis A
 
 **Remember**: This project represents significant development effort. Please respect the intellectual property rights and always provide proper attribution when using any portion of this codebase.
 
-**Copyright © 2024-2025 Luis Alarcon. All Rights Reserved.**
+**Copyright © 2024-2026 Luis Alarcon. All Rights Reserved.**
