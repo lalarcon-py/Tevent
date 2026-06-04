@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 function checkDependencies() {
-  // Check if environment variables are set
+  // Logging for env variables, can uncomment if facing issues with them
   const requiredEnvVars = [
     'DISCORD_BOT_TOKEN',
     'DISCORD_CLIENT_ID',
@@ -25,7 +25,7 @@ function checkDependencies() {
   return true;
 }
 
-// Check dependencies before attempting to load the bot
+// BOT WILL NOT LOAD WITHOUT DEPENDENCIES, BUT THIS PREVENTS CRASHES AND PROVIDES ERROR MESSAGES
 if (checkDependencies()) {
   try {
     const discordBot = require('./discord-bot/index.js');

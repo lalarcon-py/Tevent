@@ -15,14 +15,12 @@ import { useParams } from 'react-router-dom';
 import { useGuildContext } from '../contexts/GuildContext';
 import api from '../services/api';
 
-// Import all Discord setting components
 import ChannelConfig from '../components/DiscordSettings/ChannelConfig';
 import BotStatus from '../components/DiscordSettings/BotStatus';
 import RolePingConfig from '../components/DiscordSettings/RolePingConfig';
 import IntegrationSettings from '../components/DiscordSettings/IntegrationSettings';
 import WebhookSettings from '../components/DiscordSettings/WebhookSettings';
 
-// Tab panel component
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
 
@@ -43,7 +41,6 @@ function TabPanel(props) {
   );
 }
 
-// Tab props function
 function a11yProps(index) {
   return {
     id: `discord-settings-tab-${index}`,

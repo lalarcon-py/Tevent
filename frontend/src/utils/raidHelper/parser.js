@@ -52,18 +52,17 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
       console.error('Invalid date format:', raidHelperData.date);
       eventTime = new Date(); // Default to current time
     } else {
-      // Try both date formats (MM-DD-YYYY and DD-MM-YYYY)
-      // We'll check which one makes more sense
+      // Try both date formats and see which one produces a valid date
       const firstNum = parseInt(dateParts[0]);
       const secondNum = parseInt(dateParts[1]);
       
       // If first number is > 12, it must be a day (DD-MM-YYYY)
       if (firstNum > 12) {
         const day = firstNum;
-        const month = secondNum - 1; // JS months are 0-indexed
+        const month = secondNum - 1; 
         const year = parseInt(dateParts[2]);
         
-        // Parse time (default to start of day if not provided)
+        // Parse time
         let hour = 0, minute = 0;
         if (raidHelperData.time) {
           const timeParts = raidHelperData.time.split(':');
@@ -80,11 +79,11 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
       } 
       // If second number is > 12, first must be month (MM-DD-YYYY)
       else if (secondNum > 12) {
-        const month = firstNum - 1; // JS months are 0-indexed
+        const month = firstNum - 1;
         const day = secondNum;
         const year = parseInt(dateParts[2]);
         
-        // Parse time (default to start of day if not provided)
+        // Parse time
         let hour = 0, minute = 0;
         if (raidHelperData.time) {
           const timeParts = raidHelperData.time.split(':');
@@ -99,13 +98,12 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
           isoString: eventTime.toISOString()
         });
       }
-      // If both numbers are <= 12, we have to make an assumption (assume DD-MM-YYYY)
       else {
         const day = firstNum;
-        const month = secondNum - 1; // JS months are 0-indexed
+        const month = secondNum - 1;
         const year = parseInt(dateParts[2]);
         
-        // Parse time (default to start of day if not provided)
+        // Parse time
         let hour = 0, minute = 0;
         if (raidHelperData.time) {
           const timeParts = raidHelperData.time.split(':');
@@ -123,13 +121,13 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
     }
   }
   
-  // Fallback if no valid date was found
+  // No valid date was found
   if (!eventTime) {
     console.warn('No valid date information found, using current time');
     eventTime = new Date();
   }
   
-  // We DON'T convert the UTC time - just store the timezone info for display later
+  // store the timezone info for display later
   console.log('Original UTC date:', {
     originalDate: eventTime,
     timestamp: originalTimestamp,
@@ -140,7 +138,7 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
   // Format as ISO string and truncate to minutes (YYYY-MM-DDTHH:MM)
   const formattedTime = eventTime ? eventTime.toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16);
   
-  // Also log the raw data to help with debugging
+  /*
   console.log('Raw Raid Helper data:', {
     date: raidHelperData.date,
     time: raidHelperData.time,
@@ -149,8 +147,9 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
     closingTime: raidHelperData.closingTime,
     formattedTime: formattedTime
   });
+  */
   
-  // Create event object in TeventGM format
+  // Create event object
   const event = {
     timezone: selectedTimezone, // Store the selected timezone
     originalTimestamp: originalTimestamp, // Store the original Unix timestamp
@@ -158,23 +157,18 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
     description: raidHelperData.description || 'Imported from Raid Helper',
     eventTime: formattedTime,
     location: raidHelperData.location || '',
-    // Set reasonable defaults if not specified
     tanks: countRoleSignups(raidHelperData.signUps, 'Tank'),
     healers: countRoleSignups(raidHelperData.signUps, 'Healer'),
     dps: countRoleSignups(raidHelperData.signUps, 'Dps'),
     requirements: '',
     importedFromRaidHelper: true,
-    closingTime: raidHelperData.closingTime || null, // Include closing time as backup
-    rawStartTime: raidHelperData.startTime || null // Include raw start time
+    closingTime: raidHelperData.closingTime || null, 
+    rawStartTime: raidHelperData.startTime || null
   };
   
-  // Also try checking closingTime since it's sometimes more reliable
   if (raidHelperData.closingTime) {
     console.log('Raw closingTime from Raid Helper:', raidHelperData.closingTime);
     
-    // closingTime is sometimes a more reliable indicator of the actual event time
-    // It's typically set to the end time of the event
-    // We'll use it if available, but log both for debugging
     const closingTimestamp = parseInt(raidHelperData.closingTime) * 1000;
     const closingDate = new Date(closingTimestamp);
     
@@ -184,14 +178,11 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
       isoString: closingDate.toISOString()
     });
     
-    // Add this to the event data to help with date determination on the backend
     event.closingTimeFormatted = closingDate.toISOString().slice(0, 16);
   }
 
-  // Parse participants
   const participants = parseParticipants(raidHelperData.signUps);
 
-  // Parse teams (each tank could be a team leader)
   const teams = createTeamsFromParticipants(participants);
 
   return {
@@ -201,12 +192,6 @@ export const parseRaidHelperData = (raidHelperData, timezone = 'America/New_York
   };
 };
 
-/**
- * Counts the number of signups for a specific role
- * @param {Array} signUps - The signups from Raid Helper
- * @param {String} roleName - The role to count (Tank, Healer, Dps)
- * @returns {Number} The count of signups for that role
- */
 const countRoleSignups = (signUps, roleName) => {
   if (!signUps || !Array.isArray(signUps)) {
     return 0;
@@ -218,20 +203,15 @@ const countRoleSignups = (signUps, roleName) => {
   ).length;
 };
 
-/**
- * Parses participants from Raid Helper signups
- * @param {Array} signUps - The signups from Raid Helper
- * @returns {Array} Participants in TeventGM format
- */
 const parseParticipants = (signUps) => {
   if (!signUps || !Array.isArray(signUps)) {
     return [];
   }
 
   return signUps
-    .filter(signup => signup.status === 'primary') // Only include primary signups
+    .filter(signup => signup.status === 'primary') // Only include primary signup (exclude bench, absence, etc.)
     .map(signup => {
-      // Map Raid Helper roles to TeventGM roles
+      // Map Raid Helper roles to Tevent roles
       let role;
       switch (signup.className) {
         case 'Tank':
@@ -244,11 +224,10 @@ const parseParticipants = (signUps) => {
           role = 'DPS';
           break;
         default:
-          role = 'DPS'; // Default to DPS for unknown roles
+          role = 'DPS';
       }
 
-      // Determine status based on className or specName
-      let status = 'CONFIRMED'; // Default status
+      let status = 'CONFIRMED';
       
       if (signup.className === 'Absence') {
         status = 'ABSENT';
@@ -258,7 +237,6 @@ const parseParticipants = (signUps) => {
         status = 'TENTATIVE';
       } else if (signup.className === 'Late') {
         status = 'CONFIRMED'; // Late is still confirmed, but marked as late
-        // We'll add a flag for UI display purposes
       } else if (signup.specName === 'Tentative') {
         status = 'TENTATIVE';
       } else if (signup.specName === 'Absent') {
@@ -273,28 +251,23 @@ const parseParticipants = (signUps) => {
         name: signup.name,
         role,
         specName: signup.specName || '',
-        userId: signup.userId, // Save the Discord user ID for potential matching
+        userId: signup.userId, // DiscordID
         discordId: signup.userId,
-        status, // Added status field
-        isLate // Flag for late arrival
+        status, 
+        isLate
       };
     });
 };
 
-/**
- * Creates potential teams from participants
- * @param {Array} participants - The parsed participants
- * @returns {Array} Teams in TeventGM format
- */
+
 const createTeamsFromParticipants = (participants) => {
-  // Get all tanks as potential team leaders
+  // Get all tanks as team leaders
   const tanks = participants.filter(p => p.role === 'TANK');
   
   if (tanks.length === 0) {
     return []; // No tanks, no teams
   }
 
-  // Create one team per tank
   return tanks.map((tank, index) => {
     return {
       name: `Team ${index + 1}`,
@@ -304,11 +277,6 @@ const createTeamsFromParticipants = (participants) => {
   });
 };
 
-/**
- * Validates the Raid Helper data format
- * @param {String} jsonString - The JSON string to validate
- * @returns {Object|null} The parsed data if valid, null if invalid
- */
 export const validateRaidHelperData = (jsonString) => {
   try {
     const data = JSON.parse(jsonString);

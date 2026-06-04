@@ -43,7 +43,7 @@ const API_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:5000'
   : process.env.REACT_APP_API_URL;
 
-// Main App content with authentication checking
+// Main App content
 function AppContent() {
   const { isAuthenticated, user, checkAuth } = useAuth();
   const [hasGuild, setHasGuild] = useState(false);
@@ -53,7 +53,7 @@ function AppContent() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   
-  // Add a global event handler to catch any form submissions
+  // Global event handler to catch form submissions
   useEffect(() => {
     const preventSubmit = (e) => {
       // Check if this is related to our hamburger menu
@@ -65,16 +65,15 @@ function AppContent() {
       }
     };
     
-    // Add the event listener
     document.addEventListener('submit', preventSubmit, true);
     
     return () => {
-      // Clean up the event listener
+      // Without this, you're gonna end up with memory leaks at scale
       document.removeEventListener('submit', preventSubmit, true);
     };
   }, []);
 
-  // Add effect for mouse tracking (visual effect)
+  // MOUSE TRACKING EFFECT WOO
   useEffect(() => {
     const handleMouseMove = (e) => {
       document.documentElement.style.setProperty('--mouse-x', `${e.clientX}px`);
@@ -85,15 +84,14 @@ function AppContent() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Add effect to ensure auth is checked periodically, but less frequently
+  // Add effect to ensure auth is checked periodically
   useEffect(() => {
-    // Check auth immediately on mount
+    // Happens on mount and whenever checkAuth function changes (which it shouldn't, but just in case)
     checkAuth();
     
-    // And set up interval for periodic checks, but with a much longer interval
     const interval = setInterval(() => {
       checkAuth();
-    }, 600000); // Check every 10 minutes instead of 5 minutes
+    }, 600000); 
     
     return () => clearInterval(interval);
   }, [checkAuth]);
@@ -129,11 +127,11 @@ function AppContent() {
       };
     }, []);
     
-    // Don't show overlay on billing page or non-guild pages
+    // Add paths here as needed to exclude the overlay 
     const excludedPaths = ['/billing', '/login', '/guilds/setup', '/applications', '/auth-error'];
     const shouldExclude = excludedPaths.some(path => location.pathname.includes(path));
     
-    // Reset overlay when navigating to billing page
+    // Reset overlay when going to billing page
     useEffect(() => {
       if (location.pathname.includes('/billing')) {
         setShowOverlay(false);
@@ -164,7 +162,8 @@ function AppContent() {
     return <InactiveGuildOverlay daysRemaining={daysRemaining} />;
   };
 
-  // Check guild membership when auth state changes
+  // Check guild membership when auth state changes, to prevent unwanted access to the app when not in a guild. 
+  // This also handles the case of users leaving guilds while logged in, which would otherwise cause errors since the app assumes guild membership.
   useEffect(() => {
     const checkGuildMembership = async () => {
       try {
@@ -180,7 +179,7 @@ function AppContent() {
         
         console.log('Checking guild membership for authenticated user');
         
-        // Check if user has guilds
+        // Check if user is part of a guild
         const guildsResponse = await fetch(`${API_URL}/api/guilds/my-guilds`, {
           credentials: 'include'
         });
@@ -271,7 +270,7 @@ function AppContent() {
     );
   }
   
-  // If not authenticated or no guild, show landing page with separate routes
+  // As long as the user is not authenticated they'll have limited access to the app, this just shows them the landing page and application pages. 
   if (!isAuthenticated || !hasGuild) {
     return (
       <Router>
@@ -291,7 +290,6 @@ function AppContent() {
   // User is authenticated and has guild, show full app
   
   const handleDrawerToggle = (e) => {
-    // Don't need to do anything here - the MobileMenuToggle component will handle it
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -299,13 +297,10 @@ function AppContent() {
     return false;
   };
   
-  // We don't need this function since we're using the RouteWithDrawerClosing component
-  
-  // Define a component to wrap our content
   const RoutesWithDrawerHandling = () => {
     const location = useLocation();
     
-    // We'll disable this effect for now to prevent auto-closing issues
+    // The cause for auto closing issues >:(
     // useEffect(() => {
     //   // Only close the drawer if the path actually changed and the drawer is open
     //   if (isMobile && mobileDrawerOpen && prevPathRef.current !== location.pathname) {
@@ -325,7 +320,7 @@ function AppContent() {
           p: isMobile ? 2 : 3,
           ml: isMobile ? 0 : '240px',
           mt: { xs: '56px', sm: '64px' },
-          mb: 0, // Removed bottom margin since we no longer have bottom navigation
+          mb: 0,
           position: 'relative',
           '&::before': {
             content: '""',

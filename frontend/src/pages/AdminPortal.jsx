@@ -24,7 +24,6 @@ import { useNavigate } from 'react-router-dom';
 import { useSimulatedRole } from '../contexts/SimulatedRoleContext';
 import AddFakeUserForm from '../components/admin/AddFakeUserForm';
 
-// Create a custom admin theme to avoid the gradient color issue
 const adminTheme = createTheme({
   palette: {
     mode: 'dark',
@@ -122,7 +121,7 @@ const AdminPortal = () => {
   const [deleteItemDialogOpen, setDeleteItemDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
-  // Check admin status with backend
+  // Check admin status
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (!isAuthenticated) {
@@ -193,7 +192,6 @@ const AdminPortal = () => {
       }
     };
 
-    // Only fetch data if admin status has been confirmed
     if (isAuthenticated && isAdmin && authChecked) {
       if (tabValue === 0) {
         fetchGuilds();
@@ -205,12 +203,10 @@ const AdminPortal = () => {
     }
   }, [isAuthenticated, isAdmin, authChecked, tabValue]);
 
-  // Handle tab change
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
 
-  // Guild Details Handlers
   const handleOpenGuildDetails = async (guild) => {
     setSelectedGuild(guild);
     setOpenDialog(true);
@@ -401,7 +397,6 @@ const AdminPortal = () => {
       setOpenSnackbar(true);
       setDeleteItemDialogOpen(false);
       
-      // Refresh storage data
       await fetchGuildStorage(selectedGuild.id);
     } catch (err) {
       console.error('Failed to delete item:', err);
@@ -422,7 +417,6 @@ const AdminPortal = () => {
       setSuccessMessage(`Request ${status === 'Approved' ? 'approved' : 'denied'} successfully!`);
       setOpenSnackbar(true);
       
-      // Refresh storage data
       await fetchGuildStorage(selectedGuild.id);
     } catch (err) {
       console.error('Failed to update request:', err);
@@ -432,7 +426,7 @@ const AdminPortal = () => {
     }
   };
 
-  // Show loading while checking admin status
+  // show loading while checking for admin status
   if (!authChecked) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -446,7 +440,7 @@ const AdminPortal = () => {
     return (
       <Container maxWidth="md" sx={{ mt: 4 }}>
         <Alert severity="error">
-          You do not have permission to access the admin portal.
+          You do not have permission to access this resource.
         </Alert>
       </Container>
     );

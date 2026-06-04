@@ -1,4 +1,6 @@
 // src/pages/BillingPage.jsx
+
+// THIS RESOURCE DOES NOT WORK YET (NOT COMPLETELY ANYWAY)
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -99,7 +101,6 @@ const BillingPage = () => {
     }
   ];
 
-  // Handle subscription selection
   const handleSelectPlan = (plan) => {
     setSelectedPlan(plan);
     setPaymentDialogOpen(true);

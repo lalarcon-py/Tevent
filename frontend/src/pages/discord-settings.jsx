@@ -109,7 +109,6 @@ export default function DiscordSettings() {
     setConfigurations(updatedConfigs);
   };
   
-  // Toggle enabled status
   const handleToggleEnabled = (notificationType) => {
     const updatedConfigs = [...configurations];
     const existingConfig = updatedConfigs.find(c => c.channel_type === notificationType);
@@ -120,7 +119,6 @@ export default function DiscordSettings() {
     }
   };
   
-  // Save channel configurations
   const saveSettings = async () => {
     try {
       setSaving(true);
@@ -251,7 +249,7 @@ export default function DiscordSettings() {
                 {NOTIFICATION_TYPES.map((type) => {
                   const config = configurations.find(c => c.channel_type === type.id);
                   const channelId = config?.channel_id || '';
-                  const enabled = config?.enabled !== false; // Default to true if not specified
+                  const enabled = config?.enabled !== false;
                   
                   return (
                     <Grid container spacing={2} key={type.id} sx={{ mb: 2 }}>

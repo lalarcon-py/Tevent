@@ -76,7 +76,6 @@ const ApplicationDetails = () => {
     setActionLoading(true);
     try {
       await axiosInstance.post(`/api/guild-applications/${applicationId}/approve?guildId=${guildId}`);
-      // Update local application data with new status
       setApplication(prev => ({...prev, status: 'APPROVED'}));
     } catch (error) {
       console.error('Error approving application:', error);
@@ -94,7 +93,6 @@ const ApplicationDetails = () => {
     setActionLoading(true);
     try {
       await axiosInstance.post(`/api/guild-applications/${applicationId}/waitlist?guildId=${guildId}`);
-      // Update local application data with new status
       setApplication(prev => ({...prev, status: 'WAITLISTED'}));
     } catch (error) {
       console.error('Error waitlisting application:', error);
@@ -112,7 +110,6 @@ const ApplicationDetails = () => {
     setActionLoading(true);
     try {
       await axiosInstance.post(`/api/guild-applications/${applicationId}/deny?guildId=${guildId}`);
-      // Update local application data with new status
       setApplication(prev => ({...prev, status: 'DENIED'}));
     } catch (error) {
       console.error('Error denying application:', error);

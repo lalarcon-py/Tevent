@@ -5,7 +5,6 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { ThemeProvider } from '@mui/material/styles';
 import darkTheme from './theme';
-// Import cache initialization to ensure it runs early
 import './config/initCache';
 
 const root = createRoot(document.getElementById('root'));

@@ -1,5 +1,5 @@
 export const getWeaponComponents = (builds) => {
-  // Handle empty or invalid builds
+  // Empty / invalid builds go bye bye
   if (!builds || !Array.isArray(builds) || builds.length === 0) {
     return {
       primaryWeapon: null,
@@ -9,14 +9,13 @@ export const getWeaponComponents = (builds) => {
     };
   }
 
-  // Use the first build
+  // Use the first build in the array
   const build = builds[0];
   
-  // Handle different data structures
   const primary = build.primary || '';
   const secondary = build.secondary || '';
   
-  // Get image URLs
+  // Get image URLs for the weapons
   const getWeaponImageUrl = (weaponName) => {
     if (!weaponName) return null;
     const formattedName = weaponName.replace(/\s+/g, ' ').trim();

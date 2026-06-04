@@ -28,7 +28,7 @@ const ApplyToGuildPage = () => {
       }
 
       try {
-        // Fetch basic guild info
+        // Fetch guild info
         const response = await axiosInstance.get(`/api/guilds/available`);
         const guildInfo = response.data.find(g => g.id === guildId);
         
@@ -38,7 +38,7 @@ const ApplyToGuildPage = () => {
           setGuild(guildInfo);
         }
         
-        // Check if user already has an application
+        // Check for active application for this guild
         try {
           const userAppResponse = await axiosInstance.get(`/api/guild-applications/my-application?guildId=${guildId}`);
           setUserApplication(userAppResponse.data);

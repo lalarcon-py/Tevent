@@ -58,7 +58,7 @@ const GuildApplications = () => {
       setLoading(true);
       try {
         if (isAdminRole) {
-          // Get the current guild ID from localStorage or context
+          // Get the current guild ID
           const guildId = localStorage.getItem('guildId');
           
           if (!guildId) {

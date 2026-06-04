@@ -3,15 +3,7 @@
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
-
-/**
- * Hard delete a member from a guild using the dedicated endpoint
- * This bypasses any ORM issues and ensures the member is properly removed
- * 
- * @param {string} guildId - The ID of the guild
- * @param {string} memberId - The ID of the member to remove
- * @returns {Promise} - Promise resolving to the API response
- */
+// Hard delete = non recoverable delete
 export const hardDeleteMember = async (guildId, memberId) => {
   try {
     const response = await axios.delete(
@@ -19,15 +11,14 @@ export const hardDeleteMember = async (guildId, memberId) => {
       { withCredentials: true }
     );
     
-    // Force a reload of the guild members list after deletion
-    // This ensures the UI is updated
+    // Refresh UI after deletion
     window.dispatchEvent(new CustomEvent('refreshGuildMembers'));
     
     return response.data;
   } catch (error) {
     console.error('Error in hard delete:', error);
     
-    // If the hard delete fails, try the direct member delete as fallback
+    // In case of failure attempt fallback method
     if (error.response && error.response.status >= 400) {
       console.log('Attempting fallback deletion method...');
       try {
@@ -41,7 +32,7 @@ export const hardDeleteMember = async (guildId, memberId) => {
           { withCredentials: true }
         );
         
-        // Force a reload of the guild members list after deletion
+        // Refresh UI after deletion 
         window.dispatchEvent(new CustomEvent('refreshGuildMembers'));
         
         return fallbackResponse.data;
@@ -55,14 +46,7 @@ export const hardDeleteMember = async (guildId, memberId) => {
   }
 };
 
-/**
- * Remove a member from a guild using the standard endpoint
- * This is the standard method, but will fall back to the hard delete if it fails
- * 
- * @param {string} guildId - The ID of the guild
- * @param {string} memberId - The ID of the member to remove
- * @returns {Promise} - Promise resolving to the API response
- */
+
 export const removeMember = async (guildId, memberId) => {
   try {
     const response = await axios.delete(

@@ -29,15 +29,12 @@ const CHANNEL_TYPES = [
 ];
 
 const DiscordSettingsPage = () => {
-  // Get guildId from URL or localStorage
   const { guildId: urlGuildId } = useParams();
   const currentGuildId = urlGuildId || localStorage.getItem('guildId');
   
   const { guildRole } = useGuild();
   const { isAuthenticated } = useAuth();
-  const { simulatedRole } = useSimulatedRole(); // Get simulated role
-  
-  // Add this new state variable for permission check
+  const { simulatedRole } = useSimulatedRole(); // admin portal usage of simulated role
   const [isGuildMaster, setIsGuildMaster] = useState(false);
   
   // State variables
@@ -74,17 +71,15 @@ const DiscordSettingsPage = () => {
         const userRoleFromAPI = guildResponse.data.userRole;
         console.log("Server-reported user role:", userRoleFromAPI);
         
-        // Use simulated role if available, otherwise use actual role
+        // Use simulated role if available, otherwise use actual role (admin portal feature)
         const effectiveRole = simulatedRole || userRoleFromAPI;
         setIsGuildMaster(effectiveRole === 'Guild Master');
         
-        // If not a Guild Master, stop loading additional data
         if (effectiveRole !== 'Guild Master') {
           setLoading(false);
           return;
         }
         
-        // Get Discord connection status using the direct guild-mapping endpoint
         try {
           const mappingResponse = await axiosInstance.get(`/api/discord-bot/guild-mapping/${currentGuildId}`);
           console.log('Discord mapping response:', mappingResponse.data);
@@ -92,16 +87,13 @@ const DiscordSettingsPage = () => {
           setBotConnected(mappingResponse.data.connected);
           
           if (mappingResponse.data.connected) {
-            // Set selected Discord guild
             setSelectedGuild(mappingResponse.data.discordGuildId);
             
-            // Get Discord server info - falling back to simpler approach for now
             setDiscordGuilds([{
               id: mappingResponse.data.discordGuildId,
               name: "Connected Discord Server"
             }]);
             
-            // Load channels for the connected server
             await fetchDiscordChannels(currentGuildId, mappingResponse.data.discordGuildId);
             
             // Try to get existing configurations
@@ -121,7 +113,6 @@ const DiscordSettingsPage = () => {
       } catch (error) {
         console.error('Failed to fetch guild data:', error);
         
-        // Handle different error types
         if (error.response) {
           if (error.response.status === 403) {
             setIsGuildMaster(false);
@@ -138,9 +129,8 @@ const DiscordSettingsPage = () => {
     };
     
     fetchData();
-  }, [currentGuildId, simulatedRole]); // Added simulatedRole to dependency array
+  }, [currentGuildId, simulatedRole]);
   
-  // New function to fetch Discord channels
   const fetchDiscordChannels = async (guildId, discordGuildId) => {
     try {
       setChannelLoading(true);
@@ -150,10 +140,10 @@ const DiscordSettingsPage = () => {
         `/api/discord-bot/channels?guildId=${guildId}&discordGuildId=${discordGuildId}`
       );
       
-      // Filter to only include text channels (type 0)
+      // Filter to ONLY include text channels (type 0)
       const textChannels = response.data.filter(channel => channel.type === 0);
       
-      // Sort channels alphabetically for easier navigation
+      // Sort channels alphabetically
       const sortedChannels = textChannels.sort((a, b) => a.name.localeCompare(b.name));
       
       console.log(`Fetched ${sortedChannels.length} text channels`);
@@ -162,22 +152,18 @@ const DiscordSettingsPage = () => {
       console.error('Error fetching Discord channels:', error);
       setError('Failed to load Discord channels. Please try again later.');
       
-      // Fallback to empty channels list
       setChannels([]);
     } finally {
       setChannelLoading(false);
     }
   };
   
-  // Handle Discord server selection change
   const handleGuildChange = async (discordGuildId) => {
     try {
       setSelectedGuild(discordGuildId);
       
-      // Load channels for the selected server
       await fetchDiscordChannels(currentGuildId, discordGuildId);
       
-      // Get current channel configurations
       try {
         const configResponse = await axiosInstance.get(`/api/discord-bot/channel-config?guildId=${currentGuildId}`);
         if (configResponse.data && configResponse.data.configurations) {
@@ -221,7 +207,7 @@ const DiscordSettingsPage = () => {
     }
   };
   
-  // Save channel configurations
+  // Save channel configs
   const saveSettings = async () => {
     try {
       setSaving(true);

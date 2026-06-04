@@ -1,7 +1,6 @@
 export const getSelectedBuild = (participant) => {
     if (!participant) return null;
     
-    // Try to get the selected build first
     if (participant.selected_build) {
       let selectedBuild = participant.selected_build;
       if (typeof selectedBuild === 'string') {
@@ -15,7 +14,6 @@ export const getSelectedBuild = (participant) => {
       }
     }
     
-    // Try to get a build matching the role
     const builds = participant.User?.builds || participant.builds || [];
     if (!Array.isArray(builds) || builds.length === 0) return null;
     
@@ -34,6 +32,5 @@ export const getSelectedBuild = (participant) => {
       if (matchingBuild) return matchingBuild;
     }
     
-    // Fallback to first build
     return builds[0];
   };

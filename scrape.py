@@ -14,13 +14,12 @@ VALID_TYPES = {
     'Bracelet', 'Ring', 'Belt'
 }
 
-# Cache to avoid redundant downloads
+# Use cache to avoid redundant downloads
 item_cache = {}
 
 def get_item_traits(url):
     """Extract only the traits that appear after 'Possible Traits [Max 3]'"""
     try:
-        # Check cache first
         if url in item_cache:
             return item_cache[url]
             
@@ -30,7 +29,7 @@ def get_item_traits(url):
         
         content = response.text
         
-        # Look for the "Possible Traits" section
+        # Checking for "Possible Traits [Max 3]" section and extracting traits from it
         possible_traits_pattern = r'Possible Traits \[Max \d+\](.*?)(?:<\/div>|<div class=|$)'
         trait_section_match = re.search(possible_traits_pattern, content, re.DOTALL)
         
@@ -38,11 +37,11 @@ def get_item_traits(url):
         if trait_section_match:
             trait_section = trait_section_match.group(1)
             
-            # Extract trait names - looking for patterns like "Trait Name:"
+            # Extract trait names
             trait_name_pattern = r'([A-Za-z][\w\s-]+):'
             trait_names = re.findall(trait_name_pattern, trait_section)
             
-            # List of known non-traits (CSS properties, HTML attributes, etc.)
+            # Strip out annoying non-trait attributes present in destination page
             non_traits = [
                 'font-size', 'font-weight', 'color', 'class', 'style', 
                 'width', 'height', 'margin', 'padding', 'src', 'alt',
@@ -50,7 +49,7 @@ def get_item_traits(url):
                 'bottom', 'background', 'border', 'text-align', 'line-height'
             ]
             
-            # Clean up trait names and add colon
+            # Trait name formatting and filtering
             for name in trait_names:
                 trait_name = name.strip()
                 # Skip if trait name is empty or matches any non-trait
@@ -58,7 +57,7 @@ def get_item_traits(url):
                     continue
                 traits.append(f"{trait_name}:")
         
-        # Cache the result
+        # Cache results
         item_cache[url] = traits
         
         print(f"  Found {len(traits)} traits: {traits}")
@@ -81,7 +80,7 @@ def calculate_dkp(item_type):
         return 500   # Accessory
 
 def process_item(row):
-    """Process a single item row and extract relevant data"""
+    # Extract relevant data
     try:
         # Get item type
         type_cell = row.select_one('td.text-center.fw-semsi-bold')
@@ -92,27 +91,25 @@ def process_item(row):
         if item_type not in VALID_TYPES:
             return None
         
-        # Get item link and name
         item_link = row.select_one('td.ellipsis.svelte-d21jyt a')
         if not item_link:
             return None
             
         item_name = item_link.text.strip()
         
-        # Get item URL
         item_url = item_link.get('href')
         if not item_url:
             return None
             
-        # Make absolute URL if needed
+        # Make an abolute URL if it's relative
         if not item_url.startswith('http'):
             item_url = f"https://tldb.info{item_url}" if item_url.startswith('/') else f"https://tldb.info/{item_url}"
         
-        # Get item icon
+        # item icon element
         icon_element = row.select_one('td.item-icon-sticky img')
         icon_url = icon_element['src'] if icon_element else ""
         
-        # Create item data dictionary
+        # Item dictionary
         item_data = {
             'name': item_name,
             'type': item_type,
@@ -128,7 +125,6 @@ def process_item(row):
         return None
 
 def scrape_page(page):
-    """Scrape a single page of items"""
     try:
         print(f"Scraping page {page}...")
         response = requests.get(BASE_URL.format(page), headers={'User-Agent': 'Mozilla/5.0'})
@@ -163,7 +159,7 @@ def main():
     all_items = []
     page = 1
     consecutive_empty = 0
-    MAX_EMPTY_PAGES = 15  # Stop after 5 empty pages in a row
+    MAX_EMPTY_PAGES = 15  # Max number of pages to scrape without finding new items before stopping
 
     print("Starting TLDb item scraping...")
     while consecutive_empty < MAX_EMPTY_PAGES:
@@ -173,15 +169,14 @@ def main():
         if items:
             all_items.extend(items)
             print(f"✓ Found {len(items)} valid items (Total: {len(all_items)})")
-            consecutive_empty = 0  # Reset counter on successful find
+            consecutive_empty = 0
         else:
             print("× No valid items found")
             consecutive_empty += 1
             
         page += 1
-        time.sleep(1.5)  # Be nice to the server
+        time.sleep(1.5)  # Be nice to the server (pls don't rate limit me)
     
-    # Save results
     print(f"\nSaving {len(all_items)} items to tldb_items.json")
     with open('tldb_items.json', 'w') as f:
         json.dump(all_items, f, indent=2)
