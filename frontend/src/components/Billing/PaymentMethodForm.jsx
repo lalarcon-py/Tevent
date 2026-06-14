@@ -13,13 +13,11 @@ import {
 import { CardElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
-// Initialize Stripe with proper error handling
-const getStripePromise = () => {
-    const key = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
-    return loadStripe(key);
-  };
-  
-  const stripePromise = getStripePromise();
+// Only initialize Stripe when a publishable key is actually configured.
+// Calling loadStripe(undefined) throws at module load time, which crashes the app.
+const stripePromise = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY)
+  : null;
 
 // Wrapper component to provide Stripe context
 export default function PaymentMethodFormWrapper(props) {

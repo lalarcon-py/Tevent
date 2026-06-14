@@ -1,5 +1,23 @@
 // backend/controllers/billingController.js
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+// Stripe is initialized lazily so a missing key doesn't crash the server on startup.
+// All billing endpoints return 503 when Stripe isn't configured.
+let _stripe = null;
+function getStripe() {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('Stripe is not configured (STRIPE_SECRET_KEY missing)');
+  }
+  if (!_stripe) {
+    _stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  }
+  return _stripe;
+}
+// Use getStripe() anywhere you need the client instead of calling stripe directly.
+const stripe = new Proxy({}, {
+  get(_, prop) {
+    return getStripe()[prop];
+  }
+});
 const { User, Guild, GuildMember, Subscription, BillingTransaction } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');

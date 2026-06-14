@@ -1,15 +1,6 @@
-// backend/migrations/2025-03-26-add-email-to-users.js
 'use strict';
-
+// Covered by 20250307032533-add-email-and-gear-screenshot.js (which runs earlier and has guards) — no-op
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
-    await queryInterface.addColumn('users', 'email', {
-      type: Sequelize.STRING(255),
-      allowNull: true
-    });
-  },
-
-  down: async (queryInterface, Sequelize) => {
-    await queryInterface.removeColumn('users', 'email');
-  }
+  up: async () => {},
+  down: async () => {}
 };

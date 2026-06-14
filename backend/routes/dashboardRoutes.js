@@ -1,14 +1,10 @@
 const express = require('express');
+const { authenticateJWT } = require('../middleware/auth');
 const router = express.Router();
 const db = require('../models');
 const { Sequelize, Op } = require('sequelize');
 
-const isAuthenticated = (req, res, next) => {
-  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Unauthorized' });
-  next();
-};
-
-router.get('/stats/members', isAuthenticated, async (req, res) => {
+router.get('/stats/members', authenticateJWT, async (req, res) => {
   try {
     const guildId = req.guildId || req.query.guildId;
     if (!guildId) {
@@ -75,7 +71,7 @@ router.get('/stats/members', isAuthenticated, async (req, res) => {
 });
 
 
-router.get('/combat', isAuthenticated, async (req, res) => {
+router.get('/combat', authenticateJWT, async (req, res) => {
   try {
     
     // First, let's check what we get from a basic query
@@ -138,7 +134,7 @@ router.get('/combat', isAuthenticated, async (req, res) => {
 });
 
 // Add attendance stats endpoint with date filtering
-router.get('/stats/attendance', isAuthenticated, async (req, res) => {
+router.get('/stats/attendance', authenticateJWT, async (req, res) => {
   try {
     const guildId = req.guildId || req.query.guildId;
     if (!guildId) {
@@ -234,12 +230,12 @@ router.get('/stats/attendance', isAuthenticated, async (req, res) => {
     
   } catch (error) {
     console.error('Attendance stats error:', error);
-    res.status(500).json({ error: 'Failed to get attendance stats', details: error.message });
+    res.status(500).json({ error: 'Failed to get attendance stats' });
   }
 });
 
 // Add weapons endpoint
-router.get('/weapons', isAuthenticated, async (req, res) => {
+router.get('/weapons', authenticateJWT, async (req, res) => {
   try {
     const stats = await db.Item.findAll({
       where: { type: 'WEAPON' },

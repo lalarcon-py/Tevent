@@ -57,7 +57,11 @@ async function cleanupOrphanedGuilds() {
       if (!guildIds.includes(guildId)) {
         console.log(`Found orphaned schema ${schemaName} with no corresponding guild record`);
         
-        // Drop the orphaned schema
+        // Validate schemaName only contains safe characters before using in DDL
+        if (!/^[a-zA-Z0-9_]+$/.test(schemaName)) {
+          console.warn(`Skipping schema with unsafe name: ${schemaName}`);
+          continue;
+        }
         console.log(`Dropping orphaned schema ${schemaName}`);
         await sequelize.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
       }

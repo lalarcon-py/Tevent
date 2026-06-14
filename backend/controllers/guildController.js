@@ -1,10 +1,10 @@
-// backend/controllers/guildController.js
 const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const db = require('../models');
 const schemaManager = require('../utils/schemaManager');
 const { updateUserRoleAfterGuildLeave } = require('../utils/roleManager');
+const { ROLE_HIERARCHY } = require('../utils/helpers');
 
 const generateRandomCode = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -23,7 +23,6 @@ const regenerateJoinCode = async (req, res) => {
     
     const { guildId } = req.params;
     
-    // Check if user is the guild master
     const membership = await db.GuildMember.findOne({
       where: {
         guild_id: guildId,
@@ -63,10 +62,8 @@ const createGuild = async (req, res) => {
       return res.status(400).json({ error: 'Guild name must be between 3 and 50 characters' });
     }
     
-    // Generate a unique join code if not provided
     const finalJoinCode = joinCode || generateUniqueJoinCode();
     
-    // Create the guild
     const guild = await db.Guild.create({
       name,
       description,
@@ -76,15 +73,12 @@ const createGuild = async (req, res) => {
       status: 'ACTIVE'
     }, { transaction: t });
     
-    // Add user as Guild Master in guild_members
     await db.GuildMember.create({
       guild_id: guild.id,
       user_id: userId,
       role: 'Guild Master'
     }, { transaction: t });
     
-    // IMPORTANT: Also update the user's global role in the users table
-    // This ensures consistency between the two tables
     await db.User.update(
       { role: 'Guild Master' },
       { 
@@ -93,7 +87,7 @@ const createGuild = async (req, res) => {
       }
     );
     
-    // Log the guild creation
+    // Log for audit trail
     await db.AdminLog.create({
       admin_id: userId,
       action: 'CREATE_GUILD',
@@ -118,7 +112,7 @@ const createGuild = async (req, res) => {
   } catch (error) {
     await t.rollback();
     console.error('Guild creation error:', error);
-    res.status(500).json({ error: 'Failed to create guild', details: error.message });
+    res.status(500).json({ error: 'Failed to create guild' });
   }
 };
 
@@ -146,7 +140,6 @@ const joinGuild = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    // Check if guild exists
     const guild = await Guild.findByPk(guildId);
     if (!guild) {
       await t.rollback();
@@ -236,14 +229,12 @@ const leaveGuild = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    // Check if guild exists
     const guild = await Guild.findByPk(guildId);
     if (!guild) {
       await t.rollback();
       return res.status(404).json({ error: 'Guild not found' });
     }
     
-    // Check if user is a member
     const membership = await GuildMember.findOne({
       where: {
         guild_id: guildId,
@@ -256,7 +247,6 @@ const leaveGuild = async (req, res) => {
       return res.status(404).json({ error: 'Not a member of this guild' });
     }
     
-    // Check if user is the guild master
     if (membership.role === 'Guild Master') {
       
       // Find another member to transfer ownership to
@@ -325,27 +315,14 @@ const leaveGuild = async (req, res) => {
       
       console.log(`User ${req.user.id} deleted from users table`);
     } else {
-      // User still has other guild memberships
-      // Find the highest remaining role
-      let highestRole = 'Member'; // Default if no memberships remain
-      
-      const roleHierarchy = {
-        'Guild Master': 4,
-        'Guild Advisor': 3,
-        'Guild Guardian': 2,
-        'Guild Member': 1,
-        'Member': 1
-      };
+        let highestRole = 'Member'; // Default if no memberships remain
       
       for (const m of remainingMemberships) {
-        const roleRank = roleHierarchy[m.role] || 0;
-        if (roleRank > roleHierarchy[highestRole]) {
+        const roleRank = ROLE_HIERARCHY[m.role] || 0;
+        if (roleRank > (ROLE_HIERARCHY[highestRole] || 0)) {
           highestRole = m.role;
         }
       }
-      
-      // Update the user's role based on their remaining guild memberships
-      console.log(`Updating user ${req.user.id} role to ${highestRole} based on remaining memberships`);
       
       await db.User.update(
         { role: highestRole },
@@ -359,9 +336,7 @@ const leaveGuild = async (req, res) => {
       );
     }
     
-    // Delete guild-specific user data
     try {
-      // Delete guild-specific user record
       await db.User.destroy({
         where: { 
           id: req.user.id,
@@ -551,10 +526,7 @@ const transferGuildMaster = async (req, res) => {
     
     // Update roles in main users table
     try {
-      // Import the role manager utility
-      const { updateUserRoleAfterGuildLeave } = require('../utils/roleManager');
-      
-      // Update roles in main user table for both users
+      // Update roles for both users after transfer
       await updateUserRoleAfterGuildLeave(req.user.id);
       await updateUserRoleAfterGuildLeave(newMasterId);
     } catch (roleUpdateError) {
@@ -593,7 +565,6 @@ const generateInvite = async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
-    // Check if guild exists
     const guild = await db.Guild.findByPk(guildId);
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
@@ -741,7 +712,6 @@ const getGuildDetails = async (req, res) => {
     
     const { guildId } = req.params;
     
-    // Check if user is a member
     const membership = await db.GuildMember.findOne({
       where: {
         guild_id: guildId,
@@ -806,7 +776,6 @@ const getGuildMembers = async (req, res) => {
     
     const { guildId } = req.params;
     
-    // Check if user is a member
     const membership = await db.GuildMember.findOne({
       where: {
         guild_id: guildId,
@@ -853,7 +822,7 @@ const getGuildMembers = async (req, res) => {
     res.json(formattedMembers);
   } catch (error) {
     console.error('Get guild members error:', error);
-    res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
+    res.status(500).json({ error: 'Failed to fetch guild members' });
   }
 };
 
@@ -966,7 +935,6 @@ const deleteGuild = async (req, res) => {
     
     const { guildId } = req.params;
     
-    // Check if user is the guild master
     const membership = await db.GuildMember.findOne({
       where: {
         guild_id: guildId,

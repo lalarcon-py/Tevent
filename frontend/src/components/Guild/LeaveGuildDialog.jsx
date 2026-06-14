@@ -13,10 +13,7 @@ import {
   useTheme,
   useMediaQuery
 } from '@mui/material';
-
-const API_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:5000' 
-  : process.env.REACT_APP_API_URL;
+import API_URL from '../../config/apiUrl';
 
 const LeaveGuildDialog = ({ open, onClose }) => {
   const theme = useTheme();

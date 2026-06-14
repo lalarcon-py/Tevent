@@ -45,18 +45,13 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     const eventBus = getEventBus();
-    
-    // Handle authentication errors
+
+    // Handle authentication errors by notifying the app, not by hard-redirecting.
+    // A hard redirect (window.location.href) wipes all React state and lands the user
+    // on a page that has no route, which looks like a full auth loss even when the
+    // session is still valid. Let AuthContext verify the session and decide what to show.
     if (error.response?.status === 401 && !error.config.url.includes('/auth/')) {
-      console.error('Authentication required');
-      // Only redirect if not already on an auth-related page
-      if (!window.location.pathname.includes('/auth-error') && 
-          !window.location.pathname.includes('/login')) {
-        // Store the intended destination
-        sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
-        // Redirect to login page instead of directly to Discord
-        window.location.href = '/login';
-      }
+      eventBus.emit('AUTH_REQUIRED', { url: error.config.url });
     }
     
     // Handle guild inactive status (402 Payment Required)

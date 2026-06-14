@@ -3,10 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Tabs, Tab, TextField, Card, CardContent, useMediaQuery, useTheme, CircularProgress, Alert } from '@mui/material';
 import axiosInstance from '../config/axios';
 import { useNavigate } from 'react-router-dom';
-
-const API_URL = process.env.NODE_ENV === 'development'
-  ? 'http://localhost:5000'
-  : process.env.REACT_APP_API_URL;
+import API_URL from '../config/apiUrl';
 
 const GuildSetup = () => {
   const theme = useTheme();

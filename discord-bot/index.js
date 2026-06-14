@@ -1,5 +1,10 @@
 // discord-bot/index.js
 require('dotenv').config();
+
+if (!process.env.DISCORD_BOT_TOKEN) {
+  console.log('[discord-bot] DISCORD_BOT_TOKEN not set — bot disabled, skipping startup.');
+  process.exit(0);
+}
 const { 
   Client, 
   GatewayIntentBits, 

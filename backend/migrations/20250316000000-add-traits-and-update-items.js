@@ -98,7 +98,7 @@ module.exports = {
             
             await queryInterface.sequelize.query(
               `INSERT INTO items (
-                id, name, type, "dkpCost", "inStorage", quantity, icon, traits, created_at, updated_at
+                id, name, type, dkp_cost, in_storage, quantity, icon, traits, created_at, updated_at
               ) VALUES (
                 uuid_generate_v4(), ?, ?, ?, false, 0, ?, ${pgArrayLiteral}, NOW(), NOW()
               )`,

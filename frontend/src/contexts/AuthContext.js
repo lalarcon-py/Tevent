@@ -1,7 +1,8 @@
 // src/contexts/AuthContext.js - Fixed version
-import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
-import axiosInstance from '../config/axios';
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback, useMemo } from 'react';
+import axiosInstance, { getGlobalEventBus } from '../config/axios';
 import { useSimulatedRole } from './SimulatedRoleContext';
+import API_URL from '../config/apiUrl';
 
 // Create the auth context
 const AuthContext = createContext();
@@ -17,74 +18,98 @@ export const AuthProvider = ({ children }) => {
   const effectiveRole = simulatedRole || user?.role;
   
   // Refs to prevent multiple simultaneous auth checks
-  const authCheckInProgress = useRef(false);
+  const inFlight = useRef(null);       // the currently running status request, if any
   const lastAuthCheck = useRef(0);
   const intervalRef = useRef(null);
-  const AUTH_CHECK_THROTTLE = 60000; // Min time between auth checks (60 seconds)
+  const AUTH_CHECK_THROTTLE = 60000;   // Min time between background auth checks (60 seconds)
+  const FORCE_CHECK_FLOOR = 5000;      // Even forced checks honor this floor, to stop request storms
 
   // Store user data in ref to avoid dependency issues
   const userRef = useRef(null);
 
-  const checkAuth = useCallback(async (force = false) => {
-    // If a check is already in progress and not forced, skip
-    if (authCheckInProgress.current && !force) return;
-    
+  const checkAuth = useCallback((force = false) => {
+    // Always coalesce concurrent checks: never run two /api/auth/status requests
+    // at once. A forced check that arrives while one is in flight waits for that
+    // result instead of firing a parallel request. Bypassing this guard for
+    // forced checks is what previously allowed a request stampede.
+    if (inFlight.current) return inFlight.current;
+
+    // Throttle. Forced checks use a much shorter floor than background checks so a
+    // genuine re-verify (e.g. after a 401) happens promptly, but a flood of forced
+    // calls still can't turn into thousands of requests per second.
     const now = Date.now();
-    if (!force && now - lastAuthCheck.current < AUTH_CHECK_THROTTLE) return;
-  
-    authCheckInProgress.current = true;
+    const minInterval = force ? FORCE_CHECK_FLOOR : AUTH_CHECK_THROTTLE;
+    if (now - lastAuthCheck.current < minInterval) return Promise.resolve();
     lastAuthCheck.current = now;
-  
-    try {
-      // Only set loading true on initial check
-      if (!userRef.current) {
-        setIsLoading(true);
+
+    const run = (async () => {
+      try {
+        // Only set loading true on initial check
+        if (!userRef.current) {
+          setIsLoading(true);
+        }
+
+        const response = await axiosInstance.get('/api/auth/status', {
+          // Add cache busting only for forced checks
+          params: force ? { _t: Date.now() } : undefined
+        });
+
+        // Only update if data changed by comparing with ref
+        const currentUser = userRef.current;
+        const newUser = response.data;
+
+        const userDataChanged =
+          !currentUser ||
+          currentUser.id !== newUser.id ||
+          currentUser.username !== newUser.username ||
+          currentUser.role !== newUser.role;
+
+        if (userDataChanged) {
+          console.log('User data changed, updating state');
+          userRef.current = newUser;
+          setIsAuthenticated(true);
+          setUser(newUser);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        if (error.response && error.response.status === 401) {
+          userRef.current = null;
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      } finally {
+        setIsLoading(false);
+        inFlight.current = null;
       }
-      
-      const response = await axiosInstance.get('/api/auth/status', {
-        // Add cache busting only for forced checks
-        params: force ? { _t: Date.now() } : undefined
-      });
-      
-      // Only update if data changed by comparing with ref
-      const currentUser = userRef.current;
-      const newUser = response.data;
-      
-      const userDataChanged = 
-        !currentUser ||
-        currentUser.id !== newUser.id ||
-        currentUser.username !== newUser.username ||
-        currentUser.role !== newUser.role;
-  
-      if (userDataChanged) {
-        console.log('User data changed, updating state');
-        userRef.current = newUser;
-        setIsAuthenticated(true);
-        setUser(newUser);
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      if (error.response && error.response.status === 401) {
-        userRef.current = null;
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-    } finally {
-      setIsLoading(false);
-      authCheckInProgress.current = false;
-    }
+    })();
+
+    inFlight.current = run;
+    return run;
   }, []); // No dependencies to prevent recreation
 
-  // Initial auth check on mount 
+  // Initial auth check on mount
   useEffect(() => {
-    // Check auth on mount
     checkAuth(true);
-    
-    // Clean up any existing interval
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+    };
+  }, [checkAuth]);
+
+  // When any API call returns 401, re-verify the session so we can react immediately
+  // to true session expiry without needing the 10-minute polling interval to fire.
+  useEffect(() => {
+    const eventBus = getGlobalEventBus();
+    const handleAuthRequired = () => checkAuth(true);
+    eventBus.on('AUTH_REQUIRED', handleAuthRequired);
+    return () => {
+      const listeners = eventBus.listeners['AUTH_REQUIRED'];
+      if (listeners) {
+        const idx = listeners.indexOf(handleAuthRequired);
+        if (idx !== -1) listeners.splice(idx, 1);
       }
     };
   }, [checkAuth]);
@@ -106,12 +131,8 @@ export const AuthProvider = ({ children }) => {
   }, [checkAuth]);
 
   const login = useCallback(() => {
-    const baseUrl = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:5000'
-      : process.env.REACT_APP_API_URL || window.location.origin;
-    
     const returnUrl = encodeURIComponent(window.location.href);
-    window.location.href = `${baseUrl}/auth/discord?redirectUrl=${returnUrl}`;
+    window.location.href = `${API_URL}/auth/discord?redirectUrl=${returnUrl}`;
   }, []);
 
   const logout = useCallback(async () => {
@@ -130,11 +151,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       
       // Make the API call
-      const baseUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:5000'
-        : process.env.REACT_APP_API_URL || window.location.origin;
-      
-      await fetch(`${baseUrl}/auth/logout`, {
+      await fetch(`${API_URL}/auth/logout`, {
         credentials: 'include'
       });
       
@@ -145,15 +162,21 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Context value
-  const contextValue = {
+  // Stable forced-check function exposed to consumers. Without this, every render
+  // produced a brand-new function, so consumer effects depending on `checkAuth`
+  // re-fired every render and triggered another forced check — an infinite loop.
+  const forceCheckAuth = useCallback(() => checkAuth(true), [checkAuth]);
+
+  // Memoize the context value so it only changes when auth state actually changes,
+  // not on every render. This keeps the exposed `checkAuth` reference stable.
+  const contextValue = useMemo(() => ({
     isAuthenticated,
     user,
     isLoading,
     login,
     logout,
-    checkAuth: () => checkAuth(true) // Force check when manually called
-  };
+    checkAuth: forceCheckAuth // Force check when manually called
+  }), [isAuthenticated, user, isLoading, login, logout, forceCheckAuth]);
 
   return (
     <AuthContext.Provider value={contextValue}>

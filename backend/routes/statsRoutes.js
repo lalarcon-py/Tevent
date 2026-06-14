@@ -1,17 +1,11 @@
 const express = require('express');
+const { authenticateJWT } = require('../middleware/auth');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
 const db = require('../models');
 
-// Authentication middleware
-const isAuthenticated = (req, res, next) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  next();
-};
 
-router.get('/user/:userId/attendance', isAuthenticated, async (req, res) => {
+router.get('/user/:userId/attendance', authenticateJWT, async (req, res) => {
   try {
     const { userId } = req.params;
     const guildId = req.guildId || req.query.guildId;
@@ -429,9 +423,9 @@ const getWeaponStats = async (req, res) => {
   }
 };
 
-router.get('/members', isAuthenticated, dashboardController.getMemberStats);
-router.get('/combat', isAuthenticated, dashboardController.getCombatStats);
-router.get('/attendance', isAuthenticated, dashboardController.getAttendanceStats);
-router.get('/weapons', isAuthenticated, dashboardController.getWeaponStats);
+router.get('/members', authenticateJWT, dashboardController.getMemberStats);
+router.get('/combat', authenticateJWT, dashboardController.getCombatStats);
+router.get('/attendance', authenticateJWT, dashboardController.getAttendanceStats);
+router.get('/weapons', authenticateJWT, dashboardController.getWeaponStats);
 
 module.exports = router;

@@ -38,14 +38,11 @@ import DiscordSettingsPage from "./pages/DiscordSettingsPage";
 import DiscordSetupPage from './pages/DiscordSetupPage';
 import RoleSimulationBanner from './components/admin/RoleSimulationBanner';
 import StaticTeams from './components/StaticTeams/StaticTeams';
-
-const API_URL = process.env.NODE_ENV === 'development'
-  ? 'http://localhost:5000'
-  : process.env.REACT_APP_API_URL;
+import API_URL from './config/apiUrl';
 
 // Main App content
 function AppContent() {
-  const { isAuthenticated, user, checkAuth } = useAuth();
+  const { isAuthenticated, user, checkAuth, isLoading: authLoading } = useAuth();
   const [hasGuild, setHasGuild] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentGuildId, setCurrentGuildId] = useState(null);
@@ -165,10 +162,36 @@ function AppContent() {
   // Check guild membership when auth state changes, to prevent unwanted access to the app when not in a guild. 
   // This also handles the case of users leaving guilds while logged in, which would otherwise cause errors since the app assumes guild membership.
   useEffect(() => {
+    let isCancelled = false;
+
+    // Fetch with retry/backoff for transient failures. A 429 (rate limited) or 5xx is
+    // NOT an authoritative "no guild" answer — treating it as one was bouncing freshly
+    // authenticated users to /guilds/setup and blocking the dashboard. Retry instead,
+    // honoring Retry-After when the server provides it.
+    const fetchGuildsWithRetry = async (maxAttempts = 4) => {
+      let delay = 1000;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const response = await fetch(`${API_URL}/api/guilds/my-guilds`, {
+          credentials: 'include'
+        });
+
+        const isTransient = response.status === 429 || response.status >= 500;
+        if (!isTransient || attempt === maxAttempts) {
+          return response;
+        }
+
+        const retryAfter = parseInt(response.headers.get('Retry-After'), 10);
+        const waitMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : delay;
+        console.warn(`Guild check got ${response.status}; retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts})`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        delay *= 2; // exponential backoff
+      }
+    };
+
     const checkGuildMembership = async () => {
       try {
         setLoading(true);
-        
+
         if (!isAuthenticated) {
           console.log('Not authenticated, clearing guild state');
           setHasGuild(false);
@@ -176,14 +199,13 @@ function AppContent() {
           setLoading(false);
           return;
         }
-        
+
         console.log('Checking guild membership for authenticated user');
-        
-        // Check if user is part of a guild
-        const guildsResponse = await fetch(`${API_URL}/api/guilds/my-guilds`, {
-          credentials: 'include'
-        });
-        
+
+        // Check if user is part of a guild (with retry on transient errors)
+        const guildsResponse = await fetchGuildsWithRetry();
+        if (isCancelled) return;
+
         if (guildsResponse.ok) {
           const guildsData = await guildsResponse.json();
           console.log('Guild data received:', guildsData);
@@ -235,26 +257,42 @@ function AppContent() {
             }
           }
         } else {
-          console.error('Failed to fetch guilds:', guildsResponse.status);
-          setHasGuild(false);
-          try {
-            localStorage.removeItem('guildId');
-          } catch (e) {
-            console.warn('Failed to remove from localStorage:', e);
+          // A transient error (rate limit / server error) is NOT proof the user has no
+          // guild. Don't wipe the stored guildId or downgrade the user — that's what was
+          // stranding freshly authenticated users on the setup page. Leave existing state
+          // intact so a refresh (or the next successful check) can recover.
+          const isTransient = guildsResponse.status === 429 || guildsResponse.status >= 500;
+          if (isTransient) {
+            console.error(`Guild check failed transiently (${guildsResponse.status}); preserving guild state`);
+          } else {
+            console.error('Failed to fetch guilds:', guildsResponse.status);
+            setHasGuild(false);
+            try {
+              localStorage.removeItem('guildId');
+            } catch (e) {
+              console.warn('Failed to remove from localStorage:', e);
+            }
           }
         }
       } catch (error) {
+        // Network error — also transient. Don't strand the user; just stop loading.
         console.error('Guild check failed:', error);
-        setHasGuild(false);
       } finally {
-        setLoading(false);
+        if (!isCancelled) setLoading(false);
       }
     };
 
     checkGuildMembership();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [isAuthenticated, user]);
 
-  if (loading) {
+  // Wait for both the auth check AND the guild check to resolve before rendering.
+  // Without authLoading, the guild check short-circuits immediately on !isAuthenticated
+  // and shows LandingPage for a few hundred ms while the real auth result is still in flight.
+  if (loading || authLoading) {
     return (
       <Box
         sx={{
@@ -270,7 +308,8 @@ function AppContent() {
     );
   }
   
-  // As long as the user is not authenticated they'll have limited access to the app, this just shows them the landing page and application pages. 
+  // Authenticated users who haven't joined a guild yet go to guild setup.
+  // Everyone else (not authenticated) sees the landing page.
   if (!isAuthenticated || !hasGuild) {
     return (
       <Router>
@@ -281,7 +320,9 @@ function AppContent() {
           <Route path="/guilds/applications/:applicationId" element={<ApplicationDetails />} />
           <Route path="/guild-apply" element={<ApplyToGuildPage />} />
           <Route path="/admin" element={<AdminPortal />} />
-          <Route path="*" element={<LandingPage />} />
+          {/* After Discord OAuth, new users land on /guilds/setup — show setup page, not LandingPage */}
+          <Route path="/guilds/setup" element={isAuthenticated ? <GuildSetupPage /> : <LandingPage />} />
+          <Route path="*" element={isAuthenticated ? <Navigate to="/guilds/setup" replace /> : <LandingPage />} />
         </Routes>
       </Router>
     );
@@ -358,6 +399,7 @@ function AppContent() {
           <Route path="/discord/setup" element={<DiscordSetupPage />} />
           <Route path="/guilds/:guildId/discord/settings" element={<DiscordSettingsPage />} />
           <Route path="/static-teams" element={<StaticTeams />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Box>
       </>

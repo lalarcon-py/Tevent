@@ -13,10 +13,7 @@ import {
   useTheme
 } from '@mui/material';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
-
-const API_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:5000' 
-  : process.env.REACT_APP_API_URL;
+import API_URL from '../../config/apiUrl';
 
 const LeaveGuildButton = ({ guildId, currentUserRole }) => {
   const [open, setOpen] = useState(false);

@@ -43,15 +43,14 @@ const createBaseConnection = () => {
       }
     });
   } else {
-    return new Sequelize('guilddb', 'postgres', '6384', {
-      host: 'localhost',
-      port: 5432,
-      dialect: 'postgres',
+    // Uses DATABASE_URL from .env in development
+    return new Sequelize(process.env.DATABASE_URL, {
       ...commonConfig,
       dialectOptions: {
-        // Force IPv4 even in development
+        ssl: false,
         family: 4
-      }
+      },
+      logging: false
     });
   }
 };

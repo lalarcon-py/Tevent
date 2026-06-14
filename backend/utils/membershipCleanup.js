@@ -176,8 +176,45 @@ async function runMembershipCleanup() {
   return results;
 }
 
+// Removes a member from a guild and cleans up all their associated data within that guild
+// (loot requests, wishlists, event participants, team members).
+// Uses the provided transaction - caller is responsible for commit/rollback.
+async function removeGuildMember(guildId, memberId, transaction) {
+  await sequelize.query(
+    `DELETE FROM guild_members WHERE guild_id = :guildId AND user_id = :memberId`,
+    { replacements: { guildId, memberId }, type: sequelize.QueryTypes.DELETE, transaction }
+  );
+
+  await sequelize.query(
+    `DELETE FROM users WHERE id = :memberId AND guild_id = :guildId`,
+    { replacements: { guildId, memberId }, type: sequelize.QueryTypes.DELETE, transaction }
+  );
+
+  await sequelize.query(
+    `UPDATE loot_requests SET status = 'Denied - Left Guild'
+     WHERE guild_id = :guildId AND user_id = :memberId AND status = 'Pending'`,
+    { replacements: { guildId, memberId }, type: sequelize.QueryTypes.UPDATE, transaction }
+  );
+
+  await sequelize.query(
+    `DELETE FROM wishlists WHERE guild_id = :guildId AND user_id = :memberId`,
+    { replacements: { guildId, memberId }, type: sequelize.QueryTypes.DELETE, transaction }
+  );
+
+  await sequelize.query(
+    `DELETE FROM event_participants WHERE guild_id = :guildId AND user_id = :memberId`,
+    { replacements: { guildId, memberId }, type: sequelize.QueryTypes.DELETE, transaction }
+  );
+
+  await sequelize.query(
+    `DELETE FROM team_members WHERE guild_id = :guildId AND user_id = :memberId`,
+    { replacements: { guildId, memberId }, type: sequelize.QueryTypes.DELETE, transaction }
+  );
+}
+
 module.exports = {
   cleanupDuplicateMembers,
   verifyMembershipDeletions,
-  runMembershipCleanup
+  runMembershipCleanup,
+  removeGuildMember
 };

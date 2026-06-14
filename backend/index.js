@@ -30,12 +30,10 @@ const gearCheckRoutes = require('./routes/gearCheckRoutes');
 const billingRoutes = require('./routes/billingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-// Import the Discord roles routes
 const discordRolesRoutes = require('./routes/discordRolesRoutes');
 const directMemberDeleteRoutes = require('./routes/directMemberDelete');
 
 
-// Middleware imports
 const databaseMiddleware = require('./middleware/databaseMiddleware');
 const schemaMiddleware = require('./middleware/schemaMiddleware');
 const validateGuildMembership = require('./middleware/guildMembershipMiddleware');
@@ -43,7 +41,6 @@ const guildScopeMiddleware = require('./middleware/guildScopeMiddleware');
 const guildActivityMiddleware = require('./middleware/guildActivityMiddleware');
 const guildContextMiddleware = require('./middleware/guildContextMiddleware');
 
-// Route imports
 const discordIntegrationRoutes = require('./routes/discordIntegrationRoutes');
 const itemsRouter = require('./routes/items');
 const eventsRouter = require('./routes/events');
@@ -57,6 +54,8 @@ const statsRoutes = require('./routes/statsRoutes');
 const guildSettingsRoutes = require('./routes/guildSettings');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const userController = require('./controllers/userController');
+const { ROLE_HIERARCHY, validateUUID } = require('./utils/helpers');
+const { applySecurityMiddleware } = require('./middleware/security');
 const SchemaEnforcer = require('./utils/schemaEnforcer');
 const staticTeamsRoutes = require('./routes/staticTeamsRoutes');
 const rollRoutes = require('./routes/rollRoutes');
@@ -70,7 +69,14 @@ const frontendURL = process.env.NODE_ENV === 'production'
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// New function for Chrome mobile compatibility
+// Detects Chrome on a mobile device from the User-Agent. Centralized here so the
+// SameSite/redirect workarounds below all share one definition instead of re-deriving it.
+function isChromeOnMobileRequest(req) {
+  const userAgent = req.headers['user-agent'] || '';
+  return /Chrome/i.test(userAgent) && /Android|iPhone|iPad|iPod/i.test(userAgent);
+}
+
+// Chrome sends x-forwarded headers through proxies - fix protocol detection for correct cookie security
 function secureProxyMiddleware(req, res, next) {
   // Fix protocol detection for proper cookie security
   if (req.headers['x-forwarded-proto'] === 'https' || 
@@ -81,13 +87,9 @@ function secureProxyMiddleware(req, res, next) {
   next();
 }
 
-// New function for Chrome cookie handling
+// Overrides cookie options on Chrome mobile to keep SameSite=none working with cross-origin requests
 function chromeCompatibilityMiddleware(req, res, next) {
-  const userAgent = req.headers['user-agent'] || '';
-  const isChromeOnMobile = /Chrome/i.test(userAgent) && 
-                          /Android|iPhone|iPad|iPod/i.test(userAgent);
-  
-  if (isChromeOnMobile) {
+  if (isChromeOnMobileRequest(req)) {
     // Store the original cookie function
     const originalCookie = res.cookie;
     
@@ -105,37 +107,33 @@ function chromeCompatibilityMiddleware(req, res, next) {
   next();
 }
 
-// Apply new middleware
 app.use(secureProxyMiddleware);
 app.use(chromeCompatibilityMiddleware);
 
-// Database connection check
-sequelize.authenticate()
- .then(async () => {
-   // Verify builds column schema
-   const [schemaCheck] = await sequelize.query(`
-     SELECT column_name, data_type, udt_name, column_default 
-     FROM information_schema.columns 
-     WHERE table_name = 'users' 
-     AND column_name = 'builds'
-   `);
- })
- .then(() => {
-   app.listen(PORT, () => {
-   });
- })
- .catch((error) => {
- });
+// Start listening immediately — don't gate the server on the DB connection.
+// If the DB is down, requests will fail with a clear error rather than the
+// process silently refusing connections.
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
 
-// CORS Middleware
+// Verify the DB connection on startup so problems are obvious in the logs.
+sequelize.authenticate()
+  .then(() => console.log('Database connection established.'))
+  .catch((error) => {
+    console.error('Database connection failed:', error.message);
+    console.error('Make sure PostgreSQL is running and DATABASE_URL is correct in backend/.env');
+  });
+
+// CORS - only allow requests from our own frontend
 app.use(cors({
   origin: frontendURL,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'X-CSRF-Token']
 }));
 
-// Session Middleware
+// Session store backed by Postgres so sessions survive restarts
 app.use(session({
   store: new pgSession({
     conObject: {
@@ -145,7 +143,7 @@ app.use(session({
       } : false
     }
   }),
-  secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+  secret: process.env.SESSION_SECRET || (() => { if (process.env.NODE_ENV === 'production') throw new Error('SESSION_SECRET must be set in production'); return 'dev-only-fallback'; })(),
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -156,14 +154,8 @@ app.use(session({
 }));
 
 app.post('/auth/bot-login', (req, res) => {
-  console.log('Bot login attempt received');
-  console.log('Request body:', req.body);
-  console.log('Content-Type:', req.headers['content-type']);
-  
   try {
-    // Use a more defensive approach
     const botSecret = req.body?.botSecret;
-    console.log('Bot secret received:', botSecret ? '✓' : '✗');
     
     if (!botSecret) {
       return res.status(400).json({ 
@@ -185,17 +177,14 @@ app.post('/auth/bot-login', (req, res) => {
     }, (err) => {
       if (err) {
         console.error('Session creation failed:', err);
-        return res.status(500).json({ error: 'Session creation failed', details: err.message });
+        return res.status(500).json({ error: 'Session creation failed' });
       }
       
       res.status(200).json({ success: true });
     });
   } catch (error) {
     console.error('Bot login error:', error);
-    res.status(500).json({ 
-      error: 'Authentication failed', 
-      details: error.message
-    });
+    res.status(500).json({ error: 'Authentication failed' });
   }
 });
 
@@ -224,19 +213,45 @@ app.post('/auth/bot-token', (req, res) => {
   }
 });
 
-// Error handler middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ 
-    error: 'Internal Server Error', 
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined 
-  });
-});
+// Dev-only login bypass — never available in production
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/auth/dev-login', async (req, res) => {
+    try {
+      const DEV_DISCORD_ID = 'dev-user-local';
+      let user = await db.User.findOne({ where: { discord_id: DEV_DISCORD_ID } });
 
-// Authentication middlewares
+      if (!user) {
+        const isFirst = (await db.User.count()) === 0;
+        user = await db.User.create({
+          discord_id: DEV_DISCORD_ID,
+          username: 'DevUser',
+          role: isFirst ? 'Guild Master' : 'Member',
+          status: 'Active',
+          avatar_url: null,
+          builds: []
+        });
+      }
+
+      req.login(user, (err) => {
+        if (err) {
+          console.error('Dev login failed:', err);
+          return res.status(500).send('Dev login failed');
+        }
+        res.redirect(process.env.FRONTEND_URL || 'http://localhost:3002');
+      });
+    } catch (error) {
+      console.error('Dev login error:', error);
+      res.status(500).send('Dev login error: ' + error.message);
+    }
+  });
+}
+
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(guildContextMiddleware);
+
+// Security middleware: helmet headers, rate limiting, CSRF protection
+applySecurityMiddleware(app);
 
 // Parse JSON bodies - except for Stripe webhook which needs raw body
 app.use((req, res, next) => {
@@ -248,47 +263,8 @@ app.use((req, res, next) => {
 });
 app.use(express.urlencoded({ extended: true }));
 
-// Create guildMembershipMiddleware if it doesn't exist yet
-if (!validateGuildMembership) {
-  const validateGuildMembership = async (req, res, next) => {
-    // Extract guild ID from various possible sources
-    const guildId = req.params.guildId || req.query.guildId || req.body.guildId;
-    
-    // Skip validation if no guild ID or not authenticated
-    if (!guildId || !req.isAuthenticated()) {
-      return next();
-    }
-    
-    try {
-      // Check if user is a member of this guild
-      const membership = await db.GuildMember.findOne({
-        where: {
-          guild_id: guildId,
-          user_id: req.user.id
-        }
-      });
-      
-      if (!membership) {
-        return res.status(403).json({ 
-          error: 'Not a member of this guild',
-          details: 'You must be a member of this guild to access this resource'
-        });
-      }
-      
-      // Add membership info to request for potential role-based checks later
-      req.guildMembership = membership;
-      next();
-    } catch (error) {
-      console.error('Guild membership check error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  };
-}
-
-// Non-guild specific routes
 app.delete('/api/user/delete', userController.deleteUser);
 
-// User support
 app.use('/api/support', supportRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
@@ -302,18 +278,15 @@ app.use('/api/discord-setup', require('./routes/discordRoutes'));
 // Use new Discord integration routes
 app.use('/api', discordIntegrationRoutes);
 
-// Legacy Discord bot routes - to be deprecated
+// Legacy Discord bot routes
 app.use('/api/discord', require('./routes/discordBotRoutes'));
 app.use(guildActivityMiddleware);
 
 
-// Add our direct Discord roles route
 app.use('/api/direct', require('./routes/directDiscordRoles'));
 
-// Add direct member deletion route
 app.use('/api', directMemberDeleteRoutes); // This route contains our hard-delete endpoint for guild members
 
-// General use routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/gear-checks', guildScopeMiddleware, validateGuildMembership, gearCheckRoutes);
 app.use('/api/wishlist', guildScopeMiddleware, validateGuildMembership, wishlistRoutes);
@@ -359,7 +332,7 @@ app.use('/api/discord-bot/webhook', createProxyMiddleware({
   },
   onError: (err, req, res) => {
     console.error(`Proxy error: ${err.message}`);
-    res.status(500).json({ error: 'Discord bot service unavailable', details: err.message });
+    res.status(500).json({ error: 'Discord bot service unavailable' });
   }
 }));
 
@@ -399,7 +372,7 @@ app.use('/api/guilds/:guildId/members', guildScopeMiddleware, validateGuildMembe
   })
   .catch(error => {
     console.error('Get guild members error:', error);
-    res.status(500).json({ error: 'Failed to fetch guild members', details: error.message });
+    res.status(500).json({ error: 'Failed to fetch guild members' });
   });
 });
 
@@ -412,7 +385,11 @@ app.get('/api/config/discord', (req, res) => {
 });
 
 
-app.enable('trust proxy');
+// Trust exactly one proxy hop in production (e.g. nginx/load balancer).
+// In development there's no proxy so we leave it off to keep rate limiting accurate.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // FIXED - Replace the problematic endpoint with a guild-specific version
 app.get('/api/members', async (req, res) => {
@@ -603,14 +580,11 @@ app.put('/api/members/:id', async (req, res) => {
   }
 });
 
-// New function for Chrome-specific auth handling
+// On Chrome mobile, store the redirect URL in session since the state param can get mangled
 function discordAuthForChrome(req, res, next) {
-  const userAgent = req.headers['user-agent'] || '';
-  const isChromeOnMobile = /Chrome/i.test(userAgent) && 
-                          /Android|iPhone|iPad|iPod/i.test(userAgent);
   const redirectUrl = req.query.redirectUrl || '';
-  
-  if (isChromeOnMobile) {
+
+  if (isChromeOnMobileRequest(req)) {
     // Store redirect URL in session for Chrome mobile
     req.session.chromeRedirectUrl = redirectUrl;
     console.log('Chrome Mobile: Storing redirect URL in session:', redirectUrl);
@@ -625,13 +599,9 @@ function discordAuthForChrome(req, res, next) {
   }
 }
 
-// New function for Chrome auth callback handling
+// Picks up the redirect URL we stashed in session for Chrome mobile
 function handleChromeAuthCallback(req, res, next) {
-  const userAgent = req.headers['user-agent'] || '';
-  const isChromeOnMobile = /Chrome/i.test(userAgent) && 
-                          /Android|iPhone|iPad|iPod/i.test(userAgent);
-  
-  if (isChromeOnMobile && req.session.chromeRedirectUrl) {
+  if (isChromeOnMobileRequest(req) && req.session.chromeRedirectUrl) {
     console.log('Chrome Mobile: Retrieving redirect URL from session');
     
     // Get the user's guild membership
@@ -657,8 +627,9 @@ function handleChromeAuthCallback(req, res, next) {
   }
 }
 
-// Add debug route
+// Debug route - development only
 app.get('/api/debug-auth', (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
   // Don't reveal sensitive information
   const sessionInfo = req.session ? {
     exists: true,
@@ -686,7 +657,7 @@ app.get('/api/debug-auth', (req, res) => {
   });
 });
 
-// Passport Discord Strategy
+// Discord OAuth strategy - creates user on first login, updates avatar if needed
 passport.use(new DiscordStrategy({
   clientID: process.env.DISCORD_CLIENT_ID,
   clientSecret: process.env.DISCORD_CLIENT_SECRET,
@@ -713,12 +684,7 @@ passport.use(new DiscordStrategy({
     
     done(null, user);
   } catch (error) {
-    console.error('Auth error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      sql: error.sql
-    });
+    console.error('Auth error:', error.message);
     done(error, null);
   }
 }));
@@ -746,21 +712,11 @@ passport.deserializeUser(async (id, done) => {
       where: { user_id: id }
     });
     
-    // Role hierarchy for comparison
-    const roleHierarchy = {
-      'Guild Master': 4,
-      'Guild Advisor': 3,
-      'Guild Guardian': 2,
-      'Guild Member': 1,
-      'Member': 1
-    };
-    
     let highestRole = user.role;
-    let highestRoleRank = roleHierarchy[user.role] || 0;
-    
-    // Find highest role across all guild memberships
+    let highestRoleRank = ROLE_HIERARCHY[user.role] || 0;
+
     for (const membership of guildMemberships) {
-      const membershipRoleRank = roleHierarchy[membership.role] || 0;
+      const membershipRoleRank = ROLE_HIERARCHY[membership.role] || 0;
       if (membershipRoleRank > highestRoleRank) {
         highestRole = membership.role;
         highestRoleRank = membershipRoleRank;
@@ -791,7 +747,7 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Authentication routes - Apply Chrome-specific handling
+// Auth routes
 app.get('/auth/discord', discordAuthForChrome, (req, res, next) => {
   const redirectUrl = req.query.redirectUrl || '';
   const state = Buffer.from(JSON.stringify({ redirectUrl })).toString('base64');
@@ -879,37 +835,22 @@ app.get('/auth/logout', (req, res) => {
   });
 });
 
+// Alias for /auth/logout - kept for backwards compatibility with clients using this path
 app.get('/auth/discord/logout', (req, res) => {
-  // Get redirect URL from query params
-  const redirectUrl = req.query.redirectUrl || (process.env.CLIENT_BASE_URL || 'http://localhost:3002');
-  
-  // Log out the user from our application
-  req.logout(err => {
-    if (err) {
-      console.error('Discord logout error:', err);
-      return res.status(500).json({ error: 'Logout failed' });
-    }
-    
-    // Destroy the session
-    req.session.destroy(err => {
-      if (err) {
-        console.error('Session destroy error:', err);
-      }
-      
-      // Clear cookies
-      res.clearCookie('connect.sid');
-      
-      const discordLogoutUrl = `https://discord.com/api/oauth2/token/revoke`;
-      res.redirect(`${discordLogoutUrl}?redirect_uri=${encodeURIComponent(redirectUrl)}`);
-    });
-  });
+  const redirectUrl = req.query.redirectUrl || process.env.FRONTEND_URL || 'http://localhost:3002';
+  res.redirect(`/auth/logout?redirectUrl=${encodeURIComponent(redirectUrl)}`);
+});
+
+
+// Exposes the CSRF token so the frontend can attach it to state-changing requests
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: req.session.csrfToken });
 });
 
 app.get('/api/auth/status', (req, res) => {
  req.isAuthenticated() ? res.json(req.user) : res.status(401).json({ error: 'Not authenticated' });
 });
 
-// Error route
 app.get('/error', (req, res) => {
   // If this is a JSON API request
   if (req.headers.accept && req.headers.accept.includes('application/json')) {
@@ -925,8 +866,7 @@ app.get('/error', (req, res) => {
   res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/auth-error`);
 });
 
-// API 404 handler - Must come BEFORE static file handler
-// This ensures API requests get proper JSON responses instead of HTML
+// Catch-all 404 for API routes - must come before the static file handler
 app.all('/api/*', function(req, res) {
   res.status(404).json({ 
     error: 'API endpoint not found',
@@ -936,7 +876,7 @@ app.all('/api/*', function(req, res) {
   });
 });
 
-// Static file serving in production
+// Serve the React build in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../frontend/build')));
 
@@ -1020,83 +960,12 @@ app.delete('/api/guilds/:guildId/members/:memberId', async (req, res) => {
     
     console.log(`Found member to remove: ${memberCheck.username}`);
     
-    // Hard delete the member from guild_members using raw SQL 
-    // This ensures actual deletion, not soft-delete
-    const deleteResult = await sequelize.query(
-      `DELETE FROM guild_members 
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Delete any guild-specific user records for this user
-    await sequelize.query(
-      `DELETE FROM users
-       WHERE id = :memberId AND guild_id = :guildId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Also clean up any associated data for this user in the guild
-    // Update loot requests
-    await sequelize.query(
-      `UPDATE loot_requests
-       SET status = 'Denied - Left Guild'
-       WHERE guild_id = :guildId AND user_id = :memberId AND status = 'Pending'`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.UPDATE,
-        transaction: t
-      }
-    );
-    
-    // Delete wishlist entries
-    await sequelize.query(
-      `DELETE FROM wishlists
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Delete event participants
-    await sequelize.query(
-      `DELETE FROM event_participants
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Delete team members
-    await sequelize.query(
-      `DELETE FROM team_members
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Commit the transaction
+    await removeGuildMember(guildId, memberId, t);
     await t.commit();
-    
-    console.log('Delete operation successful. Member removed from guild.');
-    
-    // Return success with username from the check we did earlier
-    res.json({ 
-      success: true, 
+
+    console.log(`Member ${memberCheck.username} removed from guild ${guildId}`);
+    res.json({
+      success: true,
       message: `${memberCheck.username} has been removed from the guild`,
       removedMemberId: memberId
     });
@@ -1160,89 +1029,20 @@ app.post('/api/direct-member-delete', async (req, res) => {
       }
     );
     
-    // Use raw SQL to hard delete the member
-    const deleteResult = await sequelize.query(
-      `DELETE FROM guild_members 
-       WHERE guild_id = :guildId AND user_id = :memberId 
-       AND user_id != :requesterId`,
-      {
-        replacements: { 
-          guildId, 
-          memberId,
-          requesterId: req.user.id  // Prevent self-deletion
-        },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Delete any guild-specific user records as well
-    await sequelize.query(
-      `DELETE FROM users 
-       WHERE id = :memberId AND guild_id = :guildId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Also clean up associated data for this user in the guild
-    // Update loot requests
-    await sequelize.query(
-      `UPDATE loot_requests
-       SET status = 'Denied - Left Guild'
-       WHERE guild_id = :guildId AND user_id = :memberId AND status = 'Pending'`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.UPDATE,
-        transaction: t
-      }
-    );
-    
-    // Delete wishlist entries
-    await sequelize.query(
-      `DELETE FROM wishlists
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Delete event participants
-    await sequelize.query(
-      `DELETE FROM event_participants
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Delete team members
-    await sequelize.query(
-      `DELETE FROM team_members
-       WHERE guild_id = :guildId AND user_id = :memberId`,
-      {
-        replacements: { guildId, memberId },
-        type: sequelize.QueryTypes.DELETE,
-        transaction: t
-      }
-    );
-    
-    // Commit the transaction
+    // Self-deletion guard: run cleanup only if the member is not the requester
+    if (memberId === req.user.id) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Cannot remove yourself via this endpoint' });
+    }
+
+    await removeGuildMember(guildId, memberId, t);
     await t.commit();
-    
+
     const username = memberCheck ? memberCheck.username : 'Unknown user';
     console.log(`Direct delete successful: Removed ${username} from guild ${guildId}`);
-    
-    res.json({ 
-      success: true, 
-      message: memberCheck ? `${username} has been removed from the guild` : 'Member removed with direct database operation',
-      affected: deleteResult[1] // Number of rows affected
+    res.json({
+      success: true,
+      message: memberCheck ? `${username} has been removed from the guild` : 'Member removed'
     });
     
   } catch (error) {
@@ -1257,6 +1057,7 @@ app.post('/api/direct-member-delete', async (req, res) => {
 
 const rollScheduler = require('./utils/rollScheduler');
 const membershipCleanup = require('./utils/membershipCleanup');
+const { removeGuildMember } = require('./utils/membershipCleanup');
 const { checkDuplicateMembers, cleanupSoftDeletedMembers } = require('./jobs/checkDuplicateMembers');
 
 rollScheduler.checkForExpiredRequests()
@@ -1314,9 +1115,15 @@ process.on('SIGTERM', () => {
 });
 
 
-// UUID validation helper
-function validateUUID(uuid) {
- return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
-}
+
+// Global error handler — must be the last app.use() call so it catches errors
+// from all routes and middleware registered above
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(err.status || 500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
 module.exports = app;

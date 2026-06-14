@@ -12,7 +12,7 @@
     "@reduxjs/toolkit": "^2.1.0",
     "@stripe/react-stripe-js": "^3.3.0",
     "@stripe/stripe-js": "^5.10.0",
-    "axios": "^1.6.7",
+    "axios": "^1.16.0",
     "cra-template": "1.2.0",
     "html2canvas": "^1.4.1",
     "nodemailer": "^6.10.0",

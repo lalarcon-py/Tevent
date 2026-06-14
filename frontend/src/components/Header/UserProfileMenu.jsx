@@ -14,6 +14,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import { useAuth } from '../../contexts/AuthContext';
 import LeaveGuildDialog from '../Guild/LeaveGuildDialog';
 import EmailIcon from '@mui/icons-material/Email';
+import API_URL from '../../config/apiUrl';
 
 const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
   const theme = useTheme();
@@ -89,11 +90,7 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
     try {
       handleClose(); // Close the menu first
       
-      const baseUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:5000'
-        : process.env.REACT_APP_API_URL || window.location.origin;
-      
-      const response = await fetch(`${baseUrl}/api/guilds/leave/${guildId}`, {
+      const response = await fetch(`${API_URL}/api/guilds/leave/${guildId}`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -259,14 +256,10 @@ const UserProfileMenu = ({ anchorEl, open, handleClose }) => {
     try {
       setOpenDeleteDialog(false); // Close the dialog first
       
-      const baseUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:5000'
-        : process.env.REACT_APP_API_URL || window.location.origin;
-        
       console.log('Attempting to delete account...');
-      
+
       // API call to delete account
-      const response = await fetch(`${baseUrl}/api/user/delete`, {
+      const response = await fetch(`${API_URL}/api/user/delete`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {

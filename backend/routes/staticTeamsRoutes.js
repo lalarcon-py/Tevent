@@ -1,19 +1,13 @@
 // backend/routes/staticTeamsRoutes.js
 const express = require('express');
+const { authenticateJWT } = require('../middleware/auth');
 const router = express.Router();
 const db = require('../models');
 const { sequelize } = require('../config/database');
 
-// Authentication middleware
-const isAuthenticated = (req, res, next) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  next();
-};
 
 // Get all static teams
-router.get('/', isAuthenticated, async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   try {
     // Get guild ID from request
     let guildId = req.guildId || req.query.guildId;
@@ -109,7 +103,7 @@ router.get('/', isAuthenticated, async (req, res) => {
 });
 
 // Get all event contexts for a guild
-router.get('/event-contexts', isAuthenticated, async (req, res) => {
+router.get('/event-contexts', authenticateJWT, async (req, res) => {
   try {
     // Get guild ID from request
     let guildId = req.guildId || req.query.guildId;
@@ -145,7 +139,7 @@ router.get('/event-contexts', isAuthenticated, async (req, res) => {
 });
 
 // Update event context name (rename event type)
-router.put('/event-contexts/:oldContext', isAuthenticated, async (req, res) => {
+router.put('/event-contexts/:oldContext', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { newContext, guildId } = req.body;
@@ -177,7 +171,7 @@ router.put('/event-contexts/:oldContext', isAuthenticated, async (req, res) => {
 });
 
 // Create a new static team (single or multiple)
-router.post('/', isAuthenticated, async (req, res) => {
+router.post('/', authenticateJWT, async (req, res) => {
 const t = await sequelize.transaction();
 try {
 // Check if we're creating a single team or multiple teams
@@ -309,7 +303,7 @@ const { name, guildId, teams, event_context } = req.body;
 });
 
 // Update a static team
-router.put('/:id', isAuthenticated, async (req, res) => {
+router.put('/:id', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { name, guildId, event_context } = req.body;
@@ -353,7 +347,7 @@ router.put('/:id', isAuthenticated, async (req, res) => {
 });
 
 // Specific endpoint for updating team name
-router.post('/:id/update-name', isAuthenticated, async (req, res) => {
+router.post('/:id/update-name', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { name, guildId, event_context } = req.body;
@@ -399,7 +393,7 @@ router.post('/:id/update-name', isAuthenticated, async (req, res) => {
 });
 
 // Delete a static team
-router.delete('/:id', isAuthenticated, async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const teamId = req.params.id;
@@ -443,7 +437,7 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
 });
 
 // Add a member to a static team
-router.post('/:teamId/members', isAuthenticated, async (req, res) => {
+router.post('/:teamId/members', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { memberId, role, sourceTeamId } = req.body;
@@ -659,7 +653,7 @@ router.post('/:teamId/members', isAuthenticated, async (req, res) => {
 });
 
 // Remove a member from a static team
-router.delete('/:teamId/members/:memberId', isAuthenticated, async (req, res) => {
+router.delete('/:teamId/members/:memberId', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { teamId, memberId } = req.params;
@@ -760,7 +754,7 @@ router.delete('/:teamId/members/:memberId', isAuthenticated, async (req, res) =>
 });
 
 // Update a member's build in a static team
-router.put('/:teamId/members/:memberId', isAuthenticated, async (req, res) => {
+router.put('/:teamId/members/:memberId', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { teamId, memberId } = req.params;

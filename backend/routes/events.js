@@ -1,5 +1,6 @@
 // backend/routes/events.js
 const express = require('express');
+const { authenticateJWT } = require('../middleware/auth');
 const router = express.Router();
 const { Event, User, EventParticipant, Team, TeamMember } = require('../models');
 const db = require('../models');
@@ -7,13 +8,6 @@ const { sequelize } = require('../config/database');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
-// Authentication middleware
-const isAuthenticated = (req, res, next) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  next();
-};
 
 // Permission middleware
 const hasPermission = (roles) => (req, res, next) => {
@@ -316,7 +310,7 @@ router.post('/:teamId/members', async (req, res) => {
   }
 });
 
-router.post('/:id/signup', isAuthenticated, async (req, res) => {
+router.post('/:id/signup', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { role, selectedBuild, status = 'CONFIRMED' } = req.body; // Default status is CONFIRMED
@@ -536,7 +530,7 @@ router.get('/:eventId/team-planner-data', async (req, res) => {
   }
 });
 
-router.delete('/:id/signup', isAuthenticated, async (req, res) => {
+router.delete('/:id/signup', authenticateJWT, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const eventId = req.params.id;
@@ -643,7 +637,7 @@ router.delete('/:id/signup', isAuthenticated, async (req, res) => {
 
 // Apply permissions to event modification routes
 router.put('/:id', 
-  isAuthenticated, 
+  authenticateJWT,
   hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']), 
   async (req, res) => {
   const t = await sequelize.transaction();
@@ -718,7 +712,7 @@ router.put('/:id',
 });
 
 router.delete('/:id', 
-  isAuthenticated, 
+  authenticateJWT,
   hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']), 
   async (req, res) => {
   const t = await sequelize.transaction();
@@ -826,7 +820,7 @@ router.delete('/:id',
 
 // Create an event with permission check
 router.post('/', 
-  isAuthenticated, 
+  authenticateJWT,
   hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']), 
   async (req, res) => {
   const t = await sequelize.transaction();
@@ -927,7 +921,7 @@ router.post('/',
 
 // Import event from Raid Helper
 router.post('/import', 
-  isAuthenticated, 
+  authenticateJWT,
   hasPermission(['Guild Master', 'Guild Advisor', 'Guild Guardian']),
   async (req, res) => {
     const t = await sequelize.transaction();

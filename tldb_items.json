@@ -1,0 +1,3138 @@
+[
+  {
+    "name": "Calanthia's Regret",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_10001.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Calanthia's Transfixion of Vengeance",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_10001.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Collision Chance:",
+      "Stun Chance:"
+    ]
+  },
+  {
+    "name": "Calanthia's Cleavers of Carnage",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_10001.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Bind Chance:",
+      "Max Health:"
+    ]
+  },
+  {
+    "name": "Calanthia's Repeaters of Ruin",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_10001.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Mana Cost Efficiency:",
+      "Weaken Chance:",
+      "Max Health:"
+    ]
+  },
+  {
+    "name": "Calanthia's Loom of Entropy",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_10001.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Bind Chance:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Calanthia's Confession",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ca_10001.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:",
+      "Weaken Resistance:",
+      "Stun Resistance:",
+      "Petrification Resistance:",
+      "Sleep Resistance:",
+      "Silence Resistance:",
+      "Fear Resistance:",
+      "Bind Resistance:",
+      "Collision Resistance:"
+    ]
+  },
+  {
+    "name": "Calanthia's Bindings",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_10001.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Valiant Tunic of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05003b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Health Regen:",
+      "Buff Duration:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Valiant Trousers of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05003b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Health Regen:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Righteous Greaves of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_06002b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Health Regen:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Righteous Plate of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_06002b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Health Regen:",
+      "Buff Duration:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Noble Garment of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00005b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Mana Regen:",
+      "Buff Duration:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Noble Pants of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_06001c.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Mana Regen:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Fallen Dynasty Leg Plates",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00010b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Mana Regen:",
+      "Buff Duration:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Fallen Dynasty Plate Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_pl_m_ts_00013a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Buff Duration:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Steel Juggernaut Platemail",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00006a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Brute Slayer Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00012a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Health Regen:",
+      "Buff Duration:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Steel Juggernaut Kilt",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00006b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Health Regen:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Brute Slayer Gaiters",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00022d.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Flashfire Fanatic Cuirass",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00009a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Blood Hunter Leg Guards",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00004b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Blood Hunter Garb",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00018a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Health Regen:",
+      "Buff Duration:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Flashfire Fanatic Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05002a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Health Regen:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Ethereal Hero Robes",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00030.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Twilight Embrace Robes",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00005c.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Buff Duration:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Twilight Embrace Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00008c.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Buff Duration:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Ethereal Hero Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00030.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Health Regen:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Cloak of the Blood Moon",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00032.png",
+    "dkp_value": 750,
+    "traits": [
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Max Mana:",
+      "Weaken Resistance:",
+      "Collision Resistance:",
+      "Stun Resistance:",
+      "Sleep Resistance:"
+    ]
+  },
+  {
+    "name": "Shroud of the Prophet",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00022.png",
+    "dkp_value": 750,
+    "traits": [
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Health Regen:",
+      "Weaken Resistance:",
+      "Collision Resistance:",
+      "Stun Resistance:",
+      "Petrification Resistance:"
+    ]
+  },
+  {
+    "name": "Cloak of Piercing Ice",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00029.png",
+    "dkp_value": 750,
+    "traits": [
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:",
+      "Weaken Resistance:",
+      "Collision Resistance:",
+      "Stun Resistance:",
+      "Silence Resistance:"
+    ]
+  },
+  {
+    "name": "Hellfire Cloak",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00031.png",
+    "dkp_value": 750,
+    "traits": [
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:",
+      "Weaken Resistance:",
+      "Collision Resistance:",
+      "Stun Resistance:",
+      "Bind Resistance:"
+    ]
+  },
+  {
+    "name": "Nerzatum's Skeletal Tusks",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00032b.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Cooldown Speed:",
+      "Max Mana:",
+      "Added Attack Speed:",
+      "Bind Chance:",
+      "Silence Chance:"
+    ]
+  },
+  {
+    "name": "Minezerok's Daggers of Flaying",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00039a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Max Health:",
+      "Buff Duration:",
+      "Collision Chance:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Supreme Crossbows of the Resistance",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00022a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Max Mana:",
+      "Mana Regen:",
+      "Mana Cost Efficiency:",
+      "Collision Chance:",
+      "Bind Chance:"
+    ]
+  },
+  {
+    "name": "Kowazan's Daggers of the Blood Moon",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00037a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Buff Duration:",
+      "Mana Cost Efficiency:",
+      "Added Attack Speed:",
+      "Weaken Chance:",
+      "Silence Chance:"
+    ]
+  },
+  {
+    "name": "Supreme Daggers of the Resistance",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00013b.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Max Health:",
+      "Health Regen:",
+      "Added Attack Speed:",
+      "Collision Chance:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Malakar's Flamespike Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00034a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Cooldown Speed:",
+      "Max Health:",
+      "Buff Duration:",
+      "Weaken Chance:",
+      "Bind Chance:"
+    ]
+  },
+  {
+    "name": "Velentra's Arc of Obsession",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00029a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Mana Regen:",
+      "Mana Cost Efficiency:",
+      "Bind Chance:",
+      "Stun Chance:"
+    ]
+  },
+  {
+    "name": "Kowazan's Crossbows of the Eclipse",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00035a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Health Regen:",
+      "Cooldown Speed:",
+      "Collision Chance:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Lucien's Repeaters of Termination",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00029a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Mana Regen:",
+      "Buff Duration:",
+      "Collision Chance:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Supreme Longbow of the Resistance",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00030a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Max Mana:",
+      "Mana Regen:",
+      "Cooldown Speed:",
+      "Weaken Chance:",
+      "Stun Chance:"
+    ]
+  },
+  {
+    "name": "Grand Aelon's Longbow of Blight",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00034a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Cooldown Speed:",
+      "Max Health:",
+      "Buff Duration:",
+      "Weaken Chance:",
+      "Stun Chance:"
+    ]
+  },
+  {
+    "name": "Supreme Polearm of the Resistance",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00015a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Max Health:",
+      "Health Regen:",
+      "Cooldown Speed:",
+      "Collision Chance:",
+      "Fear Chance:"
+    ]
+  },
+  {
+    "name": "Velentra's Skewer of Rending",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00028a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Cooldown Speed:",
+      "Mana Regen:",
+      "Added Attack Speed:",
+      "Collision Chance:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Junobote's Extra Smoldering Ranseur",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00021a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Max Health:",
+      "Buff Duration:",
+      "Collision Chance:",
+      "Fear Chance:"
+    ]
+  },
+  {
+    "name": "Deviant Daggers of the Abyss",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00026b.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Mana Cost Efficiency:",
+      "Health Regen:",
+      "Weaken Chance:",
+      "Silence Chance:"
+    ]
+  },
+  {
+    "name": "Deluzhnoa's Piercing Daggers of Frost",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00052a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Silence Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Deluzhnoa's Chilling Spear of Frost",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00026a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Deluzhnoa's Bow of Frigid Frost",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00017a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Crimson Lotus Chestplate",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00019b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Luminous Longbow of the Abyss",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00007c.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Cooldown Speed:",
+      "Buff Duration:",
+      "Mana Regen:",
+      "Bind Chance:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Reckless Repeaters of the Abyss",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00008f.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Buff Duration:",
+      "Mana Regen:",
+      "Weaken Chance:",
+      "Bind Chance:"
+    ]
+  },
+  {
+    "name": "Punishing Polearm of the Abyss",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00005b.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Added Attack Speed:",
+      "Buff Duration:",
+      "Max Health:",
+      "Collision Chance:",
+      "Fear Chance:"
+    ]
+  },
+  {
+    "name": "Veiled Concord Gaiters",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00024.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Veiled Concord Cuirass",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00024.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Crimson Lotus Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_05002a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Errant Scion Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00002a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Max Health:"
+    ]
+  },
+  {
+    "name": "Giant Cordy's Ascension Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00030a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Cooldown Speed:"
+    ]
+  },
+  {
+    "name": "Breath of Boundless Sky",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00030.png",
+    "dkp_value": 750,
+    "traits": [
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:",
+      "Weaken Resistance:",
+      "Collision Resistance:",
+      "Stun Resistance:",
+      "Silence Resistance:"
+    ]
+  },
+  {
+    "name": "Umbral Astarch Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00030.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Ultimate Duskbound Shroud",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00030a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Health Regen:",
+      "Weaken Resistance:",
+      "Collision Resistance:",
+      "Stun Resistance:",
+      "Bind Resistance:"
+    ]
+  },
+  {
+    "name": "Umbral Astarch Robe",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00030.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Health:",
+      "Max Mana:"
+    ]
+  },
+  {
+    "name": "Errant Scion Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00002c.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Buff Duration:",
+      "Debuff Duration:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Arc of Lunar Radiance",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00007a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Weaken Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Crossbows of the Darkest Night",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00023.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Cooldown Speed:"
+    ]
+  },
+  {
+    "name": "Deluzhnoa's Arc of Frozen Death",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00017.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Titanspine Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00011.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Bercant's Steelstring Bow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00028.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Weaken Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Akman's Bloodletting Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00031.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Cooldown Speed:"
+    ]
+  },
+  {
+    "name": "Unrelenting Annihilation Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00020.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Weaken Chance:",
+      "Max Health:",
+      "Mana Cost Efficiency:"
+    ]
+  },
+  {
+    "name": "Cordy's Stormspore Spike Slingers",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00030.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Cooldown Speed:"
+    ]
+  },
+  {
+    "name": "Bercant's Whispering Daggers",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00034.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Kingslayer's Banded Platemail",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00014a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Oblivion's Wrath Chest Plate",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00016.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Destiny Binders",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00017.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Peerless Obsidian Razors",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00027.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Silence Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Void Stalker's Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00001d.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Transcendent Tempest's Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00014.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Ardent Herald's Gown",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00011.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Oblivion's Wrath Leggings",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00016.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Void Stalker's Overcoat",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00015a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Transcendent Tempest's Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00014.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Howling Wind Shroud",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00003.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Petrification Resistance:",
+      "Stun Resistance:"
+    ]
+  },
+  {
+    "name": "Ardent Herald's Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00004a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Steadfast Commander's Cape",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00015.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Silence Resistance:"
+    ]
+  },
+  {
+    "name": "Immortal Legionnaire's Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00019a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Cloak of Victorious Destiny",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Bind Resistance:"
+    ]
+  },
+  {
+    "name": "Immortal Legionnaire's Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00019a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Royal Spineflower Drape",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00021.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Silence Resistance:",
+      "Weaken Resistance:"
+    ]
+  },
+  {
+    "name": "First Light's Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00022a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Chosen Vanquisher's Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_06001a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Royal Praetor's Plate Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_pl_m_ts_00011.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "First Light's Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00022a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Chosen Vanquisher's Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_06001a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Royal Praetor's Gaiters",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00006a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Forgotten Lotus Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00008.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Dread Admiral's Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00021.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Forgotten Lotus Garb",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00008.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Sacred Repose Garb",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00004.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Dread Admiral's Uniform",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00021.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Sacred Repose Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00020.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Eternal Warlord's Plate",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00017.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Spectral Overseer's Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00023.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Eternal Warlord's Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00010.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Spectral Overseer's Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00023.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Imperial Seeker's Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_00015.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Imperial Seeker's Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00005.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Feral Prophet's Overcoat",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00008.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Mystic Truestrike Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00010.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Weaken Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Feral Prophet's Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00014.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Moonlight Echo Repeaters",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00018.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Weaken Chance:",
+      "Max Health:",
+      "Mana Cost Efficiency:"
+    ]
+  },
+  {
+    "name": "Forward General's Cloak",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00026.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Stun Resistance:",
+      "Collision Resistance:"
+    ]
+  },
+  {
+    "name": "Starlight Fur Cloak",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00027.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Bind Resistance:",
+      "Stun Resistance:"
+    ]
+  },
+  {
+    "name": "Razorthorn Shredders",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00010.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Longbow of the Black Anvil",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00049.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Crossbows of the Black Anvil",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00049.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Cooldown Speed:"
+    ]
+  },
+  {
+    "name": "Pristine Primalfang Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00026.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Blades of the Black Anvil",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00049.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Silence Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Golden Blossom Regalia",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00026.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Grieving Vengeance Cloak",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00024.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Bind Resistance:",
+      "Stun Resistance:"
+    ]
+  },
+  {
+    "name": "Deluzhnoa's Permafrost Razors",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00052.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Silence Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Leviathan's Bladed Tendrils",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00051.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Silence Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Leviathan's Bloodstorm Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00051.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Bind Chance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Opulent Noble's Mantle",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00023.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Silence Resistance:"
+    ]
+  },
+  {
+    "name": "Bercant's Spineflower Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00050.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Weaken Chance:",
+      "Max Health:",
+      "Mana Cost Efficiency:"
+    ]
+  },
+  {
+    "name": "Effortless Victory Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_pl_m_pt_00026.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Paramount Full Plate of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_06002a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Trophy Adorned Leg Guards",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_pt_00026.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Cloak of the Frozen Expanse",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00025.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Silence Resistance:"
+    ]
+  },
+  {
+    "name": "Paramount Greaves of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_06002a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Scaled Armor of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05003a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Ossuary Tunic of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05002a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Ossuary Trousers of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00004b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Scaled Trousers of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05003a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Hallowed Robes of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00005a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Hallowed Pants of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_06001a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Crimson Hellskewer",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00027.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Naru's Sawfang Spear",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00030.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Spear of Unhinged Horror",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00029.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Stun Chance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Deluzhnoa's Serrated Shard",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00026.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Ranseur of Murderous Glee",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00013.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Windsheer Spear",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00024.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Stun Chance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Polearm of the Black Anvil",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00022.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Collision Chance:",
+      "Max Health:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Auric Vanguard's Gaiters",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_05004a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Auric Vanguard's Full Plate",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00005a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Emperor's Golden Wing",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00033.png",
+    "dkp_value": 750,
+    "traits": []
+  },
+  {
+    "name": "Tevent's Arc of Scorching Death",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00018a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Demon Bonus Damage:",
+      "Mana Regen:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Iron Lord's Veil",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00034.png",
+    "dkp_value": 750,
+    "traits": []
+  },
+  {
+    "name": "Queen Bellandir's Ashen Spine Throwers",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00033a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Demon Bonus Damage:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Tevent's Inferno Fangs",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00035a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Queen Bellandir's Blazing Spike",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00018a.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Stun Chance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Toublek's Deathmark Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00033.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Mana Regen:",
+      "Mana Cost Efficiency:"
+    ]
+  },
+  {
+    "name": "Heroic Longbow of the Resistance",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00030.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Humanoid Bonus Damage:",
+      "Max Health:",
+      "Bind Chance:"
+    ]
+  },
+  {
+    "name": "Karnix's Netherbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00032.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Aelon's Rejuvenating Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00034.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Construct Bonus Damage:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Shaikal's Deepmind Longbow",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00009.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Max Mana:",
+      "Bind Chance:"
+    ]
+  },
+  {
+    "name": "Tevent's Arc of Wailing Death",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00018.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Demon Bonus Damage:",
+      "Mana Regen:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Longbow of the World Tree",
+    "type": "longbow",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_bow_00020.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Rex Chimaerus's Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00007c.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Max Mana:",
+      "Added Attack Speed:"
+    ]
+  },
+  {
+    "name": "Malakar's Energizing Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00034.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Demon Bonus Damage:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Kowazan's Sunflare Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00035.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Humanoid Bonus Damage:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Crossbows of Infinite Steel",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00028.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Stormbringer Crossbows",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00017.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Humanoid Bonus Damage:",
+      "Health Regen:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Heroic Crossbows of the Resistance",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00022.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Humanoid Bonus Damage:",
+      "Max Health:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Queen Bellandir's Toxic Spine Throwers",
+    "type": "crossbows",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_crossbow_00033.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Demon Bonus Damage:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Lequirus's Wicked Thorns",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00014.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Humanoid Bonus Damage:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Rex Chimaerus's Fangs",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00038.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Health Regen:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Kowazan's Twilight Daggers",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00037.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Construct Bonus Damage:",
+      "Health Regen:",
+      "Mana Cost Efficiency:"
+    ]
+  },
+  {
+    "name": "Minezerok's Daggers of Crippling",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00039.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Darkslayer Daggers",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00036.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Heroic Daggers of the Resistance",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00013.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Humanoid Bonus Damage:",
+      "Max Health:",
+      "Weaken Chance:"
+    ]
+  },
+  {
+    "name": "Tevent's Fangs of Fury",
+    "type": "daggers",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_dagger_00035.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Shock Commander Plate Armor",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_05002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Blessed Templar Plate Mail",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_pl_m_ts_00015.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Plate of the Field General",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00018.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Heroic Armor of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_06002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Greaves of the Field General",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00018.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Plate of the Infernal Herald",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_ts_00019.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Ebon Roar Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00017.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Mana:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Shock Commander Greaves",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_05002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Heroic Greaves of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_06002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Greaves of the Infernal Herald",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_pl_m_pt_00019.png",
+    "dkp_value": 750,
+    "traits": [
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Phantom Wolf Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00010.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Heroic Garb of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Coat of the Executioner",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00022.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Heroic Tunic of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_ts_05003.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Shadow Harvester Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00007.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Phantom Wolf Breeches",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05002.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Shadow Harvester Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00013.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Heroic Breeches of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_pt_00004a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Heroic Trousers of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_05003.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Ascended Guardian Raiment",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00010.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Swirling Essence Robe",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_05001.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Mana Regen:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Breeches of the Executioner",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00022a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Health Regen:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Divine Justiciar Attire",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_06001.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Heroic Robes of the Resistance",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_ts_00005.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Arcane Shadow Robes",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_ts_00023.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Arcane Shadow Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00023.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Divine Justiciar Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00022.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Swirling Essence Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_fa_m_pt_00003.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Ascended Guardian Pants",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_00005b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Health Regen:",
+      "Debuff Duration:"
+    ]
+  },
+  {
+    "name": "Heroic Pants of the Resistance",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_fa_m_pt_06001.png",
+    "dkp_value": 750,
+    "traits": [
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Melee Evasion:",
+      "Melee Endurance:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Blessed Templar Cloak",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00019.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Collision Resistance:",
+      "Sleep Resistance:"
+    ]
+  },
+  {
+    "name": "Bile Drenched Veil",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00013.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Bind Resistance:"
+    ]
+  },
+  {
+    "name": "Relentless Assault",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00014.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Silence Resistance:",
+      "Weaken Resistance:"
+    ]
+  },
+  {
+    "name": "Forsaken Embrace",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00017.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Bind Resistance:"
+    ]
+  },
+  {
+    "name": "Eldritch Whispers",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00008.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Stun Resistance:",
+      "Collision Resistance:"
+    ]
+  },
+  {
+    "name": "Supreme Devotion",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00018.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Mana:",
+      "Mana Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Petrification Resistance:",
+      "Stun Resistance:"
+    ]
+  },
+  {
+    "name": "Ancient Tapestry Mantle",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00016.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Weaken Resistance:",
+      "Silence Resistance:"
+    ]
+  },
+  {
+    "name": "Immortal Reckoning",
+    "type": "cloak",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_m_ca_00020.png",
+    "dkp_value": 750,
+    "traits": [
+      "Max Health:",
+      "Health Regen:",
+      "Skill Damage Resistance:",
+      "Debuff Duration:",
+      "Bind Resistance:",
+      "Stun Resistance:"
+    ]
+  },
+  {
+    "name": "Heroic Polearm of the Resistance",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00015.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Undead Bonus Damage:",
+      "Max Health:",
+      "Health Regen:"
+    ]
+  },
+  {
+    "name": "Queen Bellandir's Serrated Spike",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00018.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Stun Chance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Skull Severing Spear",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00019.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Max Mana:",
+      "Stun Chance:"
+    ]
+  },
+  {
+    "name": "Shaikal's Mindveil Harpoon",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00016.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Wildkin Bonus Damage:",
+      "Mana Regen:",
+      "Cooldown Speed:"
+    ]
+  },
+  {
+    "name": "Junobote's Smoldering Ranseur",
+    "type": "spear",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/weapon/it_p_spear_00021.png",
+    "dkp_value": 1000,
+    "traits": [
+      "Hit Chance:",
+      "Critical Hit Chance:",
+      "Heavy Attack Chance:",
+      "Construct Bonus Damage:",
+      "Max Mana:",
+      "Mana Regen:"
+    ]
+  },
+  {
+    "name": "Gilded Raven Tunic",
+    "type": "chest",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_part_le_m_ts_00014a.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Buff Duration:"
+    ]
+  },
+  {
+    "name": "Gilded Raven Trousers",
+    "type": "legs",
+    "icon": "https://cdn.tldb.info/db/images/ags/v41/128/image/icon/item_128/equip/armor/p_set_le_m_pt_00022b.png",
+    "dkp_value": 750,
+    "traits": [
+      "Ranged Evasion:",
+      "Ranged Endurance:",
+      "Magic Evasion:",
+      "Magic Endurance:",
+      "Max Health:",
+      "Debuff Duration:"
+    ]
+  }
+]
